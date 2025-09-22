@@ -1,4 +1,4 @@
-// src/app/mrt-checker/page.js - Fixed Version
+// src/app/mrt-checker/page.js - Fixed Version with useCallback optimizations
 'use client'
 
 import React, { useState, useRef, useEffect, useCallback } from 'react'
@@ -51,11 +51,11 @@ const MRTChecker = () => {
         return () => window.removeEventListener('resize', detectTouchDevice)
     }, [])
 
-    const generateRandomHexColor = () => {
+    const generateRandomHexColor = useCallback(() => {
         let hexColor = Math.floor(Math.random() * 16777215).toString(16);
         hexColor = hexColor.padStart(6, '0');
         return '#' + hexColor;
-    };
+    }, []);
 
     // Preset duties
     const presetDuties = [
@@ -77,20 +77,20 @@ const MRTChecker = () => {
 
     const [allDuties, setAllDuties] = useState(presetDuties)
 
-    // Utility functions for time calculations
-    const timeToMinutes = (timeString) => {
+    // Utility functions for time calculations - wrapped in useCallback
+    const timeToMinutes = useCallback((timeString) => {
         if (!timeString) return 0
         const [hours, minutes] = timeString.split(':').map(Number)
         return hours * 60 + minutes
-    }
+    }, [])
 
-    const minutesToTime = (minutes) => {
+    const minutesToTime = useCallback((minutes) => {
         const hours = Math.floor(minutes / 60)
         const mins = minutes % 60
         return `${hours.toString().padStart(2, '0')}:${mins.toString().padStart(2, '0')}`
-    }
+    }, [])
 
-    const calculateFDP = (duty) => {
+    const calculateFDP = useCallback((duty) => {
         if (!duty.startTime || !duty.endTime) return 0
         if (!duty.isFlightDuty) return 0
         
@@ -101,33 +101,33 @@ const MRTChecker = () => {
             return (24 * 60) - startMinutes + endMinutes
         }
         return endMinutes - startMinutes
-    }
+    }, [timeToMinutes])
 
-    const calculateMRT = (fdpMinutes) => {
+    const calculateMRT = useCallback((fdpMinutes) => {
         const fdpHours = fdpMinutes / 60
         
         if (fdpHours <= 8) return 11 * 60
         if (fdpHours <= 12) return 12 * 60
         if (fdpHours <= 16) return 20 * 60
         return 24 * 60
-    }
+    }, [])
 
-    const getEffectiveEndTime = (duty) => {
+    const getEffectiveEndTime = useCallback((duty) => {
         if (duty.isFlightDuty && duty.endTime) {
             const endMinutes = timeToMinutes(duty.endTime)
             const bufferedEndMinutes = endMinutes + 30
             return minutesToTime(bufferedEndMinutes >= 24 * 60 ? bufferedEndMinutes - 24 * 60 : bufferedEndMinutes)
         }
         return duty.endTime
-    }
+    }, [timeToMinutes, minutesToTime])
 
-    const formatDuration = (minutes) => {
+    const formatDuration = useCallback((minutes) => {
         const hours = Math.floor(minutes / 60)
         const mins = minutes % 60
         return mins > 0 ? `${hours}h ${mins}m` : `${hours}h`
-    }
+    }, [])
 
-    const getCalendarData = () => {
+    const getCalendarData = useCallback(() => {
         const firstDay = new Date(currentYear, currentMonth, 1)
         const lastDay = new Date(currentYear, currentMonth + 1, 0)
         const daysInMonth = lastDay.getDate()
@@ -148,7 +148,7 @@ const MRTChecker = () => {
         }
 
         return { calendarDays, startDayOfWeek, daysInMonth }
-    }
+    }, [currentYear, currentMonth])
 
     const { calendarDays, startDayOfWeek, daysInMonth } = getCalendarData()
 
@@ -254,42 +254,43 @@ const MRTChecker = () => {
         return errors
     }, [currentYear, currentMonth, droppedItems, calculateFDP, calculateMRT, getEffectiveEndTime, timeToMinutes, formatDuration])
 
-    // Auto-populate weekends with rest days
+    // Auto-populate weekends with rest days - Fixed dependencies
     useEffect(() => {
         const currentMonthDays = new Date(currentYear, currentMonth + 1, 0).getDate()
-        const newDroppedItems = { ...droppedItems }
-        let hasChanges = false
         
-        for (let day = 1; day <= currentMonthDays; day++) {
-            const dayDate = new Date(currentYear, currentMonth, day)
-            const dayOfWeek = dayDate.getDay() // 0 = Sunday, 6 = Saturday
-            const key = `${currentYear}-${currentMonth}-${day}`
+        setDroppedItems(prevDroppedItems => {
+            const newDroppedItems = { ...prevDroppedItems }
+            let hasChanges = false
             
-            // Only auto-populate if the day isn't already assigned
-            if (!droppedItems[key]) {
-                if (dayOfWeek === 0) { // Sunday - assign 例 (recessday)
-                    const recessDuty = presetDuties.find(d => d.id === 'recessday')
-                    if (recessDuty) {
-                        newDroppedItems[key] = recessDuty
-                        hasChanges = true
-                    }
-                } else if (dayOfWeek === 6) { // Saturday - assign 休 (rest)
-                    const restDuty = presetDuties.find(d => d.id === 'rest')
-                    if (restDuty) {
-                        newDroppedItems[key] = restDuty
-                        hasChanges = true
+            for (let day = 1; day <= currentMonthDays; day++) {
+                const dayDate = new Date(currentYear, currentMonth, day)
+                const dayOfWeek = dayDate.getDay() // 0 = Sunday, 6 = Saturday
+                const key = `${currentYear}-${currentMonth}-${day}`
+                
+                // Only auto-populate if the day isn't already assigned
+                if (!prevDroppedItems[key]) {
+                    if (dayOfWeek === 0) { // Sunday - assign 例 (recessday)
+                        const recessDuty = presetDuties.find(d => d.id === 'recessday')
+                        if (recessDuty) {
+                            newDroppedItems[key] = recessDuty
+                            hasChanges = true
+                        }
+                    } else if (dayOfWeek === 6) { // Saturday - assign 休 (rest)
+                        const restDuty = presetDuties.find(d => d.id === 'rest')
+                        if (restDuty) {
+                            newDroppedItems[key] = restDuty
+                            hasChanges = true
+                        }
                     }
                 }
             }
-        }
-        
-        // Only update if there are changes
-        if (hasChanges) {
-            setDroppedItems(newDroppedItems)
-        }
-    }, [currentMonth, currentYear]) // Removed droppedItems and presetDuties from dependencies
+            
+            // Only return new state if there are changes
+            return hasChanges ? newDroppedItems : prevDroppedItems
+        })
+    }, [currentMonth, currentYear]) // Only depend on month/year changes
 
-    // FIXED: Move validation logic directly inside useEffect to avoid dependency issues
+    // Validation logic - moved into useEffect to avoid dependency issues
     useEffect(() => {
         const validateRestRequirements = () => {
             const errors = []
@@ -376,7 +377,7 @@ const MRTChecker = () => {
         setValidationErrors(errors)
     }, [droppedItems, currentMonth, currentYear, hasConsecutive32HourRest, checkMinimumRestViolations])
 
-    const isDutyInViolation = (day) => {
+    const isDutyInViolation = useCallback((day) => {
         const currentMonthDays = new Date(currentYear, currentMonth + 1, 0).getDate()
         const dayKey = `${currentYear}-${currentMonth}-${day}`
         const duty = droppedItems[dayKey]
@@ -432,9 +433,9 @@ const MRTChecker = () => {
         }
         
         return null
-    }
+    }, [currentYear, currentMonth, droppedItems, calculateFDP, calculateMRT, getEffectiveEndTime, timeToMinutes, minutesToTime, formatDuration])
 
-    const getDaySuggestion = (day) => {
+    const getDaySuggestion = useCallback((day) => {
         const currentMonthDays = new Date(currentYear, currentMonth + 1, 0).getDate()
         const dayKey = `${currentYear}-${currentMonth}-${day}`
         const duty = droppedItems[dayKey]
@@ -498,7 +499,7 @@ const MRTChecker = () => {
         }
         
         return null
-    }
+    }, [currentYear, currentMonth, droppedItems, calculateFDP, calculateMRT, getEffectiveEndTime, timeToMinutes, minutesToTime, formatDuration])
 
     const handleScreenshot = async () => {
         if (validationErrors.length > 0) return
@@ -532,36 +533,36 @@ const MRTChecker = () => {
         }
     }
 
-    const handleYearClick = () => {
+    const handleYearClick = useCallback(() => {
         setShowYearPicker(!showYearPicker)
         setShowMonthPicker(false)
-    }
+    }, [showYearPicker])
 
-    const selectYear = (year) => {
+    const selectYear = useCallback((year) => {
         setCurrentYear(year)
         setShowYearPicker(false)
-    }
+    }, [])
 
-    const handleMonthClick = () => {
+    const handleMonthClick = useCallback(() => {
         setShowMonthPicker(!showMonthPicker)
         setShowYearPicker(false)
-    }
+    }, [showMonthPicker])
 
-    const selectMonth = (monthIndex) => {
+    const selectMonth = useCallback((monthIndex) => {
         setCurrentMonth(monthIndex)
         setShowMonthPicker(false)
-    }
+    }, [])
 
-    const getYearOptions = () => {
+    const getYearOptions = useCallback(() => {
         const currentYearDefault = new Date().getFullYear()
         const years = []
         for (let i = currentYearDefault - 1; i <= currentYearDefault + 2; i++) {
             years.push(i)
         }
         return years
-    }
+    }, [])
 
-    const handleAddCustomDuty = () => {
+    const handleAddCustomDuty = useCallback(() => {
         if (!newDuty.name || !newDuty.code) {
             alert('請填寫任務名稱和說明')
             return
@@ -583,9 +584,9 @@ const MRTChecker = () => {
         setAllDuties(prev => [...prev, customDuty])
         setNewDuty({ name: '', startTime: '', endTime: '', code: '', isFlightDuty: false })
         setShowCustomDutyModal(false)
-    }
+    }, [newDuty, generateRandomHexColor])
 
-    const handleDeleteCustomDuty = (dutyId) => {
+    const handleDeleteCustomDuty = useCallback((dutyId) => {
         if (window.confirm('確定要刪除此自訂任務嗎？')) {
             setCustomDuties(prev => prev.filter(duty => duty.id !== dutyId))
             setAllDuties(prev => prev.filter(duty => duty.id !== dutyId))
@@ -600,9 +601,9 @@ const MRTChecker = () => {
                 return newItems
             })
         }
-    }
+    }, [])
 
-    const handleDutyClick = (duty) => {
+    const handleDutyClick = useCallback((duty) => {
         if (isTouchDevice) {
             if (selectedDuty?.id === duty.id) {
                 setSelectedDuty(null)
@@ -610,9 +611,9 @@ const MRTChecker = () => {
                 setSelectedDuty(duty)
             }
         }
-    }
+    }, [isTouchDevice, selectedDuty])
 
-    const handleCalendarCellClick = (day) => {
+    const handleCalendarCellClick = useCallback((day) => {
         if (isTouchDevice && day) {
             const key = `${currentYear}-${currentMonth}-${day}`
             
@@ -629,40 +630,40 @@ const MRTChecker = () => {
                 setDroppedItems(prev => ({ ...prev, [key]: selectedDuty }))
             }
         }
-    }
+    }, [isTouchDevice, currentYear, currentMonth, droppedItems, selectedDuty])
 
-    const clearSelection = () => {
+    const clearSelection = useCallback(() => {
         setSelectedDuty(null)
-    }
+    }, [])
 
-    const handleDragStart = (e, duty) => {
+    const handleDragStart = useCallback((e, duty) => {
         if (isTouchDevice) return
         setDraggedItem(duty)
         setDraggedFromDate(null)
         e.dataTransfer.effectAllowed = 'copy'
-    }
+    }, [isTouchDevice])
 
-    const handleDutyDragStart = (e, duty, dateKey) => {
+    const handleDutyDragStart = useCallback((e, duty, dateKey) => {
         if (isTouchDevice) return
         setDraggedItem(duty)
         setDraggedFromDate(dateKey)
         e.dataTransfer.effectAllowed = 'move'
         e.stopPropagation()
-    }
+    }, [isTouchDevice])
 
-    const handleDragOver = (e) => {
+    const handleDragOver = useCallback((e) => {
         if (isTouchDevice) return
         e.preventDefault()
         e.dataTransfer.dropEffect = draggedFromDate ? 'move' : 'copy'
-    }
+    }, [isTouchDevice, draggedFromDate])
 
-    const handleDrop = (e, day) => {
+    const handleDrop = useCallback((e, day) => {
         if (isTouchDevice) return
         e.preventDefault()
         handleDropAction(day)
-    }
+    }, [isTouchDevice])
 
-    const handleDropAction = (day) => {
+    const handleDropAction = useCallback((day) => {
         if (draggedItem && day) {
             const key = `${currentYear}-${currentMonth}-${day}`
             
@@ -679,9 +680,9 @@ const MRTChecker = () => {
         }
         setDraggedItem(null)
         setDraggedFromDate(null)
-    }
+    }, [draggedItem, currentYear, currentMonth, draggedFromDate])
 
-    const handleEmptyAreaDrop = (e) => {
+    const handleEmptyAreaDrop = useCallback((e) => {
         if (isTouchDevice) return
         e.preventDefault()
         if (draggedFromDate) {
@@ -693,7 +694,7 @@ const MRTChecker = () => {
         }
         setDraggedItem(null)
         setDraggedFromDate(null)
-    }
+    }, [isTouchDevice, draggedFromDate])
 
     return (
         <>
@@ -800,7 +801,7 @@ const MRTChecker = () => {
                                                 >
                                                     <div className={styles.dutyCode}>
                                                         {duty.code}
-                                                        {duty.isFlightDuty && <span className={styles.flightDutyIndicator}>★</span>}
+                                                        {duty.isFlightDuty && <span className={styles.flightDutyIndicator}>☆</span>}
                                                     </div>
                                                     {duty.startTime && duty.endTime && (
                                                         <div className={styles.dutyTimes}>
@@ -897,7 +898,7 @@ const MRTChecker = () => {
                                                     >
                                                         <div className={styles.dutyCodeCalendar}>
                                                             {assignedDuty.code}
-                                                            {assignedDuty.isFlightDuty && <span className={styles.flightDutyIndicator}>★</span>}
+                                                            {assignedDuty.isFlightDuty && <span className={styles.flightDutyIndicator}>☆</span>}
                                                         </div>
                                                         {assignedDuty.startTime && assignedDuty.endTime && (
                                                             <div className={styles.dutyTimeRange}>
@@ -948,7 +949,7 @@ const MRTChecker = () => {
                                 <div className={styles.instructionNote}>所有警示排除後才能截圖</div>
                                 <div className={styles.instructionNote}>週末自動安排：週六=休假，週日=例假（可重新安排）</div>
                                 <div className={styles.instructionRequirements}>
-                                    休時規定: 每週最多5個工作日 • 每週需要1例+1休 • 每7日需休滿連續32h • ★ = 飛班任務 (+30min DP)
+                                    休時規定: 每週最多5個工作日 • 每週需要1例+1休 • 每7日需休滿連續32h • ☆ = 飛班任務 (+30min DP)
                                 </div>
                             </div>
                         </div>
@@ -1036,7 +1037,7 @@ const MRTChecker = () => {
                                                 className={styles.formCheckbox}
                                             />
                                             <span className={styles.formCheckboxText}>
-                                                是否飛班 (影響RP計算用30分DP) ★
+                                                是否飛班 (影響RP計算用30分DP) ☆
                                             </span>
                                         </label>
                                     </div>

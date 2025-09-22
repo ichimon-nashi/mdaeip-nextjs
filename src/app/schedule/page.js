@@ -71,7 +71,7 @@ export default function SchedulePage() {
 					
 					// Filter dates to only include current month to avoid next month spillover
 					const currentYear = currentMonth.includes('2025') ? 2025 : new Date().getFullYear();
-					const monthNumber = currentMonth.match(/(\d{2})月/)?.[1];
+					const monthNumber = currentMonth.match(/(\d{2})æœˆ/)?.[1];
 					
 					if (monthNumber) {
 						return dates.filter(date => {
@@ -138,7 +138,7 @@ export default function SchedulePage() {
 			return duty;
 		}
 		
-		// Don't modify if it's a valid date
+		// Don&apos;t modify if it&apos;s a valid date
 		if (isValidDate(duty)) {
 			return duty;
 		}
@@ -233,19 +233,19 @@ export default function SchedulePage() {
 	// Handle duty change button click - with toast notifications
 	const handleDutyChangeClick = useCallback(() => {
 		if (!scheduleData.hasScheduleData) {
-			toast("此月份沒有班表資料，無法申請換班！", { icon: '❌', duration: 3000 });
+			toast("此月份沒有班表資料，無法申請換班！", { icon: '⌀', duration: 3000 });
 			return;
 		}
 
 		if (selectedDuties.length === 0) {
-			toast("想換班還不選人嗎!搞屁啊!", { icon: '😑', duration: 3000 });
+			toast("想換班還不選人嗎!搞屁啊!", { icon: '😒', duration: 3000 });
 			return;
 		}
 
 		// Check if all selected duties belong to the same employee
 		const uniqueEmployeeIds = [...new Set(selectedDuties.map(duty => duty.employeeId))];
 		if (uniqueEmployeeIds.length > 1) {
-			toast("這位太太，一張換班單只能跟一位換班!", { icon: '😑', duration: 3000 });
+			toast("這位太太，一張換班單只能跟一位換班!", { icon: '😒', duration: 3000 });
 			return;
 		}
 
@@ -375,7 +375,7 @@ export default function SchedulePage() {
 		);
 	}
 
-	// Don't show schedule if no user - let AuthContext handle redirect
+	// Don&apos;t show schedule if no user - let AuthContext handle redirect
 	if (!user) {
 		return (
 			<div className="min-h-screen flex items-center justify-center">
@@ -479,7 +479,7 @@ export default function SchedulePage() {
 
 						{/* Filter Tabs */}
 						<div ref={crewSectionRef} className={styles.crewSection}>
-							<h2 className={styles.sectionTitle}>Crew Members' Schedule</h2>
+							<h2 className={styles.sectionTitle}>Crew Members&apos; Schedule</h2>
 							<div className={styles.tabContainer}>
 								<button
 									className={`${styles.tab} ${styles.TSATab} ${activeTab === 'TSA' ? styles.active : ''}`}
