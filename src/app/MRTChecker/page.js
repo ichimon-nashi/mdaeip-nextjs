@@ -1,7 +1,7 @@
 // src/app/mrt-checker/page.js - Fixed Version
 'use client'
 
-import React, { useState, useRef, useEffect } from 'react'
+import React, { useState, useRef, useEffect, useCallback } from 'react'
 import Head from 'next/head'
 import { Calendar, Camera, X, Plus, Clock, Edit3, Trash2 } from 'lucide-react'
 import styles from '../../styles/MRTChecker.module.css'
@@ -152,10 +152,113 @@ const MRTChecker = () => {
 
     const { calendarDays, startDayOfWeek, daysInMonth } = getCalendarData()
 
+    const hasConsecutive32HourRest = useCallback((sevenDayPeriod) => {
+        // Simple approach: check for patterns that guarantee 32+ hour rest
+        
+        // Pattern 1: Two consecutive rest days (48+ hours)
+        for (let i = 0; i < sevenDayPeriod.length - 1; i++) {
+            if (sevenDayPeriod[i].isRest && sevenDayPeriod[i + 1].isRest) {
+                return true
+            }
+        }
+        
+        // Pattern 2: Rest day + unassigned day (48+ hours)
+        for (let i = 0; i < sevenDayPeriod.length - 1; i++) {
+            if ((sevenDayPeriod[i].isRest && !sevenDayPeriod[i + 1].assignment) ||
+                (!sevenDayPeriod[i].assignment && sevenDayPeriod[i + 1].isRest)) {
+                return true
+            }
+        }
+        
+        // Pattern 3: Two consecutive unassigned days (48+ hours)
+        for (let i = 0; i < sevenDayPeriod.length - 1; i++) {
+            if (!sevenDayPeriod[i].assignment && !sevenDayPeriod[i + 1].assignment) {
+                return true
+            }
+        }
+        
+        // Pattern 4: Calculate actual rest time between duties across multiple days
+        const duties = sevenDayPeriod
+            .map((day, index) => ({ ...day, originalIndex: index }))
+            .filter(day => day.isDuty && day.assignment?.startTime && day.assignment?.endTime)
+            .sort((a, b) => a.originalIndex - b.originalIndex)
+        
+        for (let i = 0; i < duties.length - 1; i++) {
+            const firstDuty = duties[i]
+            const secondDuty = duties[i + 1]
+            
+            const daysBetween = secondDuty.originalIndex - firstDuty.originalIndex - 1
+            const firstEndTime = getEffectiveEndTime(firstDuty.assignment)
+            const firstEndMinutes = timeToMinutes(firstEndTime)
+            const secondStartMinutes = timeToMinutes(secondDuty.assignment.startTime)
+            
+            let totalRestMinutes = 0
+            
+            if (daysBetween === 0) {
+                // Consecutive days or same day
+                if (secondStartMinutes >= firstEndMinutes) {
+                    totalRestMinutes = secondStartMinutes - firstEndMinutes
+                } else {
+                    // Crosses midnight
+                    totalRestMinutes = (24 * 60) - firstEndMinutes + secondStartMinutes
+                }
+            } else {
+                // Multiple days between duties
+                totalRestMinutes = (24 * 60) - firstEndMinutes // Rest of first day
+                totalRestMinutes += daysBetween * 24 * 60 // Full days between
+                totalRestMinutes += secondStartMinutes // Partial last day
+            }
+            
+            if (totalRestMinutes >= 32 * 60) { // 32 hours = 1920 minutes
+                return true
+            }
+        }
+        
+        return false
+    }, [getEffectiveEndTime, timeToMinutes])
+
+    const checkMinimumRestViolations = useCallback(() => {
+        const errors = []
+        const currentMonthDays = new Date(currentYear, currentMonth + 1, 0).getDate()
+        
+        for (let day = 1; day < currentMonthDays; day++) {
+            const todayKey = `${currentYear}-${currentMonth}-${day}`
+            const tomorrowKey = `${currentYear}-${currentMonth}-${day + 1}`
+            
+            const todayDuty = droppedItems[todayKey]
+            const tomorrowDuty = droppedItems[tomorrowKey]
+            
+            if (todayDuty?.isDuty && tomorrowDuty?.isDuty) {
+                const todayFDP = calculateFDP(todayDuty)
+                const requiredMRT = calculateMRT(todayFDP)
+                
+                if (todayDuty.endTime && tomorrowDuty.startTime) {
+                    const todayEffectiveEndTime = getEffectiveEndTime(todayDuty)
+                    const todayEndMinutes = timeToMinutes(todayEffectiveEndTime)
+                    const tomorrowStartMinutes = timeToMinutes(tomorrowDuty.startTime)
+                    
+                    let actualRestMinutes
+                    if (tomorrowStartMinutes > todayEndMinutes) {
+                        actualRestMinutes = tomorrowStartMinutes - todayEndMinutes
+                    } else {
+                        actualRestMinutes = (24 * 60) - todayEndMinutes + tomorrowStartMinutes
+                    }
+                    
+                    if (actualRestMinutes < requiredMRT) {
+                        errors.push(`Day ${day}-${day + 1}: Insufficient rest time (${formatDuration(actualRestMinutes)} < required ${formatDuration(requiredMRT)})`)
+                    }
+                }
+            }
+        }
+        
+        return errors
+    }, [currentYear, currentMonth, droppedItems, calculateFDP, calculateMRT, getEffectiveEndTime, timeToMinutes, formatDuration])
+
     // Auto-populate weekends with rest days
     useEffect(() => {
         const currentMonthDays = new Date(currentYear, currentMonth + 1, 0).getDate()
         const newDroppedItems = { ...droppedItems }
+        let hasChanges = false
         
         for (let day = 1; day <= currentMonthDays; day++) {
             const dayDate = new Date(currentYear, currentMonth, day)
@@ -165,20 +268,28 @@ const MRTChecker = () => {
             // Only auto-populate if the day isn't already assigned
             if (!droppedItems[key]) {
                 if (dayOfWeek === 0) { // Sunday - assign 例 (recessday)
-                    newDroppedItems[key] = presetDuties.find(d => d.id === 'recessday')
+                    const recessDuty = presetDuties.find(d => d.id === 'recessday')
+                    if (recessDuty) {
+                        newDroppedItems[key] = recessDuty
+                        hasChanges = true
+                    }
                 } else if (dayOfWeek === 6) { // Saturday - assign 休 (rest)
-                    newDroppedItems[key] = presetDuties.find(d => d.id === 'rest')
+                    const restDuty = presetDuties.find(d => d.id === 'rest')
+                    if (restDuty) {
+                        newDroppedItems[key] = restDuty
+                        hasChanges = true
+                    }
                 }
             }
         }
         
         // Only update if there are changes
-        if (Object.keys(newDroppedItems).length !== Object.keys(droppedItems).length) {
+        if (hasChanges) {
             setDroppedItems(newDroppedItems)
         }
-    }, [currentMonth, currentYear]) // Only depend on month/year changes
+    }, [currentMonth, currentYear]) // Removed droppedItems and presetDuties from dependencies
 
-    const validateRestRequirements = () => {
+    const validateRestRequirements = useCallback(() => {
         const errors = []
         const currentMonthDays = new Date(currentYear, currentMonth + 1, 0).getDate()
         
@@ -257,109 +368,7 @@ const MRTChecker = () => {
         errors.push(...dutyViolations)
         
         return errors
-    }
-
-    const hasConsecutive32HourRest = (sevenDayPeriod) => {
-        // Simple approach: check for patterns that guarantee 32+ hour rest
-        
-        // Pattern 1: Two consecutive rest days (48+ hours)
-        for (let i = 0; i < sevenDayPeriod.length - 1; i++) {
-            if (sevenDayPeriod[i].isRest && sevenDayPeriod[i + 1].isRest) {
-                return true
-            }
-        }
-        
-        // Pattern 2: Rest day + unassigned day (48+ hours)
-        for (let i = 0; i < sevenDayPeriod.length - 1; i++) {
-            if ((sevenDayPeriod[i].isRest && !sevenDayPeriod[i + 1].assignment) ||
-                (!sevenDayPeriod[i].assignment && sevenDayPeriod[i + 1].isRest)) {
-                return true
-            }
-        }
-        
-        // Pattern 3: Two consecutive unassigned days (48+ hours)
-        for (let i = 0; i < sevenDayPeriod.length - 1; i++) {
-            if (!sevenDayPeriod[i].assignment && !sevenDayPeriod[i + 1].assignment) {
-                return true
-            }
-        }
-        
-        // Pattern 4: Calculate actual rest time between duties across multiple days
-        const duties = sevenDayPeriod
-            .map((day, index) => ({ ...day, originalIndex: index }))
-            .filter(day => day.isDuty && day.assignment?.startTime && day.assignment?.endTime)
-            .sort((a, b) => a.originalIndex - b.originalIndex)
-        
-        for (let i = 0; i < duties.length - 1; i++) {
-            const firstDuty = duties[i]
-            const secondDuty = duties[i + 1]
-            
-            const daysBetween = secondDuty.originalIndex - firstDuty.originalIndex - 1
-            const firstEndTime = getEffectiveEndTime(firstDuty.assignment)
-            const firstEndMinutes = timeToMinutes(firstEndTime)
-            const secondStartMinutes = timeToMinutes(secondDuty.assignment.startTime)
-            
-            let totalRestMinutes = 0
-            
-            if (daysBetween === 0) {
-                // Consecutive days or same day
-                if (secondStartMinutes >= firstEndMinutes) {
-                    totalRestMinutes = secondStartMinutes - firstEndMinutes
-                } else {
-                    // Crosses midnight
-                    totalRestMinutes = (24 * 60) - firstEndMinutes + secondStartMinutes
-                }
-            } else {
-                // Multiple days between duties
-                totalRestMinutes = (24 * 60) - firstEndMinutes // Rest of first day
-                totalRestMinutes += daysBetween * 24 * 60 // Full days between
-                totalRestMinutes += secondStartMinutes // Partial last day
-            }
-            
-            if (totalRestMinutes >= 32 * 60) { // 32 hours = 1920 minutes
-                return true
-            }
-        }
-        
-        return false
-    }
-
-    const checkMinimumRestViolations = () => {
-        const errors = []
-        const currentMonthDays = new Date(currentYear, currentMonth + 1, 0).getDate()
-        
-        for (let day = 1; day < currentMonthDays; day++) {
-            const todayKey = `${currentYear}-${currentMonth}-${day}`
-            const tomorrowKey = `${currentYear}-${currentMonth}-${day + 1}`
-            
-            const todayDuty = droppedItems[todayKey]
-            const tomorrowDuty = droppedItems[tomorrowKey]
-            
-            if (todayDuty?.isDuty && tomorrowDuty?.isDuty) {
-                const todayFDP = calculateFDP(todayDuty)
-                const requiredMRT = calculateMRT(todayFDP)
-                
-                if (todayDuty.endTime && tomorrowDuty.startTime) {
-                    const todayEffectiveEndTime = getEffectiveEndTime(todayDuty)
-                    const todayEndMinutes = timeToMinutes(todayEffectiveEndTime)
-                    const tomorrowStartMinutes = timeToMinutes(tomorrowDuty.startTime)
-                    
-                    let actualRestMinutes
-                    if (tomorrowStartMinutes > todayEndMinutes) {
-                        actualRestMinutes = tomorrowStartMinutes - todayEndMinutes
-                    } else {
-                        actualRestMinutes = (24 * 60) - todayEndMinutes + tomorrowStartMinutes
-                    }
-                    
-                    if (actualRestMinutes < requiredMRT) {
-                        errors.push(`Day ${day}-${day + 1}: Insufficient rest time (${formatDuration(actualRestMinutes)} < required ${formatDuration(requiredMRT)})`)
-                    }
-                }
-            }
-        }
-        
-        return errors
-    }
+    }, [currentYear, currentMonth, droppedItems, hasConsecutive32HourRest, checkMinimumRestViolations])
 
     const isDutyInViolation = (day) => {
         const currentMonthDays = new Date(currentYear, currentMonth + 1, 0).getDate()
@@ -520,7 +529,7 @@ const MRTChecker = () => {
     useEffect(() => {
         const errors = validateRestRequirements()
         setValidationErrors(errors)
-    }, [droppedItems, currentMonth, currentYear])
+    }, [droppedItems, currentMonth, currentYear, validateRestRequirements])
 
     const handleYearClick = () => {
         setShowYearPicker(!showYearPicker)

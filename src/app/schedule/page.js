@@ -137,7 +137,7 @@ export default function SchedulePage() {
 			return duty;
 		}
 		
-		// Don't modify if it's a valid date
+		// Don&apos;t modify if it&apos;s a valid date
 		if (isValidDate(duty)) {
 			return duty;
 		}
@@ -336,30 +336,6 @@ export default function SchedulePage() {
 		return () => window.removeEventListener('scroll', handleScroll);
 	}, []);
 
-	// Bottom detection for button positioning
-	useEffect(() => {
-		let ticking = false;
-		
-		const handleScroll = () => {
-			if (!ticking) {
-				requestAnimationFrame(() => {
-					if (containerRef.current) {
-						const scrollPosition = window.innerHeight + window.scrollY;
-						const bottomThreshold = document.body.offsetHeight - 200;
-						setIsAtBottom(scrollPosition >= bottomThreshold);
-					}
-					ticking = false;
-				});
-				ticking = true;
-			}
-		};
-
-		window.addEventListener('scroll', handleScroll, { passive: true });
-		handleScroll();
-
-		return () => window.removeEventListener('scroll', handleScroll);
-	}, []);
-
 	// Show loading while auth is being checked
 	if (loading) {
 		return (
@@ -474,7 +450,7 @@ export default function SchedulePage() {
 
 						{/* Filter Tabs */}
 						<div ref={crewSectionRef} className={styles.crewSection}>
-							<h2 className={styles.sectionTitle}>Crew Members' Schedule</h2>
+							<h2 className={styles.sectionTitle}>Crew Members&apos; Schedule</h2>
 							<div className={styles.tabContainer}>
 								<button
 									className={`${styles.tab} ${styles.TSATab} ${activeTab === 'TSA' ? styles.active : ''}`}

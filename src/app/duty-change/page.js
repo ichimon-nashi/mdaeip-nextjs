@@ -156,7 +156,7 @@ export default function DutyChange() {
                 console.error('Error parsing stored duty change data:', error);
             }
         }
-    }, []);
+    }, [userSchedule]); // Added userSchedule as dependency
 
     function downloadImageMobile(canvas, filename) {
         try {

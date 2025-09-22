@@ -2,6 +2,7 @@
 
 import { useRouter } from 'next/navigation';
 import { usePathname } from 'next/navigation';
+import Image from 'next/image';
 import { X, Calendar, Clock, Users, Settings, MapPin, FileText, Utensils, NotebookPen, Crown, Shield, User, Star } from 'lucide-react';
 import styles from '../styles/NavigationDrawer.module.css';
 
@@ -144,15 +145,23 @@ const NavigationDrawer = ({ isOpen, onClose, userDetails }) => {
                                     border: `2px solid ${currentLevelInfo.color}`
                                 }}
                             >
-                                {/* Render image or fallback text based on icon type */}
-                                <img 
+                                {/* Use Next.js Image component for optimization */}
+                                <Image 
                                     src={currentLevelInfo.icon} 
                                     alt={`Level ${userLevel}`}
-                                    style={{ width: '90%', height: '90%' }}
+                                    width={36}
+                                    height={36}
+                                    style={{ 
+                                        width: '90%', 
+                                        height: '90%',
+                                        objectFit: 'contain'
+                                    }}
                                     onError={(e) => {
                                         // Fallback to text if image fails to load
                                         e.target.style.display = 'none';
-                                        e.target.nextSibling.style.display = 'block';
+                                        if (e.target.nextSibling) {
+                                            e.target.nextSibling.style.display = 'block';
+                                        }
                                     }}
                                 />
                                 <span style={{ display: 'none' }}>{userLevel}</span>
