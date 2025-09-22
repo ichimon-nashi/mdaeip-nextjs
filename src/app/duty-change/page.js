@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useAuth } from '../../contexts/AuthContext';
 import styles from '../../styles/DutyChange.module.css';
@@ -9,7 +9,8 @@ import toast from "react-hot-toast";
 
 const formTemplateImage = '/assets/form-template.png';
 
-export default function DutyChange() {
+// Create a separate component that uses useSearchParams
+function DutyChangeContent() {
     const router = useRouter();
     const searchParams = useSearchParams();
     const { user, logout } = useAuth();
@@ -156,7 +157,7 @@ export default function DutyChange() {
                 console.error('Error parsing stored duty change data:', error);
             }
         }
-    }, [userSchedule]); // Added userSchedule as dependency
+    }, [userSchedule]);
 
     function downloadImageMobile(canvas, filename) {
         try {
@@ -648,5 +649,26 @@ export default function DutyChange() {
                 </div>
             </div>
         </div>
+    );
+}
+
+// Loading fallback component
+function LoadingFallback() {
+    return (
+        <div className="min-h-screen flex items-center justify-center">
+            <div className="text-center">
+                <div className="spinner animate-spin w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full mx-auto mb-4"></div>
+                <p>載入中...</p>
+            </div>
+        </div>
+    );
+}
+
+// Main component with Suspense boundary
+export default function DutyChange() {
+    return (
+        <Suspense fallback={<LoadingFallback />}>
+            <DutyChangeContent />
+        </Suspense>
     );
 }
