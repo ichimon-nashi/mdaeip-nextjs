@@ -1,0 +1,292 @@
+/* NAVIGATION DRAWER */
+.drawerBackdrop {
+	position: fixed;
+	top: 0;
+	left: 0;
+	right: 0;
+	bottom: 0;
+	background-color: rgba(0, 0, 0, 0.5);
+	z-index: 9998; /* Much higher z-index */
+}
+
+.navigationDrawer {
+	position: fixed;
+	top: 0;
+	left: 0;
+	height: 100vh;
+	width: 320px;
+	background: white;
+	box-shadow: 2px 0 10px rgba(0, 0, 0, 0.1);
+	transform: translateX(-100%);
+	transition: transform 0.3s ease-in-out;
+	z-index: 9999; /* Much higher z-index */
+	display: flex;
+	flex-direction: column;
+}
+
+.navigationDrawer.open {
+	transform: translateX(0);
+}
+
+.drawerHeader {
+	padding: 1.5rem;
+	border-bottom: 1px solid #e5e7eb;
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	background-color: #2563eb;
+	color: white;
+}
+
+.drawerUserInfo {
+	display: flex;
+	align-items: center;
+	gap: 0.75rem;
+}
+
+.userAvatarContainer {
+	position: relative;
+	display: flex;
+	align-items: center;
+	margin-right: 12px;
+}
+
+.userAvatar {
+	width: 48px;
+	height: 48px;
+	border-radius: 50%;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	font-weight: 600;
+	font-size: 18px;
+	position: relative;
+	transition: all 0.2s ease;
+}
+
+.userLevelBadge {
+	position: absolute;
+	top: -4px;
+	right: -4px;
+	width: 20px;
+	height: 20px;
+	border-radius: 50%;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	font-size: 10px;
+	font-weight: 700;
+	border: 2px solid white;
+	box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12), 0 1px 2px rgba(0, 0, 0, 0.24);
+}
+
+.userDetails {
+	flex: 1;
+	min-width: 0;
+}
+
+.userName {
+	font-weight: 600;
+	font-size: 1.125rem;
+	line-height: 1.2;
+	margin-bottom: 4px;
+}
+
+.userMeta {
+	font-size: 14px;
+	color: #d4d4d4;
+	line-height: 1.3;
+}
+
+.userLevel {
+	font-size: 12px;
+	font-weight: 500;
+	margin-top: 2px;
+	opacity: 0.8;
+}
+
+.drawerCloseButton {
+	background: none;
+	border: none;
+	color: white;
+	cursor: pointer;
+	padding: 0.5rem;
+	border-radius: 0.25rem;
+	transition: background-color 0.2s;
+}
+
+.drawerCloseButton:hover {
+	background-color: rgba(255, 255, 255, 0.1);
+}
+
+.drawerContent {
+	flex: 1;
+	padding: 1.5rem;
+	overflow-y: auto;
+}
+
+.drawerSection {
+	margin-bottom: 2rem;
+}
+
+.drawerSectionTitle {
+	font-size: 0.875rem;
+	font-weight: 600;
+	color: #6b7280;
+	text-transform: uppercase;
+	letter-spacing: 0.05em;
+	margin-bottom: 1rem;
+}
+
+.drawerMenu {
+	display: flex;
+	flex-direction: column;
+	gap: 0.5rem;
+}
+
+.drawerMenuItem {
+	display: flex;
+	align-items: center;
+	width: 100%;
+	padding: 12px 16px;
+	border: none;
+	background: none;
+	border-radius: 8px;
+	margin-bottom: 4px;
+	transition: all 0.2s ease;
+	position: relative;
+	text-decoration: none;
+	color: inherit;
+	cursor: pointer;
+}
+
+.drawerMenuItem:hover {
+	background-color: #f3f4f6;
+	transform: translateX(4px);
+}
+
+.drawerMenuItem.active {
+	background-color: #eff6ff;
+	color: #2563eb;
+}
+
+.drawerMenuItem.disabled {
+	cursor: not-allowed;
+	opacity: 0.6;
+	background-color: transparent !important;
+}
+
+.drawerMenuItem.disabled:hover {
+	background-color: #f9fafb !important;
+	transform: none;
+}
+
+.menuItemIcon {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	margin-right: 12px;
+	transition: all 0.2s ease;
+}
+
+.menuItemContent {
+	flex: 1;
+	text-align: left;
+}
+
+.menuItemTitle {
+	font-weight: 500;
+	font-size: 14px;
+	margin-bottom: 2px;
+	line-height: 1.3;
+}
+
+.menuItemTitleContainer {
+	display: flex;
+	flex-direction: column;
+	align-items: flex-start;
+}
+
+.menuItemDescription {
+	font-size: 12px;
+	opacity: 0.7;
+	line-height: 1.3;
+}
+
+.accessLevelRequired {
+	font-size: 10px;
+	color: #ef4444;
+	font-weight: 500;
+	margin-top: 2px;
+	opacity: 0.8;
+	line-height: 1.2;
+}
+
+.accessDeniedIcon {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	margin-left: auto;
+	opacity: 0.5;
+}
+
+.menuItemIndicator {
+	width: 3px;
+	height: 24px;
+	background-color: currentColor;
+	border-radius: 2px;
+	margin-left: 8px;
+}
+
+.drawerFooter {
+	padding: 1.5rem;
+	border-top: 1px solid #e5e7eb;
+	text-align: center;
+}
+
+.appVersion {
+	font-size: 0.75rem;
+	color: #9ca3af;
+}
+
+/* Responsive adjustments */
+@media (max-width: 480px) {
+	.navigationDrawer {
+		width: 280px;
+	}
+
+	.drawerUserInfo {
+		gap: 0.5rem;
+	}
+
+	.userName {
+		font-size: 1rem;
+	}
+
+	.userMeta {
+		font-size: 0.75rem;
+	}
+
+	.userAvatar {
+		font-size: 16px;
+	}
+
+	.userLevelBadge {
+		width: 18px;
+		height: 18px;
+		font-size: 9px;
+	}
+
+	.menuItemTitle {
+		font-size: 13px;
+	}
+
+	.menuItemDescription {
+		font-size: 11px;
+	}
+
+	.accessLevelRequired {
+		font-size: 9px;
+		margin-top: 2px;
+	}
+}

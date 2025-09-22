@@ -1,0 +1,785 @@
+/* G-DAY PLANNER STYLES - NEXT.JS VERSION */
+
+/* Main Planner Styles */
+.plannerContainer {
+	min-height: 100vh;
+	padding: 0;
+	display: flex;
+	flex-direction: column;
+}
+
+.plannerContent {
+	width: 95%;
+	margin: 0 auto;
+	padding: 1rem;
+	background: white;
+	margin-top: 0;
+	border-radius: 0 0 1rem 1rem;
+	box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+	flex: 1;
+	display: flex;
+	flex-direction: column;
+	overflow-x: hidden;
+}
+
+.plannerHeader {
+	text-align: center;
+	margin-bottom: 1rem;
+	position: relative;
+	flex-shrink: 0;
+}
+
+.plannerTitle {
+	font-size: 1.5rem;
+	font-weight: bold;
+	color: #2d3748;
+	margin-bottom: 0.5rem;
+}
+
+.navigationContainer {
+	display: flex;
+	justify-content: center;
+	align-items: center;
+}
+
+/* Enhanced Date Picker Styles - Mobile First */
+.datePickerWrapper {
+	display: flex;
+	gap: 10px;
+	flex-wrap: nowrap;
+	align-items: center;
+	justify-content: center;
+}
+
+.datePickerContainer {
+	position: relative;
+	display: inline-block;
+}
+
+.clickableDate {
+background: linear-gradient(225deg, rgb(77, 174, 213) 0%, rgb(142, 179, 204) 100%);
+	color: white;
+	padding: 8px 12px;
+	border-radius: 20px;
+	cursor: pointer;
+	font-weight: bold;
+	font-size: 0.9rem;
+	transition: all 0.3s ease;
+	box-shadow: 0 2px 8px rgba(52, 152, 219, 0.3);
+	user-select: none;
+	white-space: nowrap;
+}
+
+.clickableDate:hover {
+	transform: translateY(-1px);
+	box-shadow: 0 4px 12px rgba(52, 152, 219, 0.4);
+}
+
+.pickerDropdown {
+	position: absolute;
+	top: 100%;
+	left: 50%;
+	transform: translateX(-50%);
+	background: white;
+	border-radius: 10px;
+	box-shadow: 0 8px 25px rgba(0, 0, 0, 0.2);
+	z-index: 1000;
+	overflow: hidden;
+	margin-top: 5px;
+	min-width: 100px;
+}
+
+.pickerOption {
+	padding: 8px 12px;
+	cursor: pointer;
+	transition: all 0.2s ease;
+	text-align: center;
+	font-size: 0.9rem;
+}
+
+.pickerOption:hover {
+	background: #f8f9fa;
+}
+
+.pickerOption.selected {
+	background: #3498db;
+	color: white;
+	font-weight: bold;
+}
+
+/* Enhanced Leave Types Section - Mobile First */
+.leaveTypesSection {
+	margin-bottom: 1rem;
+	flex-shrink: 0;
+}
+
+.leaveTypesHeader {
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	margin-bottom: 0.5rem;
+	flex-wrap: nowrap;
+	gap: 8px;
+}
+
+.leaveTypesTitle {
+	font-size: 1.1rem;
+	font-weight: 600;
+	color: #2d3748;
+	margin: 0;
+	white-space: nowrap;
+	min-width: 0;
+	flex-shrink: 0;
+}
+
+.clearSelectionBtn {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	max-width: 30%;
+	gap: 4px;
+	background: #e74c3c;
+	color: white;
+	border: none;
+	padding: 4px 8px;
+	border-radius: 15px;
+	cursor: pointer;
+	font-size: 0.8rem;
+	transition: all 0.3s ease;
+	white-space: nowrap;
+	flex-shrink: 0;
+}
+
+.clearSelectionBtn:hover {
+	background: #c0392b;
+	transform: translateY(-1px);
+}
+
+.leaveTypesGrid {
+	display: grid;
+	grid-template-columns: repeat(4, 1fr);
+	gap: 8px;
+	margin: 0 auto;
+	max-width: 100%;
+}
+
+.leaveTypeItem {
+	padding: 8px 4px;
+	border-radius: 12px;
+	text-align: center;
+	cursor: pointer;
+	user-select: none;
+	transition: all 0.3s ease;
+	box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+	position: relative;
+	overflow: hidden;
+	font-weight: bold;
+	font-size: 0.85rem;
+	min-height: 45px;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+}
+
+.leaveTypeItem:hover {
+	transform: translateY(-2px);
+	box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+}
+
+.leaveTypeItem:active {
+	cursor: grabbing;
+}
+
+.leaveTypeItem.selected {
+	border-color: #fff;
+	box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.8),
+		0 4px 15px rgba(0, 0, 0, 0.3);
+	transform: translateY(-2px) scale(1.05);
+}
+
+.leaveTypeItem::before {
+	content: "";
+	position: absolute;
+	top: 0;
+	left: -100%;
+	width: 100%;
+	height: 100%;
+	background: linear-gradient(
+		90deg,
+		transparent,
+		rgba(255, 255, 255, 0.2),
+		transparent
+	);
+	transition: left 0.5s;
+}
+
+.leaveTypeItem:hover::before {
+	left: 100%;
+}
+
+.leaveTypeLabel {
+	font-weight: 600;
+	color: white;
+	z-index: 1;
+	position: relative;
+}
+
+/* Vacation type colors - CSS-based styling */
+.leaveExample {
+background: linear-gradient(to right, rgb(242, 112, 156), rgb(255, 148, 114));
+	color: white;
+}
+
+.leaveRest {
+background: linear-gradient(90deg, hsla(225, 78%, 59%, 1) 0%, hsla(197, 85%, 51%, 1) 100%);
+	color: white;
+}
+
+.leaveAnnual {
+background: linear-gradient(90deg, hsla(167, 68%, 73%, 1) 0%, hsla(178, 59%, 48%, 1) 100%);
+	color: white;
+}
+
+.leaveWelfare {
+background: linear-gradient(90deg, hsla(235, 100%, 78%, 1) 0%, hsla(222, 77%, 33%, 1) 100%);
+	color: white;
+}
+
+.leaveMedical {
+background: linear-gradient(90deg, hsla(270, 91%, 83%, 1) 0%, hsla(290, 56%, 56%, 1) 100%);
+	color: white;
+}
+
+.leaveGday {
+background: linear-gradient(90deg, hsla(42, 93%, 57%, 1) 0%, hsla(358, 78%, 62%, 1) 100%);
+	color: white;
+}
+
+.leavePersonal {
+background: linear-gradient(90deg, hsla(207, 80%, 59%, 1) 0%, hsla(344, 64%, 79%, 1) 50%, hsla(343, 93%, 69%, 1) 100%);
+	color: white;
+}
+
+/* Enhanced Calendar Styles - Mobile First */
+.calendarContainer {
+	margin-bottom: 1rem;
+	flex: 1;
+	display: flex;
+	flex-direction: column;
+	min-height: 0;
+}
+
+.calendarHeader {
+	display: grid;
+	grid-template-columns: repeat(7, 1fr);
+	gap: 1px;
+	margin-bottom: 5px;
+	flex-shrink: 0;
+}
+
+.calendarDayName {
+	background: linear-gradient(135deg, #34495e, #2c3e50);
+	color: white;
+	padding: 8px 2px;
+	text-align: center;
+	font-weight: bold;
+	border-radius: 4px;
+	font-size: 0.8rem;
+}
+
+.calendarGrid {
+	display: grid;
+	grid-template-columns: repeat(7, 1fr);
+	gap: 1px;
+	flex: 1;
+	min-height: 0;
+}
+
+.calendarCell {
+	background: #f8f9fa;
+	border: 1px solid #e9ecef;
+	border-radius: 4px;
+	min-height: 50px;
+	padding: 4px;
+	position: relative;
+	transition: all 0.3s ease;
+	display: flex;
+	flex-direction: column;
+	justify-content: space-between;
+}
+
+.calendarCell.clickable {
+	cursor: pointer;
+}
+
+.calendarCell.clickable:hover {
+	background: #e3f2fd;
+	border-color: #2196f3;
+}
+
+.calendarCell:hover {
+	background: #f7fafc;
+}
+
+.calendarCell.weekend {
+	background: #fff3e0;
+	border-color: #ffcc02;
+}
+
+.calendarCell.weekend:hover {
+	background: #fed7aa;
+}
+
+.calendarEmptyCell {
+	background: #f8f9fa;
+	min-height: 50px;
+}
+
+.calendarDayNumber {
+	font-weight: bold;
+	color: #2c3e50;
+	margin-bottom: 2px;
+	font-size: 0.8rem;
+	flex-shrink: 0;
+}
+
+.droppedLeave {
+	color: white;
+	padding: 2px 4px;
+	border-radius: 4px;
+	text-align: center;
+	font-weight: bold;
+	font-size: 0.7rem;
+	transition: all 0.3s ease;
+	box-shadow: 0 1px 4px rgba(0, 0, 0, 0.2);
+	position: relative;
+	overflow: hidden;
+	cursor: pointer;
+	flex-shrink: 0;
+	align-self: stretch;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	min-height: 18px;
+}
+
+.droppedLeave:hover {
+	transform: translateY(-1px);
+	box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+	opacity: 0.9;
+}
+
+.droppedLeave:active {
+	cursor: grabbing;
+}
+
+/* Enhanced Instructions - Mobile First */
+.instructions {
+	text-align: center;
+	color: #718096;
+	margin-bottom: 1rem;
+	flex-shrink: 0;
+}
+
+.instructionText {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	gap: 5px;
+	font-size: 0.9rem;
+	margin-bottom: 5px;
+}
+
+.instructionIcon {
+	color: #3498db;
+	width: 1rem;
+	height: 1rem;
+	flex-shrink: 0;
+}
+
+.instructionNote {
+	margin: 2px 0;
+	font-size: 0.8rem;
+}
+
+/* Action Section for separated buttons */
+.actionSection {
+	display: flex;
+	gap: 1rem;
+	justify-content: center;
+	margin-top: 1rem;
+	padding: 1rem;
+	flex-shrink: 0;
+	flex-wrap: nowrap;
+}
+
+/* Copy Button Styles */
+.copyButton {
+	display: flex;
+	align-items: center;
+	gap: 0.5rem;
+	padding: 0.75rem 1.5rem;
+	border: none;
+	border-radius: 20px;
+	font-size: 0.9rem;
+	font-weight: bold;
+	cursor: pointer;
+	transition: all 0.3s ease;
+	background: linear-gradient(135deg, #3b82f6, #2563eb);
+	color: white;
+	box-shadow: 0 4px 15px rgba(59, 130, 246, 0.3);
+	min-width: 140px;
+	justify-content: center;
+}
+
+.copyButton:hover {
+	transform: translateY(-1px);
+	box-shadow: 0 6px 20px rgba(59, 130, 246, 0.4);
+	background: linear-gradient(135deg, #2563eb, #1d4ed8);
+}
+
+.copyButton:active {
+	transform: translateY(0);
+}
+
+/* Enhanced Screenshot Button */
+.screenshotButton {
+	display: flex;
+	align-items: center;
+	gap: 0.5rem;
+	padding: 0.75rem 1.5rem;
+	border: none;
+	border-radius: 20px;
+	font-size: 0.9rem;
+	font-weight: bold;
+	cursor: pointer;
+	transition: all 0.3s ease;
+	background: linear-gradient(100deg, hsla(33, 100%, 53%, 1) 30%, hsla(58, 100%, 68%, 1) 100%);
+	color: white;
+	box-shadow: 0 4px 15px rgba(255, 165, 0, 0.3);
+	min-width: 140px;
+	justify-content: center;
+}
+
+.screenshotButton:hover {
+	transform: translateY(-1px);
+	box-shadow: 0 6px 20px rgba(255, 165, 0, 0.4);
+}
+
+.screenshotButton:active {
+	transform: translateY(0);
+}
+
+/* Action Icon Styles */
+.actionIcon {
+	width: 1.25rem;
+	height: 1.25rem;
+	flex-shrink: 0;
+}
+
+/* Legacy screenshot section - kept for compatibility */
+.screenshotSection {
+	text-align: center;
+	padding: 1rem 0;
+	flex-shrink: 0;
+}
+
+.screenshotIcon {
+	width: 1rem;
+	height: 1rem;
+}
+
+/* Responsive Design */
+@media (max-width: 640px) {
+	.plannerContent {
+		padding: 1.5rem;
+	}
+
+	.plannerTitle {
+		font-size: 1.8rem;
+	}
+
+	.datePickerWrapper {
+		gap: 15px;
+	}
+
+	.clickableDate {
+		padding: 10px 16px;
+		font-size: 1rem;
+	}
+
+	.leaveTypesTitle {
+		font-size: 1.3rem;
+	}
+
+	.leaveTypesGrid {
+		grid-template-columns: repeat(7, 1fr);
+		gap: 8px;
+	}
+
+	.leaveTypeItem {
+		padding: 10px 6px;
+		font-size: 0.9rem;
+		min-height: 50px;
+	}
+
+	.calendarDayName {
+		padding: 10px 4px;
+		font-size: 0.9rem;
+	}
+
+	.calendarCell {
+		min-height: 60px;
+		padding: 6px;
+	}
+
+	.calendarDayNumber {
+		font-size: 0.9rem;
+	}
+
+	.droppedLeave {
+		padding: 4px 6px;
+		font-size: 0.8rem;
+		min-height: 24px;
+	}
+
+	.instructionText {
+		font-size: 1rem;
+	}
+
+	.instructionNote {
+		font-size: 0.9rem;
+	}
+
+	.actionSection {
+		gap: 1.5rem;
+		padding: 1.5rem;
+	}
+
+	.copyButton,
+	.screenshotButton {
+		padding: 12px 24px;
+		font-size: 1rem;
+		min-width: 160px;
+	}
+
+	.actionIcon {
+		width: 1.5rem;
+		height: 1.5rem;
+	}
+}
+
+/* Desktop Responsive Design */
+@media (min-width: 1025px) {
+	.plannerContent {
+		padding: 1rem;
+		max-width: 90%;
+	}
+
+	.plannerTitle {
+		font-size: 2.5rem;
+		margin-bottom: 1rem;
+	}
+
+	.plannerHeader {
+		margin-bottom: 2rem;
+	}
+
+	.datePickerWrapper {
+		gap: 20px;
+	}
+
+	.clickableDate {
+		padding: 12px 20px;
+		font-size: 1.1rem;
+	}
+
+	.pickerDropdown {
+		min-width: 120px;
+		margin-top: 10px;
+	}
+
+	.pickerOption {
+		padding: 12px 20px;
+		font-size: 1rem;
+	}
+
+	.leaveTypesSection {
+		margin-bottom: 2rem;
+	}
+
+	.leaveTypesHeader {
+		margin-bottom: 1rem;
+	}
+
+	.leaveTypesTitle {
+		font-size: 1.5rem;
+	}
+
+	.clearSelectionBtn {
+		padding: 8px 16px;
+		font-size: 0.9rem;
+	}
+
+	.leaveTypesGrid {
+		grid-template-columns: repeat(7, 1fr);
+		gap: 12px;
+		max-width: 900px;
+	}
+
+	.leaveTypeItem {
+		padding: 12px 8px;
+		font-size: 1rem;
+		min-height: 60px;
+		cursor: grab;
+	}
+
+	.calendarContainer {
+		margin-bottom: 2rem;
+	}
+
+	.calendarHeader {
+		gap: 2px;
+		margin-bottom: 10px;
+	}
+
+	.calendarDayName {
+		padding: 15px;
+		font-size: 1.1rem;
+		border-radius: 8px;
+	}
+
+	.calendarGrid {
+		gap: 2px;
+	}
+
+	.calendarCell {
+		min-height: 80px;
+		padding: 8px;
+		border-radius: 8px;
+	}
+
+	.calendarDayNumber {
+		font-size: 1rem;
+		margin-bottom: 5px;
+	}
+
+	.droppedLeave {
+		padding: 6px 8px;
+		font-size: 0.9rem;
+		border-radius: 8px;
+		cursor: grab;
+		min-height: 28px;
+	}
+
+	.instructions {
+		margin-bottom: 2rem;
+	}
+
+	.instructionText {
+		font-size: 1.1rem;
+		gap: 10px;
+		margin-bottom: 10px;
+	}
+
+	.instructionIcon {
+		width: 1.25rem;
+		height: 1.25rem;
+	}
+
+	.instructionNote {
+		font-size: 0.95rem;
+		margin: 5px 0;
+	}
+
+	.actionSection {
+		gap: 2rem;
+		padding: 2rem;
+	}
+
+	.copyButton,
+	.screenshotButton {
+		padding: 15px 30px;
+		font-size: 1.1rem;
+		min-width: 180px;
+	}
+
+	.actionIcon {
+		width: 1.5rem;
+		height: 1.5rem;
+	}
+
+	.screenshotSection {
+		padding: 2rem 0;
+	}
+
+	.screenshotIcon {
+		width: 1.25rem;
+		height: 1.25rem;
+	}
+}
+
+/* Small Mobile Devices */
+@media (max-width: 380px) {
+	.leaveTypesGrid {
+		grid-template-columns: repeat(3, 1fr);
+		gap: 4px;
+	}
+
+	.leaveTypeItem {
+		padding: 6px 2px;
+		font-size: 0.75rem;
+		min-height: 40px;
+	}
+
+	.leaveTypesTitle {
+		font-size: 1rem;
+	}
+
+	.plannerTitle {
+		font-size: 1.3rem;
+	}
+
+	.clickableDate {
+		padding: 6px 10px;
+		font-size: 0.8rem;
+	}
+
+	.calendarDayName {
+		padding: 6px 1px;
+		font-size: 0.7rem;
+	}
+
+	.calendarCell {
+		min-height: 45px;
+		padding: 3px;
+	}
+
+	.calendarDayNumber {
+		font-size: 0.7rem;
+	}
+
+	.droppedLeave {
+		padding: 2px 3px;
+		font-size: 0.65rem;
+		min-height: 18px;
+	}
+
+	.actionSection {
+		gap: 0.5rem;
+		padding: 0.75rem;
+	}
+
+	.copyButton,
+	.screenshotButton {
+		padding: 8px 12px;
+		font-size: 0.75rem;
+		min-width: 100px;
+		flex: 1;
+	}
+
+	.actionIcon {
+		width: 1rem;
+		height: 1rem;
+	}
+}

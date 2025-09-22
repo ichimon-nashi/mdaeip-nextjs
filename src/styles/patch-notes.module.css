@@ -1,0 +1,461 @@
+/* Main container */
+.container {
+    min-height: 100vh;
+    background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
+}
+
+.patchNotesContainer {
+    padding: 20px;
+    max-width: 1400px;
+    margin: 0 auto;
+    display: grid;
+    grid-template-columns: 1fr 300px;
+    gap: 24px;
+}
+
+/* Main panel */
+.mainPanel {
+    background: white;
+    border-radius: 16px;
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+    padding: 24px;
+    min-height: 600px;
+}
+
+.panelHeader {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 32px;
+    padding-bottom: 16px;
+    border-bottom: 2px solid #e2e8f0;
+}
+
+.panelTitle {
+    font-size: 1.75rem;
+    font-weight: 700;
+    color: #1e293b;
+    margin: 0;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.updateCount {
+    font-size: 1rem;
+    font-weight: 500;
+    color: #64748b;
+    background: #f1f5f9;
+    padding: 4px 12px;
+    border-radius: 20px;
+}
+
+/* Filter section */
+.filterSection {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.filterLabel {
+    font-weight: 600;
+    color: #475569;
+    font-size: 0.9rem;
+}
+
+.filterSelect {
+    padding: 8px 16px;
+    border: 2px solid #e2e8f0;
+    border-radius: 8px;
+    background: white;
+    color: #374151;
+    font-size: 0.9rem;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.filterSelect:hover {
+    border-color: #cbd5e1;
+}
+
+.filterSelect:focus {
+    outline: none;
+    border-color: #3b82f6;
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+}
+
+/* Timeline container */
+.timelineContainer {
+    display: flex;
+    flex-direction: column;
+    gap: 32px;
+}
+
+/* Date groups */
+.dateGroup {
+    position: relative;
+}
+
+.dateHeader {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 16px;
+    padding: 12px 0;
+}
+
+.dateBadge {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: linear-gradient(135deg, #3b82f6, #1d4ed8);
+    color: white;
+    padding: 8px 16px;
+    border-radius: 12px;
+    font-weight: 600;
+    font-size: 0.95rem;
+    box-shadow: 0 2px 4px rgba(59, 130, 246, 0.2);
+}
+
+.updateCountBadge {
+    background: #f1f5f9;
+    color: #64748b;
+    padding: 4px 12px;
+    border-radius: 20px;
+    font-size: 0.85rem;
+    font-weight: 500;
+}
+
+/* Updates grid */
+.updatesGrid {
+    display: grid;
+    gap: 16px;
+}
+
+.updateCard {
+    background: #fafafa;
+    border: 1px solid #e5e7eb;
+    border-radius: 12px;
+    overflow: hidden;
+    transition: all 0.3s ease;
+    position: relative;
+}
+
+.updateCard:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 25px -5px rgba(0, 0, 0, 0.1);
+    border-color: #d1d5db;
+}
+
+.updateHeader {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 16px 20px;
+    background: white;
+    border-bottom: 1px solid #f3f4f6;
+}
+
+.appInfo {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.appBadge {
+    padding: 6px 12px;
+    border-radius: 8px;
+    color: white;
+    font-weight: 600;
+    font-size: 0.85rem;
+    min-width: max-content;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+}
+
+.updateMeta {
+    color: #6b7280;
+    font-size: 0.85rem;
+    font-weight: 500;
+    min-width: max-content;
+}
+
+.expandButton {
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 8px;
+    border-radius: 6px;
+    color: #6b7280;
+    transition: all 0.2s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.expandButton:hover {
+    background: #f3f4f6;
+    color: #374151;
+}
+
+/* Update content */
+.updateContent {
+    overflow: hidden;
+    transition: all 0.3s ease;
+}
+
+.expanded {
+    background: white;
+}
+
+.updateList {
+    padding: 20px;
+}
+
+.updatePreview {
+    padding: 16px 20px;
+    background: #f9fafb;
+}
+
+.updateItem {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    margin-bottom: 12px;
+    line-height: 1.5;
+}
+
+.updateItem:last-child {
+    margin-bottom: 0;
+}
+
+.updateIcon {
+    color: #6b7280;
+    margin-top: 2px;
+    flex-shrink: 0;
+}
+
+.updateText {
+    color: #374151;
+    font-size: 0.9rem;
+    flex: 1;
+}
+
+.moreIndicator {
+    color: #9ca3af;
+    font-style: italic;
+    margin-left: 8px;
+}
+
+/* Empty state */
+.emptyState {
+    text-align: center;
+    padding: 64px 20px;
+    color: #6b7280;
+}
+
+.emptyIcon {
+    margin: 0 auto 16px;
+    color: #d1d5db;
+}
+
+.emptyTitle {
+    font-size: 1.25rem;
+    font-weight: 600;
+    color: #374151;
+    margin-bottom: 8px;
+}
+
+.emptyText {
+    font-size: 0.9rem;
+    line-height: 1.5;
+}
+
+/* Stats section */
+.statsSection {
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
+}
+
+.statsCard {
+    background: white;
+    border-radius: 16px;
+    padding: 24px;
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+}
+
+.statsTitle {
+    font-size: 1.25rem;
+    font-weight: 700;
+    color: #1e293b;
+    margin-bottom: 16px;
+    border-bottom: 2px solid #e2e8f0;
+    padding-bottom: 8px;
+}
+
+.statsList {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.statItem {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 0;
+}
+
+.statLabel {
+    color: #64748b;
+    font-weight: 500;
+    font-size: 0.9rem;
+}
+
+.statValue {
+    color: #1e293b;
+    font-weight: 700;
+    font-size: 1rem;
+}
+
+/* Apps overview */
+.appsOverview {
+    background: white;
+    border-radius: 16px;
+    padding: 24px;
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+}
+
+.overviewTitle {
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: #1e293b;
+    margin-bottom: 16px;
+    border-bottom: 2px solid #e2e8f0;
+    padding-bottom: 8px;
+}
+
+.appsList {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.appOverviewItem {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 8px 0;
+}
+
+.appColorDot {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+
+.appOverviewText {
+    flex: 1;
+}
+
+.appOverviewName {
+    font-weight: 600;
+    color: #374151;
+    font-size: 0.9rem;
+    line-height: 1.2;
+}
+
+.appOverviewCount {
+    color: #6b7280;
+    font-size: 0.8rem;
+    font-weight: 500;
+}
+
+/* Responsive design */
+@media (max-width: 1024px) {
+    .patchNotesContainer {
+        grid-template-columns: 1fr;
+        gap: 16px;
+    }
+    
+    .statsSection {
+        grid-column: 1;
+        flex-direction: row;
+    }
+    
+    .statsCard,
+    .appsOverview {
+        flex: 1;
+    }
+}
+
+@media (max-width: 768px) {
+    .patchNotesContainer {
+        padding: 16px;
+    }
+    
+    .mainPanel {
+        padding: 16px;
+    }
+    
+    .panelHeader {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 16px;
+    }
+    
+    .panelTitle {
+        font-size: 1.5rem;
+    }
+    
+    .filterSection {
+        width: 100%;
+        justify-content: space-between;
+    }
+    
+    .filterSelect {
+        flex: 1;
+        max-width: 200px;
+    }
+    
+    .statsSection {
+        flex-direction: column;
+    }
+    
+    .updateHeader {
+        padding: 12px 16px;
+    }
+    
+    .updateList,
+    .updatePreview {
+        padding: 16px;
+    }
+    
+    .dateHeader {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 8px;
+    }
+}
+
+@media (max-width: 480px) {
+    .appInfo {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 4px;
+    }
+    
+    .updateMeta {
+        font-size: 0.8rem;
+    }
+    
+    .updateText {
+        font-size: 0.85rem;
+    }
+    
+    .statsCard,
+    .appsOverview {
+        padding: 16px;
+    }
+} 

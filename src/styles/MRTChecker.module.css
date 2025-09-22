@@ -1,0 +1,944 @@
+/* ==============================================
+   MRT CHECKER STYLES
+   ============================================== */
+
+/* Container and Layout */
+.dutyRosterContainer {
+	min-height: 100vh;
+	background: linear-gradient(135deg, #2563eb 0%, #8956e0 50%, #4677df 100%);
+	background: linear-gradient(120deg, hsla(211, 96%, 62%, 1) 0%, hsla(295, 94%, 76%, 1) 100%);
+}
+
+.dutyRosterHeader {
+	background-color: #2563eb;
+	color: white;
+	padding: 1rem;
+	box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+}
+
+.headerContent {
+	margin: 0 auto;
+	display: flex;
+	align-items: center;
+}
+
+.headerTitle {
+	font-size: 1.5rem;
+	font-weight: bold;
+	margin: 0;
+}
+
+.headerUser {
+	font-size: 0.875rem;
+}
+
+.dutyRosterMain {
+	max-width: 85%;
+	margin: 0 auto;
+	padding: 1.5rem;
+}
+
+/* Main Panel */
+.dutyRosterPanel {
+	background: rgba(255, 255, 255, 0.9);
+	backdrop-filter: blur(10px);
+	border-radius: 0.5rem;
+	padding: 1.5rem;
+	margin-bottom: 1.5rem;
+	box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+}
+
+.panelHeader {
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	margin-bottom: 1rem;
+}
+
+.panelTitle {
+	font-size: 1.5rem;
+	font-weight: bold;
+	color: #374151;
+	margin: 0;
+}
+
+/* Date Navigation */
+.dateNavigation {
+	display: flex;
+	gap: 1rem;
+}
+
+.datePickerWrapper {
+	position: relative;
+}
+
+.datePickerButton {
+	background-color: #dbeafe;
+	color: #1e40af;
+	padding: 0.5rem 1rem;
+	border: none;
+	border-radius: 0.5rem;
+	font-weight: 500;
+	cursor: pointer;
+	transition: background-color 0.2s;
+}
+
+.datePickerButton:hover {
+	background-color: #bfdbfe;
+}
+
+.dropdownMenu {
+	position: absolute;
+	top: 100%;
+	left: 0;
+	margin-top: 0.25rem;
+	background: white;
+	border: 1px solid #e5e7eb;
+	border-radius: 0.5rem;
+	box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+	z-index: 10;
+}
+
+.yearDropdown {
+	min-width: 100px;
+}
+
+.monthDropdown {
+	align-items: center;
+	margin: auto;
+	display: grid;
+	grid-template-columns: repeat(3, 1fr);
+	gap: 0.25rem;
+	padding: 0.5rem;
+}
+
+.dropdownItem {
+	padding: 0.75rem;
+	cursor: pointer;
+	transition: background-color 0.2s;
+	text-align: center;
+	border-radius: 0.25rem;
+}
+
+.dropdownItem:hover {
+	background-color: #dbeafe;
+}
+
+.dropdownItem.selected {
+	background-color: #dbeafe;
+	color: #1e40af;
+}
+
+/* Duties Section */
+.dutiesSection {
+	margin-bottom: 1.5rem;
+}
+
+.dutiesHeader {
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	margin-bottom: 1rem;
+}
+
+.dutiesTitle {
+	font-size: 1.125rem;
+	font-weight: 600;
+	color: #374151;
+	margin: 0;
+}
+
+.dutiesControls {
+	display: flex;
+	gap: 0.5rem;
+}
+
+.clearSelectionButton {
+	display: flex;
+	align-items: center;
+	gap: 0.25rem;
+	padding: 0.25rem 0.75rem;
+	background-color: #6d7990;
+	border: none;
+	border-radius: 0.5rem;
+	font-size: 0.875rem;
+	cursor: pointer;
+	transition: background-color 0.2s;
+}
+
+.clearSelectionButton:hover {
+	background-color: #e5e7eb;
+}
+
+.addDutyButton {
+	display: flex;
+	align-items: center;
+	gap: 0.25rem;
+	padding: 0.5rem 0.75rem;
+	background-color: #e97a3f;
+	color: white;
+	border: none;
+	border-radius: 0.5rem;
+	cursor: pointer;
+	transition: background-color 0.2s;
+}
+
+.addDutyButton:hover {
+	background-color: #dc2626;
+}
+
+.dutiesGrid {
+	display: grid;
+	grid-template-columns: repeat(2, 1fr);
+	gap: 0.75rem;
+}
+
+/* Add these to your MRTChecker.module.css file */
+.formGroup {
+    margin-bottom: 1rem;
+}
+
+.formLabel {
+    display: block;
+    font-size: 0.875rem;
+    font-weight: 500;
+    color: #374151;
+    margin-bottom: 0.25rem;
+}
+
+.formInput {
+    width: 100%;
+    padding: 0.5rem 0.75rem;
+    border: 1px solid #d1d5db;
+    border-radius: 0.375rem;
+    font-size: 0.875rem;
+    transition: border-color 0.2s;
+    box-sizing: border-box;
+}
+
+.formInput:focus {
+    outline: none;
+    border-color: #2563eb;
+    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+}
+
+.minHScreen {
+    min-height: 100vh;
+}
+
+@media (min-width: 640px) {
+	.dutiesGrid {
+		grid-template-columns: repeat(4, 1fr);
+	}
+}
+
+@media (min-width: 768px) {
+	.dutiesGrid {
+		grid-template-columns: repeat(7, 1fr);
+	}
+}
+
+.dutyItemWrapper {
+	position: relative;
+}
+
+.dutyItem {
+	padding: 0.5rem;
+	border-radius: 0.5rem;
+	cursor: pointer;
+	transition: all 0.2s;
+	color: white;
+	font-weight: 500;
+	text-align: center;
+	user-select: none;
+}
+
+.dutyItem:hover {
+	transform: scale(1.05);
+	box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+}
+
+.dutyItem.selected {
+	transform: scale(1.05);
+	box-shadow: 0 0 0 4px rgba(251, 191, 36, 0.5);
+}
+
+.dutyCode {
+	font-size: 1.125rem;
+	font-weight: bold;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	gap: 0.25rem;
+}
+
+.flightDutyIndicator {
+	color: #fbbf24;
+	font-size: 0.875rem;
+	text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+}
+
+.dutyTimes {
+	font-size: 0.75rem;
+	opacity: 0.9;
+	margin-top: 0.25rem;
+}
+
+.dutyFdp {
+	font-size: 0.75rem;
+	opacity: 0.75;
+	margin-top: 0.25rem;
+}
+
+.deleteDutyButton {
+	position: absolute;
+	top: -0.5rem;
+	right: 0;
+	background-color: #ef4444;
+	color: white;
+	border: none;
+	border-radius: 10px;
+	padding: 0.25rem;
+	opacity: 0;
+	transition: opacity 0.2s;
+	cursor: pointer;
+}
+
+.dutyItemWrapper:hover .deleteDutyButton {
+	opacity: 1;
+}
+
+.deleteDutyButton:hover {
+	background-color: #dc2626;
+}
+
+/* Validation Section */
+.validationSection {
+	margin-bottom: 1.5rem;
+}
+
+.validationHeader {
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	margin-bottom: 0.5rem;
+}
+
+.validationTitle {
+	min-width: max-content;
+	font-size: 1.125rem;
+	font-weight: 600;
+	color: #dc2626;
+	margin: 0;
+}
+
+.validationToggle {
+	font-size: 0.875rem;
+	width: fit-content;
+	color: #dc2626;
+	background: none;
+	border: none;
+	text-decoration: underline;
+	cursor: pointer;
+}
+
+.validationToggle:hover {
+	color: #991b1b;
+}
+
+.validationErrors {
+	background-color: #fef2f2;
+	border: 1px solid #fecaca;
+	border-radius: 0.5rem;
+	padding: 1rem;
+}
+
+.validationError {
+	display: flex;
+	align-items: flex-start;
+	gap: 0.5rem;
+	font-size: 0.875rem;
+	color: #b91c1c;
+	margin-bottom: 0.5rem;
+}
+
+.validationError:last-child {
+	margin-bottom: 0;
+}
+
+.errorBullet {
+	color: #ef4444;
+	margin-top: 0.25rem;
+}
+
+.validationSuccess {
+	background-color: #f0fdf4;
+	border: 1px solid #bbf7d0;
+	border-radius: 0.5rem;
+	padding: 1rem;
+	display: flex;
+	align-items: center;
+	gap: 0.5rem;
+	margin-bottom: 1.5rem;
+}
+
+.successIndicator {
+	width: 0.5rem;
+	height: 0.5rem;
+	background-color: #10b981;
+	border-radius: 50%;
+}
+
+.successText {
+	font-size: 0.875rem;
+	font-weight: 500;
+	color: #15803d;
+}
+
+/* Calendar */
+.calendarContainer {
+	background: white;
+	border-radius: 0.5rem;
+	overflow: hidden;
+	box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.calendarHeader {
+	display: grid;
+	grid-template-columns: repeat(7, 1fr);
+	background-color: #374151;
+	color: white;
+}
+
+.calendarDayName {
+	padding: 0.75rem;
+	text-align: center;
+	font-weight: 500;
+}
+
+.calendarGrid {
+	display: grid;
+	grid-template-columns: repeat(7, 1fr);
+}
+
+.calendarEmptyCell {
+	height: 5rem;
+	background-color: #f9fafb;
+}
+
+.calendarCell {
+	height: 6rem;
+	min-height: fit-content;
+	border: 1px solid #e5e7eb;
+	padding: 0.25rem;
+	cursor: pointer;
+	transition: background-color 0.2s;
+	position: relative;
+	overflow: hidden;
+}
+
+.calendarCell:hover {
+	background-color: #dbeafe;
+}
+
+.calendarCell.weekend {
+	background-color: #fff9e3;
+}
+
+.calendarCell.weekend:hover {
+	background-color: #fde68a;
+}
+
+.calendarCell.clickable:hover {
+	background-color: #dbeafe;
+}
+
+.calendarDayNumber {
+	font-size: 0.875rem;
+	font-weight: 500;
+	color: #374151;
+	margin-bottom: 0.25rem;
+}
+
+.assignedDuty {
+	font-size: 0.75rem;
+	color: white;
+	border-radius: 0.25rem;
+	padding: 0.125rem 0.25rem;
+	font-weight: 500;
+	cursor: move;
+	word-break: break-all;
+	border: 2px solid transparent;
+	transition: border-color 0.2s;
+	overflow: hidden;
+	max-width: 100%;
+	box-sizing: border-box;
+}
+
+.assignedDuty.dutyViolation {
+	border-color: #ef4444;
+	box-shadow: 0 0 0 1px #ef4444;
+}
+
+.dutyCodeCalendar {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	gap: 0.125rem;
+	font-weight: bold;
+}
+
+.dutyTimeRange {
+	font-size: 0.625rem;
+	opacity: 0.9;
+	text-align: center;
+	margin-top: 0.125rem;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+.dutyStartTime {
+	font-size: 0.75rem;
+	opacity: 0.9;
+}
+
+.dutyMrt {
+	font-size: 0.75rem;
+	opacity: 0.75;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+/* Day Suggestions */
+.daySuggestion {
+	position: absolute;
+	bottom: 0.125rem;
+	left: 0.125rem;
+	right: 0.125rem;
+	font-size: 1rem;
+	opacity: 0.7;
+	pointer-events: none;
+}
+
+.suggestionText {
+	font-style: italic;
+	text-align: center;
+	padding: 0.125rem;
+	border-radius: 0.25rem;
+	background: rgba(255, 255, 255, 0.8);
+}
+
+.suggestionText.required {
+	color: #dc2626;
+	font-weight: 600;
+	background: rgba(254, 226, 226, 0.9);
+	border: 1px dashed #dc2626;
+}
+
+.suggestionText.restTime {
+	color: #059669;
+	background: rgba(236, 253, 245, 0.9);
+	border: 1px dashed #059669;
+}
+
+.suggestionLine {
+	font-weight: 500;
+}
+
+.suggestionDetail {
+	font-size: 1rem;
+	opacity: 0.9;
+	margin-top: 0.125rem;
+}
+
+/* Instructions */
+.instructions {
+	margin-top: 1rem;
+	font-size: 0.95rem;
+	color: #6b7280;
+}
+
+.instructionItem {
+	display: flex;
+	align-items: center;
+	gap: 0.5rem;
+	margin-bottom: 0.25rem;
+}
+
+.instructionNote {
+	font-size: 0.85rem;
+	color: #9ca3af;
+	margin-bottom: 0.25rem;
+}
+
+.instructionRequirements {
+	font-size: 0.85rem;
+	color: #2563eb;
+	font-weight: 500;
+	margin-top: 0.5rem;
+}
+
+/* Screenshot Section */
+.screenshotSection {
+	display: flex;
+	justify-content: center;
+}
+
+.screenshotButton {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	gap: 0.5rem;
+	padding: 0.75rem 1.5rem;
+	background-color: #059669;
+	color: white;
+	border: none;
+	border-radius: 0.5rem;
+	font-weight: 500;
+	cursor: pointer;
+	transition: background-color 0.2s;
+	box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+}
+
+.screenshotButton:hover:not(.disabled) {
+	background-color: #047857;
+}
+
+.screenshotButton.disabled {
+	background-color: #9ca3af;
+	cursor: not-allowed;
+	justify-content: center;
+}
+
+.blockedText {
+	font-size: 0.75rem;
+}
+
+/* Modal */
+.modalOverlay {
+	position: fixed;
+	inset: 0;
+	background-color: rgba(0, 0, 0, 0.5);
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	z-index: 50;
+	padding: 1rem;
+}
+
+.modalContent {
+	background: white;
+	border-radius: 0.5rem;
+	padding: 1.5rem;
+	width: 100%;
+	max-width: 28rem;
+}
+
+.modalHeader {
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	margin-bottom: 1rem;
+}
+
+.modalTitle {
+	font-size: 1.125rem;
+	font-weight: 600;
+	margin: 0;
+}
+
+.modalClose {
+	color: #9ca3af;
+	background: none;
+	border: none;
+	cursor: pointer;
+	width: fit-content;
+	transition: color 0.2s;
+}
+
+.modalClose:hover {
+	color: #6b7280;
+}
+
+.modalForm {
+	margin-bottom: 1.5rem;
+}
+
+.formCheckboxLabel {
+	display: flex;
+	align-items: center;
+	gap: 0.5rem;
+	cursor: pointer;
+}
+
+.formCheckbox {
+	width: 1rem;
+	height: 1rem;
+	accent-color: #2563eb;
+	cursor: pointer;
+}
+
+.formCheckboxText {
+	font-size: 0.875rem;
+	color: #374151;
+	user-select: none;
+}
+
+.formRow {
+	display: grid;
+	grid-template-columns: 1fr 1fr;
+	gap: 0.75rem;
+}
+
+.modalActions {
+	display: flex;
+	gap: 0.75rem;
+}
+
+.modalButton {
+	flex: 1;
+	padding: 0.5rem 1rem;
+	border-radius: 0.5rem;
+	font-weight: 500;
+	cursor: pointer;
+	transition: background-color 0.2s;
+}
+
+.modalButton.cancel {
+	border: 1px solid #d1d5db;
+	background: white;
+	color: #374151;
+}
+
+.modalButton.cancel:hover {
+	background-color: #f9fafb;
+}
+
+.modalButton.confirm {
+	background-color: #2563eb;
+	color: white;
+	border: none;
+}
+
+.modalButton.confirm:hover {
+	background-color: #1d4ed8;
+}
+
+/* Responsive Design for MRT Checker */
+@media (max-width: 768px) {
+	.dutyRosterMain {
+		padding: 1rem;
+		margin: 0;
+		max-width: 100%;
+	}
+	
+	.dutyRosterPanel {
+		padding: 1rem;
+		max-width: 100%;
+		overflow-x: auto;
+	}
+	
+	.panelHeader {
+		flex-direction: column;
+		align-items: flex-start;
+		gap: 1rem;
+	}
+	
+	.panelTitle {
+		font-size: 1.25rem;
+	}
+	
+	.dateNavigation {
+		flex-direction: column;
+		gap: 0.5rem;
+		width: 100%;
+	}
+	
+	.datePickerButton {
+		width: 100%;
+		padding: 0.75rem;
+	}
+	
+	.dutiesHeader {
+		flex-direction: column;
+		align-items: flex-start;
+		gap: 0.5rem;
+	}
+	
+	.dutiesControls {
+		width: 100%;
+		justify-content: space-between;
+	}
+	
+	.dutiesGrid {
+		grid-template-columns: repeat(2, 1fr);
+		gap: 0.5rem;
+	}
+	
+	.dutyItem {
+		padding: 0.5rem;
+	}
+	
+	.dutyCode {
+		font-size: 1rem;
+	}
+	
+	.dutyTimes {
+		font-size: 0.625rem;
+	}
+	
+	.dutyFdp {
+		font-size: 0.625rem;
+	}
+	
+	.calendarCell {
+		height: 4rem;
+		padding: 0.125rem;
+		position: relative;
+		overflow: hidden;
+	}
+	
+	.calendarDayNumber {
+		font-size: 0.75rem;
+		margin-bottom: 0.125rem;
+	}
+	
+	.assignedDuty {
+		font-size: 0.625rem;
+		padding: 0.0625rem 0.125rem;
+		max-height: calc(100% - 1rem);
+		overflow: hidden;
+		position: relative;
+	}
+	
+	.dutyCodeCalendar {
+		font-size: 0.75rem;
+		line-height: 1;
+		margin-bottom: 0.125rem;
+	}
+	
+	.dutyTimeRange {
+		font-size: 0.5rem;
+		line-height: 1;
+		margin-top: 0.0625rem;
+	}
+	
+	.dutyMrt {
+		font-size: 0.5rem;
+		line-height: 1;
+		margin-top: 0.0625rem;
+	}
+	
+	.flightDutyIndicator {
+		font-size: 0.625rem;
+	}
+	
+	.daySuggestion {
+		position: absolute;
+		bottom: 0.0625rem;
+		left: 0.0625rem;
+		right: 0.0625rem;
+		font-size: 0.625rem;
+	}
+	
+	.suggestionText {
+		padding: 0.0625rem;
+		font-size: 0.5rem;
+	}
+	
+	.suggestionDetail {
+		font-size: 0.5rem;
+		margin-top: 0.0625rem;
+	}
+	
+	.instructions {
+		font-size: 0.875rem;
+	}
+	
+	.instructionItem {
+		flex-direction: column;
+		align-items: flex-start;
+		gap: 0.25rem;
+		text-align: left;
+	}
+	
+	.instructionNote {
+		font-size: 0.75rem;
+	}
+	
+	.instructionRequirements {
+		font-size: 0.75rem;
+	}
+	
+	.screenshotButton {
+		padding: 1rem 1.5rem;
+		font-size: 0.875rem;
+	}
+	
+	.validationSection {
+		margin-bottom: 1rem;
+	}
+	
+	.validationHeader {
+		flex-direction: column;
+		align-items: flex-start;
+		gap: 0.5rem;
+	}
+	
+	.modalContent {
+		margin: 1rem;
+		max-width: calc(100vw - 2rem);
+	}
+	
+	.formRow {
+		grid-template-columns: 1fr;
+		gap: 0.5rem;
+	}
+}
+
+@media (max-width: 480px) {
+	.dutyRosterMain {
+		padding: 0.5rem;
+	}
+	
+	.dutyRosterPanel {
+		padding: 0.75rem;
+	}
+	
+	.panelTitle {
+		font-size: 1.125rem;
+		line-height: 1.3;
+	}
+	
+	.calendarCell {
+		height: 3.5rem;
+	}
+	
+	.calendarDayNumber {
+		font-size: 0.625rem;
+	}
+	
+	.assignedDuty {
+		font-size: 0.5rem;
+		padding: 0.0625rem;
+	}
+	
+	.dutyCodeCalendar {
+		font-size: 0.625rem;
+	}
+	
+	.dutyTimeRange {
+		font-size: 0.4375rem;
+	}
+	
+	.dutyMrt {
+		font-size: 0.4375rem;
+	}
+	
+	.screenshotButton {
+		padding: 0.75rem 1rem;
+		font-size: 0.75rem;
+	}
+}

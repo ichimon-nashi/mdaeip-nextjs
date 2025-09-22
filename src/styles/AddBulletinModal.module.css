@@ -1,0 +1,216 @@
+/* Modal Overlay */
+.modalOverlay {
+	position: fixed;
+	top: 0;
+	left: 0;
+	right: 0;
+	bottom: 0;
+	background-color: rgba(0, 0, 0, 0.5);
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	z-index: 10000;
+}
+
+/* Modal Content */
+.modalContent {
+	background: white;
+	border-radius: 8px;
+	max-width: 500px;
+	width: 90%;
+	max-height: 90vh;
+	overflow-y: auto;
+	box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
+}
+
+/* Modal Header */
+.modalHeader {
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	padding: 20px 24px 16px;
+	border-bottom: 1px solid #e5e7eb;
+}
+
+.modalHeader h2 {
+	margin: 0;
+	font-size: 1.25rem;
+	font-weight: 600;
+	color: #111827;
+}
+
+.modalCloseButton {
+	background: none;
+	border: none;
+	cursor: pointer;
+	padding: 4px;
+	border-radius: 4px;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	color: #6b7280;
+	transition: all 0.2s;
+}
+
+.modalCloseButton:hover {
+	background-color: #f3f4f6;
+	color: #374151;
+}
+
+/* Modal Body */
+.modalBody {
+	padding: 24px;
+}
+
+/* Form Styles */
+.bulletinForm {
+	display: flex;
+	flex-direction: column;
+	gap: 16px;
+}
+
+.formGroup {
+	margin-bottom: 16px;
+}
+
+.formGroup label {
+	display: block;
+	margin-bottom: 6px;
+	font-weight: 500;
+	color: #374151;
+	font-size: 14px;
+}
+
+.formGroup input,
+.formGroup textarea {
+	width: 100%;
+	padding: 8px 12px;
+	border: 1px solid #d1d5db;
+	border-radius: 4px;
+	font-size: 14px;
+	font-family: inherit;
+	box-sizing: border-box;
+	transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.formGroup textarea {
+	resize: vertical;
+	min-height: 60px;
+	line-height: 1.5;
+}
+
+.formGroup input:focus,
+.formGroup textarea:focus {
+	outline: none;
+	border-color: #3b82f6;
+	box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+}
+
+.formGroup input:disabled,
+.formGroup textarea:disabled {
+	background-color: #f9fafb;
+	cursor: not-allowed;
+	opacity: 0.7;
+}
+
+/* Form Actions */
+.formActions {
+	display: flex;
+	gap: 12px;
+	justify-content: flex-end;
+	margin-top: 24px;
+	padding-top: 16px;
+	border-top: 1px solid #f3f4f6;
+}
+
+.cancelButton,
+.submitButton {
+	padding: 10px 20px;
+	border-radius: 6px;
+	font-size: 14px;
+	font-weight: 500;
+	cursor: pointer;
+	border: 1px solid;
+	transition: all 0.2s;
+	min-width: 80px;
+}
+
+.cancelButton {
+	background-color: white;
+	border-color: #d1d5db;
+	color: #374151;
+}
+
+.cancelButton:hover {
+	background-color: #f9fafb;
+	border-color: #9ca3af;
+}
+
+.submitButton {
+	background-color: #3b82f6;
+	border-color: #3b82f6;
+	color: white;
+}
+
+.submitButton:hover {
+	background-color: #2563eb;
+	border-color: #2563eb;
+}
+
+.submitButton:disabled,
+.cancelButton:disabled {
+	opacity: 0.5;
+	cursor: not-allowed;
+}
+
+.submitButton:disabled:hover,
+.cancelButton:disabled:hover {
+	background-color: initial;
+	border-color: initial;
+}
+
+/* Form Note */
+.formNote {
+	margin-top: 16px;
+	padding: 12px;
+	background-color: #f0f9ff;
+	border-radius: 4px;
+	border-left: 4px solid #0ea5e9;
+}
+
+.formNote p {
+	margin: 0;
+	font-size: 13px;
+	color: #0c4a6e;
+	line-height: 1.4;
+}
+
+/* Responsive Design */
+@media (max-width: 640px) {
+	.modalOverlay {
+		padding: 8px;
+	}
+
+	.modalContent {
+		max-height: 95vh;
+		width: 95%;
+	}
+
+	.modalHeader {
+		padding: 16px 20px 12px;
+	}
+
+	.modalBody {
+		padding: 20px;
+	}
+
+	.formActions {
+		flex-direction: column-reverse;
+		gap: 8px;
+	}
+
+	.cancelButton,
+	.submitButton {
+		width: 100%;
+	}
+}

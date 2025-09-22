@@ -1,0 +1,99 @@
+/* NAVBAR */
+.nav {
+	padding: 0.7rem 0.2rem;
+}
+
+.navbar {
+	background-color: #2563eb;
+	color: white;
+	padding: 1rem 0;
+	box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+	position: sticky;
+	top: 0;
+	z-index: 40;
+}
+
+.navbarContainer {
+	width: 100%;
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	padding: 0 1rem;
+}
+
+.navbarLeft {
+	display: flex;
+	align-items: center;
+	gap: 1rem;
+}
+
+.navbarMenuButton {
+	width: 2.25rem;
+	height: 2.25rem;
+	background: none;
+	border: none;
+	color: white;
+	cursor: pointer;
+	padding: 0.5rem;
+	border-radius: 0.25rem;
+	transition: background-color 0.2s;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+}
+
+.navbarMenuButton:hover {
+	background-color: rgba(255, 255, 255, 0.1);
+}
+
+.navbarTitle {
+	font-size: 1.25rem;
+	font-weight: bold;
+}
+
+.navbarRight {
+	display: flex;
+	align-items: center;
+	gap: 1rem;
+}
+
+.navbarWelcomeMsg {
+	width: 4.6rem;
+	font-size: 1rem;
+	margin: 0;
+	color: white;
+}
+
+.settingsButton {
+	width: 2rem;
+	height: 2rem;
+	background: none;
+	border: none;
+	color: white;
+	cursor: pointer;
+	padding: 0.25rem;
+	border-radius: 0.25rem;
+	transition: background-color 0.2s;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+}
+
+.settingsButton:hover {
+	background-color: rgba(255, 255, 255, 0.1);
+}
+
+.logoutButton {
+	padding: 0.25rem 0.75rem;
+	background-color: #1d4ed8;
+	border: none;
+	border-radius: 0.25rem;
+	font-size: 0.875rem;
+	cursor: pointer;
+	color: white;
+	transition: background-color 0.3s;
+}
+
+.logoutButton:hover {
+	background-color: #1e40af;
+}
