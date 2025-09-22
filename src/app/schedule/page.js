@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useRouter } from 'next/navigation';
+import toast from 'react-hot-toast';
 import styles from '../../styles/Schedule.module.css';
 // Import DataRoster functions
 import { 
@@ -137,7 +138,7 @@ export default function SchedulePage() {
 			return duty;
 		}
 		
-		// Don&apos;t modify if it&apos;s a valid date
+		// Don't modify if it's a valid date
 		if (isValidDate(duty)) {
 			return duty;
 		}
@@ -203,10 +204,10 @@ export default function SchedulePage() {
 		return content;
 	}, []);
 
-	// Handle duty selection with highlighting
+	// Handle duty selection with highlighting - with toast
 	const handleDutySelect = useCallback((employeeId, name, date, duty) => {
 		if (!scheduleData.hasScheduleData) {
-			alert("此月份沒有班表資料！");
+			toast("此月份沒有班表資料！", { icon: '📅', duration: 3000 });
 			return;
 		}
 
@@ -229,17 +230,22 @@ export default function SchedulePage() {
 		}
 	}, [scheduleData.hasScheduleData, selectedDuties]);
 
-	// Handle duty change button click - updated for Next.js
+	// Handle duty change button click - with toast notifications
 	const handleDutyChangeClick = useCallback(() => {
+		if (!scheduleData.hasScheduleData) {
+			toast("此月份沒有班表資料，無法申請換班！", { icon: '❌', duration: 3000 });
+			return;
+		}
+
 		if (selectedDuties.length === 0) {
-			alert("請先選擇要換班的日期！");
+			toast("想換班還不選人嗎!搞屁啊!", { icon: '😑', duration: 3000 });
 			return;
 		}
 
 		// Check if all selected duties belong to the same employee
 		const uniqueEmployeeIds = [...new Set(selectedDuties.map(duty => duty.employeeId))];
 		if (uniqueEmployeeIds.length > 1) {
-			alert("錯誤：不能同時與多個員工換班！請只選擇同一個員工的班次。");
+			toast("這位太太，一張換班單只能跟一位換班!", { icon: '😑', duration: 3000 });
 			return;
 		}
 
@@ -256,13 +262,20 @@ export default function SchedulePage() {
 
 		// Navigate to duty change page
 		router.push('/duty-change');
-	}, [selectedDuties, router, user, currentMonth]);
+	}, [selectedDuties, router, user, currentMonth, scheduleData.hasScheduleData]);
 
+	// Handle month change - with toast notification
 	const handleMonthChange = useCallback((event) => {
 		const newMonth = event.target.value;
 		setCurrentMonth(newMonth);
 		setSelectedDuties([]);
 		setHighlightedDates({});
+
+		// Check if data exists and show notification
+		const newMonthData = getAllSchedulesForMonth(newMonth);
+		if (!newMonthData || newMonthData.length === 0) {
+			toast(`${newMonth}尚無班表資料`, { icon: '📅', duration: 2000 });
+		}
 	}, []);
 
 	const handleTabChange = useCallback((base) => {
@@ -312,18 +325,30 @@ export default function SchedulePage() {
 		}
 	}, [scheduleData.hasScheduleData]);
 
-	// Bottom detection for button positioning only
+	// FIXED: Bottom detection for button positioning
 	useEffect(() => {
 		let ticking = false;
 		
 		const handleScroll = () => {
 			if (!ticking) {
 				requestAnimationFrame(() => {
-					if (containerRef.current) {
-						const scrollPosition = window.innerHeight + window.scrollY;
-						const bottomThreshold = document.body.offsetHeight - 200;
-						setIsAtBottom(scrollPosition >= bottomThreshold);
-					}
+					const scrollTop = window.pageYOffset || document.documentElement.scrollTop;
+					const windowHeight = window.innerHeight;
+					const documentHeight = Math.max(
+						document.body.scrollHeight,
+						document.body.offsetHeight,
+						document.documentElement.clientHeight,
+						document.documentElement.scrollHeight,
+						document.documentElement.offsetHeight
+					);
+					
+					// Calculate distance from bottom
+					const distanceFromBottom = documentHeight - (scrollTop + windowHeight);
+					
+					// Show inline button only when very close to bottom (100px or less)
+					// This keeps the floating button visible longer
+					setIsAtBottom(distanceFromBottom <= 100);
+					
 					ticking = false;
 				});
 				ticking = true;
@@ -331,9 +356,13 @@ export default function SchedulePage() {
 		};
 
 		window.addEventListener('scroll', handleScroll, { passive: true });
-		handleScroll();
+		window.addEventListener('resize', handleScroll, { passive: true }); // Also handle window resize
+		handleScroll(); // Initial check
 
-		return () => window.removeEventListener('scroll', handleScroll);
+		return () => {
+			window.removeEventListener('scroll', handleScroll);
+			window.removeEventListener('resize', handleScroll);
+		};
 	}, []);
 
 	// Show loading while auth is being checked
@@ -450,7 +479,7 @@ export default function SchedulePage() {
 
 						{/* Filter Tabs */}
 						<div ref={crewSectionRef} className={styles.crewSection}>
-							<h2 className={styles.sectionTitle}>Crew Members&apos; Schedule</h2>
+							<h2 className={styles.sectionTitle}>Crew Members' Schedule</h2>
 							<div className={styles.tabContainer}>
 								<button
 									className={`${styles.tab} ${styles.TSATab} ${activeTab === 'TSA' ? styles.active : ''}`}
@@ -569,9 +598,9 @@ export default function SchedulePage() {
 							</div>
 						</div>
 
-						{/* Smart Submit Button - floating when scrolling, inline when at bottom */}
-						{isAtBottom ? (
-							<div className={styles.submitButtonInline}>
+						{/* FIXED: Smart Submit Button - always visible, switches between floating and inline */}
+						{!isAtBottom && (
+							<div className={styles.submitButtonFullWidth}>
 								<button 
 									className={styles.dutyChangeButtonFull}
 									onClick={handleDutyChangeClick}
@@ -579,8 +608,10 @@ export default function SchedulePage() {
 									提交換班申請 ({selectedDuties.length} 項選擇)
 								</button>
 							</div>
-						) : (
-							<div className={styles.submitButtonFullWidth}>
+						)}
+						
+						{isAtBottom && (
+							<div className={styles.submitButtonInline}>
 								<button 
 									className={styles.dutyChangeButtonFull}
 									onClick={handleDutyChangeClick}

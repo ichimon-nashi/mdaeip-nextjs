@@ -289,86 +289,92 @@ const MRTChecker = () => {
         }
     }, [currentMonth, currentYear]) // Removed droppedItems and presetDuties from dependencies
 
-    const validateRestRequirements = useCallback(() => {
-        const errors = []
-        const currentMonthDays = new Date(currentYear, currentMonth + 1, 0).getDate()
-        
-        // Check each week for proper rest/work distribution
-        for (let day = 1; day <= currentMonthDays; day++) {
-            const dayDate = new Date(currentYear, currentMonth, day)
-            const dayOfWeek = (dayDate.getDay() + 6) % 7 // Monday = 0, Sunday = 6
+    // FIXED: Move validation logic directly inside useEffect to avoid dependency issues
+    useEffect(() => {
+        const validateRestRequirements = () => {
+            const errors = []
+            const currentMonthDays = new Date(currentYear, currentMonth + 1, 0).getDate()
             
-            // Check week starting from Monday
-            if (dayOfWeek === 0) {
-                const weekDays = []
-                for (let i = 0; i < 7; i++) {
-                    const weekDay = day + i
-                    if (weekDay <= currentMonthDays) {
-                        weekDays.push(weekDay)
+            // Check each week for proper rest/work distribution
+            for (let day = 1; day <= currentMonthDays; day++) {
+                const dayDate = new Date(currentYear, currentMonth, day)
+                const dayOfWeek = (dayDate.getDay() + 6) % 7 // Monday = 0, Sunday = 6
+                
+                // Check week starting from Monday
+                if (dayOfWeek === 0) {
+                    const weekDays = []
+                    for (let i = 0; i < 7; i++) {
+                        const weekDay = day + i
+                        if (weekDay <= currentMonthDays) {
+                            weekDays.push(weekDay)
+                        }
                     }
+                    
+                    if (weekDays.length >= 7) {
+                        const weekAssignments = weekDays.map(d => {
+                            const key = `${currentYear}-${currentMonth}-${d}`
+                            return droppedItems[key]
+                        })
+                        
+                        const recessDayCount = weekAssignments.filter(duty => duty?.id === 'recessday').length
+                        const restCount = weekAssignments.filter(duty => duty?.id === 'rest').length
+                        const workDuties = weekAssignments.filter(duty => 
+                            duty && duty.id !== 'recessday' && duty.id !== 'rest'
+                        ).length
+                        
+                        const weekNumber = Math.floor((day - 1) / 7) + 1
+                        
+                        // Rule 1: Maximum 5 work duties per week
+                        if (workDuties > 5) {
+                            errors.push(`Week ${weekNumber} (${day}-${day+6}): Too many work duties (${workDuties}/5 max)`)
+                        }
+                        
+                        // Rule 2: Exactly one recessday per week
+                        if (recessDayCount === 0) {
+                            errors.push(`Week ${weekNumber} (${day}-${day+6}): Missing required 例 (Recess Day)`)
+                        } else if (recessDayCount > 1) {
+                            errors.push(`Week ${weekNumber} (${day}-${day+6}): Too many 例 (${recessDayCount}), only 1 allowed per week`)
+                        }
+                        
+                        // Rule 2: Exactly one rest day per week
+                        if (restCount === 0) {
+                            errors.push(`Week ${weekNumber} (${day}-${day+6}): Missing required 休 (Rest Day)`)
+                        } else if (restCount > 1) {
+                            errors.push(`Week ${weekNumber} (${day}-${day+6}): Too many 休 (${restCount}), only 1 allowed per week`)
+                        }
+                    }
+                }
+            }
+            
+            // Rule 3: Check for 32-hour consecutive rest in every 7-day rolling period
+            for (let startDay = 1; startDay <= currentMonthDays - 6; startDay++) {
+                const sevenDayPeriod = []
+                for (let day = startDay; day < startDay + 7; day++) {
+                    const key = `${currentYear}-${currentMonth}-${day}`
+                    const assignment = droppedItems[key]
+                    sevenDayPeriod.push({
+                        day,
+                        assignment,
+                        isRest: assignment?.isRest || false,
+                        isDuty: assignment?.isDuty || false
+                    })
                 }
                 
-                if (weekDays.length >= 7) {
-                    const weekAssignments = weekDays.map(d => {
-                        const key = `${currentYear}-${currentMonth}-${d}`
-                        return droppedItems[key]
-                    })
-                    
-                    const recessDayCount = weekAssignments.filter(duty => duty?.id === 'recessday').length
-                    const restCount = weekAssignments.filter(duty => duty?.id === 'rest').length
-                    const workDuties = weekAssignments.filter(duty => 
-                        duty && duty.id !== 'recessday' && duty.id !== 'rest'
-                    ).length
-                    
-                    const weekNumber = Math.floor((day - 1) / 7) + 1
-                    
-                    // Rule 1: Maximum 5 work duties per week
-                    if (workDuties > 5) {
-                        errors.push(`Week ${weekNumber} (${day}-${day+6}): Too many work duties (${workDuties}/5 max)`)
-                    }
-                    
-                    // Rule 2: Exactly one recessday per week
-                    if (recessDayCount === 0) {
-                        errors.push(`Week ${weekNumber} (${day}-${day+6}): Missing required 例 (Recess Day)`)
-                    } else if (recessDayCount > 1) {
-                        errors.push(`Week ${weekNumber} (${day}-${day+6}): Too many 例 (${recessDayCount}), only 1 allowed per week`)
-                    }
-                    
-                    // Rule 2: Exactly one rest day per week
-                    if (restCount === 0) {
-                        errors.push(`Week ${weekNumber} (${day}-${day+6}): Missing required 休 (Rest Day)`)
-                    } else if (restCount > 1) {
-                        errors.push(`Week ${weekNumber} (${day}-${day+6}): Too many 休 (${restCount}), only 1 allowed per week`)
-                    }
+                if (!hasConsecutive32HourRest(sevenDayPeriod)) {
+                    errors.push(`Days ${startDay}-${startDay + 6}: Missing required 32-hour consecutive rest period`)
                 }
             }
-        }
-        
-        // Rule 3: Check for 32-hour consecutive rest in every 7-day rolling period
-        for (let startDay = 1; startDay <= currentMonthDays - 6; startDay++) {
-            const sevenDayPeriod = []
-            for (let day = startDay; day < startDay + 7; day++) {
-                const key = `${currentYear}-${currentMonth}-${day}`
-                const assignment = droppedItems[key]
-                sevenDayPeriod.push({
-                    day,
-                    assignment,
-                    isRest: assignment?.isRest || false,
-                    isDuty: assignment?.isDuty || false
-                })
-            }
             
-            if (!hasConsecutive32HourRest(sevenDayPeriod)) {
-                errors.push(`Days ${startDay}-${startDay + 6}: Missing required 32-hour consecutive rest period`)
-            }
+            // Check minimum rest between consecutive duties
+            const dutyViolations = checkMinimumRestViolations()
+            errors.push(...dutyViolations)
+            
+            return errors
         }
-        
-        // Check minimum rest between consecutive duties
-        const dutyViolations = checkMinimumRestViolations()
-        errors.push(...dutyViolations)
-        
-        return errors
-    }, [currentYear, currentMonth, droppedItems, hasConsecutive32HourRest, checkMinimumRestViolations])
+
+        const errors = validateRestRequirements()
+        setValidationErrors(errors)
+    }, [droppedItems, currentMonth, currentYear, hasConsecutive32HourRest, checkMinimumRestViolations])
 
     const isDutyInViolation = (day) => {
         const currentMonthDays = new Date(currentYear, currentMonth + 1, 0).getDate()
@@ -525,11 +531,6 @@ const MRTChecker = () => {
             alert('截圖失敗，請重試')
         }
     }
-
-    useEffect(() => {
-        const errors = validateRestRequirements()
-        setValidationErrors(errors)
-    }, [droppedItems, currentMonth, currentYear, validateRestRequirements])
 
     const handleYearClick = () => {
         setShowYearPicker(!showYearPicker)

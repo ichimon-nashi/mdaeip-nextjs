@@ -1,6 +1,8 @@
 import { useState } from "react";
 import { useRouter } from "next/router";
 import { useAuth } from "../contexts/AuthContext";
+import toast from "react-hot-toast";
+import styles from "./Login.module.css";
 
 const Login = () => {
 	const [loginDetails, setLoginDetails] = useState({
@@ -23,11 +25,18 @@ const Login = () => {
 			);
 
 			if (!error && user) {
+				toast.success("Login successful");
 				// Redirect to main app after successful login
 				router.push("/mdaduty");
+			} else {
+				toast("你是哪根蔥?!", {
+					icon: '🤨', 
+					duration: 3000,
+				});
 			}
 		} catch (error) {
 			console.error("Login error:", error);
+			toast.error("Login failed");
 		} finally {
 			setIsLoading(false);
 		}
@@ -42,36 +51,42 @@ const Login = () => {
 	};
 
 	return (
-		<form onSubmit={handleLoginSubmit}>
-			<div className="login">
-				<h1>豪神</h1>
-				<div className="input">
-					<input
-						type="text"
-						name="employeeID"
-						onChange={handleChange}
-						value={loginDetails.employeeID}
-						placeholder="員編 Employee ID"
-						autoComplete="off"
+		<div className={styles.form}>
+			<form onSubmit={handleLoginSubmit}>
+				<div className={styles.login}>
+					<h1 className={styles.title}>豪神</h1>
+					<div className={styles.input}>
+						<input
+							type="text"
+							name="employeeID"
+							onChange={handleChange}
+							value={loginDetails.employeeID}
+							placeholder="員編 Employee ID"
+							autoComplete="off"
+							disabled={isLoading}
+						/>
+					</div>
+					<div className={styles.input}>
+						<input
+							type="password"
+							name="password"
+							onChange={handleChange}
+							value={loginDetails.password}
+							placeholder="密碼 Password"
+							autoComplete="off"
+							disabled={isLoading}
+						/>
+					</div>
+					<button 
+						type="submit" 
 						disabled={isLoading}
-					/>
+						className={styles.button}
+					>
+						{isLoading ? "Signing in..." : "Sign in"}
+					</button>
 				</div>
-				<div className="input">
-					<input
-						type="password"
-						name="password"
-						onChange={handleChange}
-						value={loginDetails.password}
-						placeholder="密碼 Password"
-						autoComplete="off"
-						disabled={isLoading}
-					/>
-				</div>
-				<button type="submit" disabled={isLoading}>
-					{isLoading ? "Signing in..." : "Sign in"}
-				</button>
-			</div>
-		</form>
+			</form>
+		</div>
 	);
 };
 

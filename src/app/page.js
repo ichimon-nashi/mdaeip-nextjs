@@ -2,6 +2,8 @@
 
 import { useState } from "react";
 import { useAuth } from "../contexts/AuthContext";
+import toast from 'react-hot-toast';
+import styles from './page.module.css';
 
 export default function HomePage() {
 	const [loginDetails, setLoginDetails] = useState({
@@ -23,23 +25,24 @@ export default function HomePage() {
 	const handleLoginSubmit = async (event) => {
 		event.preventDefault();
 		
-		if (!loginDetails.employeeID || !loginDetails.password) {
-			setError("Please fill in all fields");
-			return;
-		}
-
 		setIsLoading(true);
 		setError("");
 		
 		try {
 			const result = await login(loginDetails.employeeID, loginDetails.password);
 
-			if (!result.success) {
+			if (result.success) {
+				toast.success("Login successful");
+			} else {
+				toast("你是哪根蔥?!", {
+					icon: '🤨', 
+					duration: 3000,
+				});
 				setError(result.error);
 			}
-			// Don't handle success here - let AuthContext handle the redirect
 		} catch (error) {
-			setError("Login error: " + error.message);
+			// toast.error("Login error: " + error.message);
+			// setError("Login error: " + error.message);
 		} finally {
 			setIsLoading(false);
 		}
@@ -48,12 +51,7 @@ export default function HomePage() {
 	// Show loading while auth is being checked
 	if (loading) {
 		return (
-			<div style={{ 
-				display: 'flex', 
-				justifyContent: 'center', 
-				alignItems: 'center', 
-				height: '100vh' 
-			}}>
+			<div className={styles.loadingContainer}>
 				Loading...
 			</div>
 		);
@@ -62,95 +60,57 @@ export default function HomePage() {
 	// Don't show login form if user is already logged in
 	if (user) {
 		return (
-			<div style={{ 
-				display: 'flex', 
-				justifyContent: 'center', 
-				alignItems: 'center', 
-				height: '100vh' 
-			}}>
+			<div className={styles.loadingContainer}>
 				Redirecting to schedule...
 			</div>
 		);
 	}
 
 	return (
-		<form onSubmit={handleLoginSubmit}>
-			<div style={{
-				display: 'flex',
-				flexDirection: 'column',
-				alignItems: 'center',
-				justifyContent: 'center',
-				minHeight: '100vh',
-				background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-				fontFamily: 'Arial, sans-serif'
-			}}>
-				<h1 style={{ color: 'white', fontSize: '3rem', marginBottom: '2rem' }}>豪神</h1>
-				
-				{error && (
-					<div style={{ 
-						color: 'red', 
-						marginBottom: '10px', 
-						padding: '10px', 
-						background: 'rgba(255,255,255,0.9)', 
-						borderRadius: '5px',
-						maxWidth: '300px'
-					}}>
-						{error}
+		<div className={styles.loginPageContainer}>
+			<form onSubmit={handleLoginSubmit} className={styles.loginForm}>
+				<div className={styles.login}>
+					<h1 className={styles.title}>豪神</h1>
+					
+					{error && (
+						<div className={styles.errorContainer}>
+							{error}
+						</div>
+					)}
+					
+					<div className={styles.input}>
+						<input
+							type="text"
+							name="employeeID"
+							onChange={handleChange}
+							value={loginDetails.employeeID}
+							placeholder="員編 Employee ID"
+							autoComplete="username"
+							disabled={isLoading}
+							className={styles.inputField}
+						/>
 					</div>
-				)}
-				
-				<div style={{ marginBottom: '1rem' }}>
-					<input
-						type="text"
-						name="employeeID"
-						onChange={handleChange}
-						value={loginDetails.employeeID}
-						placeholder="員編 Employee ID"
-						autoComplete="username"
+					<div className={styles.input}>
+						<input
+							type="password"
+							name="password"
+							onChange={handleChange}
+							value={loginDetails.password}
+							placeholder="密碼 Password"
+							autoComplete="current-password"
+							disabled={isLoading}
+							className={styles.inputField}
+						/>
+					</div>
+					<button 
+						type="submit" 
 						disabled={isLoading}
-						style={{
-							padding: '15px 20px',
-							border: 'none',
-							borderRadius: '25px',
-							fontSize: '16px',
-							width: '280px'
-						}}
-					/>
+						className={styles.loginButton}
+					>
+						{isLoading ? "Signing in..." : "Sign in"}
+					</button>
 				</div>
-				<div style={{ marginBottom: '1rem' }}>
-					<input
-						type="password"
-						name="password"
-						onChange={handleChange}
-						value={loginDetails.password}
-						placeholder="密碼 Password"
-						autoComplete="current-password"
-						disabled={isLoading}
-						style={{
-							padding: '15px 20px',
-							border: 'none',
-							borderRadius: '25px',
-							fontSize: '16px',
-							width: '280px'
-						}}
-					/>
-				</div>
-				<button 
-					type="submit" 
-					disabled={isLoading}
-					style={{
-						background: 'rgba(255, 255, 255, 0.2)',
-						color: 'white',
-						border: '2px solid rgba(255, 255, 255, 0.3)',
-						padding: '15px 40px',
-						borderRadius: '25px',
-						fontSize: '16px',
-						cursor: isLoading ? 'not-allowed' : 'pointer'
-					}}
-				>
-					{isLoading ? "Signing in..." : "Sign in"}
-				</button>
-			</div>
-		</form>
+			</form>
+		</div>
 	);
 }
