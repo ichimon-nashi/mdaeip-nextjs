@@ -1,4 +1,4 @@
-/* NAVIGATION DRAWER */
+/* NAVIGATION DRAWER - Mobile Optimized */
 .drawerBackdrop {
 	position: fixed;
 	top: 0;
@@ -6,7 +6,7 @@
 	right: 0;
 	bottom: 0;
 	background-color: rgba(0, 0, 0, 0.5);
-	z-index: 9998; /* Much higher z-index */
+	z-index: 9998;
 }
 
 .navigationDrawer {
@@ -14,14 +14,16 @@
 	top: 0;
 	left: 0;
 	height: 100vh;
+	height: 100dvh; /* Dynamic viewport height for mobile */
 	width: 320px;
 	background: white;
 	box-shadow: 2px 0 10px rgba(0, 0, 0, 0.1);
 	transform: translateX(-100%);
 	transition: transform 0.3s ease-in-out;
-	z-index: 9999; /* Much higher z-index */
+	z-index: 9999;
 	display: flex;
 	flex-direction: column;
+	overflow: hidden; /* Prevent drawer itself from scrolling */
 }
 
 .navigationDrawer.open {
@@ -29,6 +31,7 @@
 }
 
 .drawerHeader {
+	flex-shrink: 0; /* Prevent header from shrinking */
 	padding: 1.5rem;
 	border-bottom: 1px solid #e5e7eb;
 	display: flex;
@@ -90,12 +93,18 @@
 	font-size: 1.125rem;
 	line-height: 1.2;
 	margin-bottom: 4px;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
 }
 
 .userMeta {
 	font-size: 14px;
 	color: #d4d4d4;
 	line-height: 1.3;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
 }
 
 .userLevel {
@@ -120,9 +129,10 @@
 }
 
 .drawerContent {
-	flex: 1;
+	flex: 1; /* Take remaining space */
+	overflow-y: auto; /* Only content area scrolls */
 	padding: 1.5rem;
-	overflow-y: auto;
+	-webkit-overflow-scrolling: touch; /* Smooth scrolling on iOS */
 }
 
 .drawerSection {
@@ -192,6 +202,7 @@
 .menuItemContent {
 	flex: 1;
 	text-align: left;
+	min-width: 0; /* Allow text to truncate */
 }
 
 .menuItemTitle {
@@ -239,9 +250,11 @@
 }
 
 .drawerFooter {
+	flex-shrink: 0; /* Prevent footer from shrinking */
 	padding: 1.5rem;
 	border-top: 1px solid #e5e7eb;
 	text-align: center;
+	background: white;
 }
 
 .appVersion {
@@ -249,44 +262,108 @@
 	color: #9ca3af;
 }
 
-/* Responsive adjustments */
-@media (max-width: 480px) {
+/* Mobile-specific adjustments */
+@media (max-width: 768px) {
 	.navigationDrawer {
-		width: 280px;
+		width: 280px; /* Slightly narrower on mobile */
+		height: 100vh;
+		height: 100dvh; /* Dynamic viewport height for mobile browsers */
 	}
-
-	.drawerUserInfo {
-		gap: 0.5rem;
+	
+	.drawerHeader {
+		padding: 1rem 1rem 0.75rem;
 	}
-
-	.userName {
-		font-size: 1rem;
+	
+	.drawerContent {
+		padding: 1rem;
 	}
-
-	.userMeta {
-		font-size: 0.75rem;
+	
+	.drawerMenuItem {
+		padding: 0.75rem;
 	}
-
+	
 	.userAvatar {
+		width: 40px;
+		height: 40px;
 		font-size: 16px;
 	}
-
+	
 	.userLevelBadge {
 		width: 18px;
 		height: 18px;
 		font-size: 9px;
 	}
-
+	
+	.userName {
+		font-size: 1rem;
+	}
+	
+	.userMeta {
+		font-size: 0.75rem;
+	}
+	
 	.menuItemTitle {
 		font-size: 13px;
 	}
-
+	
 	.menuItemDescription {
 		font-size: 11px;
 	}
-
+	
 	.accessLevelRequired {
 		font-size: 9px;
-		margin-top: 2px;
 	}
+}
+
+/* Extra small screens */
+@media (max-width: 480px) {
+	.navigationDrawer {
+		width: 260px;
+	}
+	
+	.drawerHeader {
+		padding: 0.75rem;
+	}
+	
+	.drawerContent {
+		padding: 0.75rem;
+	}
+	
+	.userAvatarContainer {
+		margin-right: 8px;
+	}
+	
+	.userAvatar {
+		width: 36px;
+		height: 36px;
+		font-size: 14px;
+	}
+	
+	.userLevelBadge {
+		width: 16px;
+		height: 16px;
+		font-size: 8px;
+	}
+	
+	.userName {
+		font-size: 0.9rem;
+	}
+	
+	.userMeta {
+		font-size: 0.7rem;
+	}
+}
+
+/* iOS Safari specific fixes */
+@supports (-webkit-touch-callout: none) {
+	.navigationDrawer {
+		height: -webkit-fill-available;
+	}
+}
+
+/* Prevent body scroll when drawer is open */
+:global(body.drawer-open) {
+	overflow: hidden;
+	position: fixed;
+	width: 100%;
 }

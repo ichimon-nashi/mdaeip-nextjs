@@ -4,7 +4,10 @@
 const bcrypt = require("bcryptjs");
 
 // Your current approved users data
-const approvedUsers = [{ id: "test", password: "123" }];
+const approvedUsers = [
+	{ id: "59161", name: "王儀珺", password: "123456" },
+	{ id: "59230", name: "葉蓉婷", password: "123456" },
+];
 
 async function hashAllPasswords() {
 	console.log("Generating bcrypt hashes...\n");
@@ -14,7 +17,7 @@ async function hashAllPasswords() {
 	for (const user of approvedUsers) {
 		try {
 			const hash = await bcrypt.hash(user.password, saltRounds);
-			console.log(`${user.id}: ${hash}`);
+			console.log(`${user.id}/${user.name}: ${hash}`);
 		} catch (error) {
 			console.error(`Error hashing password for ${user.id}:`, error);
 		}

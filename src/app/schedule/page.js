@@ -14,9 +14,70 @@ import {
   dataRoster 
 } from '../../lib/DataRoster';
 
+// Mobile detection hook
+const useIsMobile = () => {
+	const [isMobile, setIsMobile] = useState(false);
+
+	useEffect(() => {
+		const checkDevice = () => {
+			setIsMobile(window.innerWidth <= 768);
+		};
+
+		checkDevice();
+		window.addEventListener('resize', checkDevice);
+		return () => window.removeEventListener('resize', checkDevice);
+	}, []);
+
+	return isMobile;
+};
+
+// Touch-friendly selection summary component for mobile
+const SelectionSummary = ({ selectedDuties, onClear, formatDate }) => {
+	if (selectedDuties.length === 0) return null;
+
+	return (
+		<div className={styles.mobileSelectionSummary}>
+			<div className={styles.selectionHeader}>
+				<span>已選擇 {selectedDuties.length} 項</span>
+				<button onClick={onClear} className={styles.clearButton}>
+					清除全部
+				</button>
+			</div>
+			<div className={styles.selectionList}>
+				{selectedDuties.slice(0, 3).map((item, index) => (
+					<div key={index} className={styles.selectionItem}>
+						{item.name} - {formatDate(item.date)} ({item.duty})
+					</div>
+				))}
+				{selectedDuties.length > 3 && (
+					<div className={styles.selectionMore}>
+						還有 {selectedDuties.length - 3} 項...
+					</div>
+				)}
+			</div>
+		</div>
+	);
+};
+
+// Mobile Info Button for consistent same-duty viewing
+const MobileInfoButton = ({ onClick, isActive }) => (
+	<button 
+		className={`${styles.mobileInfoButton} ${isActive ? styles.active : ''}`}
+		onClick={onClick}
+	>
+		{isActive ? '🔍' : '📋'}
+	</button>
+);
+
 export default function SchedulePage() {
 	const { user, loading, logout } = useAuth();
 	const router = useRouter();
+
+	// Mobile detection
+	const isMobile = useIsMobile();
+	
+	// Mobile info mode state
+	const [mobileInfoMode, setMobileInfoMode] = useState(false);
 
 	// Refs for synchronized scrolling (removed sticky functionality)
 	const userTableRef = useRef(null);
@@ -71,7 +132,7 @@ export default function SchedulePage() {
 					
 					// Filter dates to only include current month to avoid next month spillover
 					const currentYear = currentMonth.includes('2025') ? 2025 : new Date().getFullYear();
-					const monthNumber = currentMonth.match(/(\d{2})æœˆ/)?.[1];
+					const monthNumber = currentMonth.match(/(\d{2})月/)?.[1];
 					
 					if (monthNumber) {
 						return dates.filter(date => {
@@ -138,7 +199,7 @@ export default function SchedulePage() {
 			return duty;
 		}
 		
-		// Don&apos;t modify if it&apos;s a valid date
+		// Don't modify if it's a valid date
 		if (isValidDate(duty)) {
 			return duty;
 		}
@@ -204,11 +265,58 @@ export default function SchedulePage() {
 		return content;
 	}, []);
 
-	// Handle duty selection with highlighting - with toast
+	// Mobile-friendly tooltip replacement
+	const handleDutyInfo = useCallback((employeeId, name, date, duty, sameEmployees) => {
+		if (!isMobile) {
+			// Desktop: use regular tooltip (handled by title attribute)
+			return;
+		}
+
+		// Mobile: show toast with same duty info
+		if (sameEmployees.length > 0) {
+			const displayDuty = duty || "空";
+			const employeeList = sameEmployees.slice(0, 3).map(emp => 
+				`${emp.id} ${emp.name || 'N/A'}`
+			).join(', ');
+			const moreCount = sameEmployees.length > 3 ? `等${sameEmployees.length}人` : '';
+			
+			toast(`${displayDuty}: ${employeeList}${moreCount}`, {
+				icon: 'ℹ️',
+				duration: 3000,
+				position: 'bottom-center'
+			});
+		}
+	}, [isMobile]);
+
+	// Mobile info mode toggle
+	const toggleMobileInfoMode = useCallback(() => {
+		setMobileInfoMode(prev => {
+			const newMode = !prev;
+			toast(newMode ? '查看模式：點擊班表查看相同班別' : '選擇模式：點擊班表選擇換班', {
+				icon: newMode ? '🔍' : '📋',
+				duration: 2000
+			});
+			return newMode;
+		});
+	}, []);
+
+	// Mobile-enhanced duty selection with haptic feedback
 	const handleDutySelect = useCallback((employeeId, name, date, duty) => {
 		if (!scheduleData.hasScheduleData) {
 			toast("此月份沒有班表資料！", { icon: '📅', duration: 3000 });
 			return;
+		}
+
+		// If in mobile info mode, show duty info instead of selecting
+		if (isMobile && mobileInfoMode) {
+			const sameEmployees = getEmployeesWithSameDuty(date, duty);
+			handleDutyInfo(employeeId, name, date, duty, sameEmployees);
+			return;
+		}
+
+		// Add haptic feedback for mobile devices
+		if (window.navigator && window.navigator.vibrate) {
+			window.navigator.vibrate(50); // Short vibration
 		}
 
 		const displayDuty = duty === "" ? "空" : duty;
@@ -220,6 +328,12 @@ export default function SchedulePage() {
 			const newSelectedDuties = [...selectedDuties];
 			newSelectedDuties.splice(existingIndex, 1);
 			setSelectedDuties(newSelectedDuties);
+			if (isMobile) {
+				toast(`取消選擇 ${name} 的 ${formatDate(date)} (${displayDuty})`, { 
+					icon: '❌', 
+					duration: 2000 
+				});
+			}
 		} else {
 			setSelectedDuties(prev => [...prev, {
 				employeeId,
@@ -227,25 +341,31 @@ export default function SchedulePage() {
 				date,
 				duty: displayDuty
 			}]);
+			if (isMobile) {
+				toast(`選擇 ${name} 的 ${formatDate(date)} (${displayDuty})`, { 
+					icon: '✅', 
+					duration: 2000 
+				});
+			}
 		}
-	}, [scheduleData.hasScheduleData, selectedDuties]);
+	}, [scheduleData.hasScheduleData, selectedDuties, isMobile, mobileInfoMode, formatDate, getEmployeesWithSameDuty, handleDutyInfo]);
 
 	// Handle duty change button click - with toast notifications
 	const handleDutyChangeClick = useCallback(() => {
 		if (!scheduleData.hasScheduleData) {
-			toast("此月份沒有班表資料，無法申請換班！", { icon: '⌀', duration: 3000 });
+			toast("此月份沒有班表資料，無法申請換班！", { icon: '⌚', duration: 3000 });
 			return;
 		}
 
 		if (selectedDuties.length === 0) {
-			toast("想換班還不選人嗎!搞屁啊!", { icon: '😒', duration: 3000 });
+			toast("想換班還不選人嗎!極屌啊!", { icon: '😑', duration: 3000 });
 			return;
 		}
 
 		// Check if all selected duties belong to the same employee
 		const uniqueEmployeeIds = [...new Set(selectedDuties.map(duty => duty.employeeId))];
 		if (uniqueEmployeeIds.length > 1) {
-			toast("這位太太，一張換班單只能跟一位換班!", { icon: '😒', duration: 3000 });
+			toast("這位太太，一張換班單只能跟一位換班!", { icon: '😑', duration: 3000 });
 			return;
 		}
 
@@ -284,9 +404,79 @@ export default function SchedulePage() {
 		setHighlightedDates({});
 	}, []);
 
-	const handleLogout = () => {
-		logout();
-	};
+	// Clear all selections (for mobile summary)
+	const handleClearAll = useCallback(() => {
+		setSelectedDuties([]);
+		toast('已清除所有選擇', { icon: '🗑️', duration: 2000 });
+	}, []);
+
+	// Mobile-aware table header rendering
+	const renderTableHeader = useCallback(() => (
+		<thead>
+			<tr className={styles.tableHeader}>
+				{!isMobile && (
+					<th className={`${styles.stickyCol} ${styles.employeeId}`}>員編</th>
+				)}
+				<th className={`${styles.stickyCol} ${styles.employeeName}`}>姓名</th>
+				<th className={styles.colRank}>職位</th>
+				<th className={styles.colBase}>基地</th>
+				{scheduleData.allDates.map(date => (
+					<th key={date} className={styles.dateCol}>
+						<div>{formatDate(date)}</div>
+						<div className={styles.dayOfWeek}>({getDayOfWeek(date)})</div>
+					</th>
+				))}
+			</tr>
+		</thead>
+	), [scheduleData.allDates, formatDate, getDayOfWeek, isMobile]);
+
+	// Mobile-aware table row rendering
+	const renderTableRow = useCallback((schedule, isUserSchedule = false) => (
+		<tr key={schedule.employeeID}>
+			{!isMobile && (
+				<td className={`${styles.stickyCol} ${styles.employeeIdCell}`}>
+					{schedule.employeeID}
+				</td>
+			)}
+			<td className={`${styles.stickyCol} ${styles.employeeNameCell}`}>
+				{schedule.name || '-'}
+			</td>
+			<td className={styles.rankCell}>
+				{schedule.rank || '-'}
+			</td>
+			<td className={styles.baseCell}>
+				{schedule.base}
+			</td>
+			{scheduleData.allDates.map(date => {
+				const duty = schedule.days[date];
+				const displayDuty = duty || "空";
+				const formattedDuty = formatDutyText(displayDuty);
+				const bgColorClass = getDutyBackgroundColor(duty);
+				const fontSizeClass = getDutyFontSize(displayDuty);
+				const sameEmployees = getEmployeesWithSameDuty(date, duty);
+				const isSelected = !isUserSchedule && selectedDuties.some(item =>
+					item.employeeId === schedule.employeeID && item.date === date
+				);
+
+				return (
+					<td
+						key={date}
+						className={`${styles.dutyCell} ${!isUserSchedule ? styles.selectable : ''} ${bgColorClass} ${isSelected ? styles.selected : ''}`}
+						{...(!isMobile && { title: generateTooltipContent(date, duty, sameEmployees) })}
+						onClick={() => {
+							if (!isUserSchedule) {
+								handleDutySelect(schedule.employeeID, schedule.name, date, duty);
+							}
+						}}
+					>
+						<div className={`${styles.dutyContent} ${styles[fontSizeClass]}`}>
+							{formattedDuty}
+						</div>
+					</td>
+				);
+			})}
+		</tr>
+	), [scheduleData.allDates, selectedDuties, formatDutyText, getDutyBackgroundColor, getDutyFontSize, getEmployeesWithSameDuty, generateTooltipContent, handleDutySelect, isMobile]);
 
 	// Synchronized horizontal scrolling
 	useEffect(() => {
@@ -325,7 +515,7 @@ export default function SchedulePage() {
 		}
 	}, [scheduleData.hasScheduleData]);
 
-	// FIXED: Bottom detection for button positioning
+	// Bottom detection for button positioning
 	useEffect(() => {
 		let ticking = false;
 		
@@ -345,9 +535,10 @@ export default function SchedulePage() {
 					// Calculate distance from bottom
 					const distanceFromBottom = documentHeight - (scrollTop + windowHeight);
 					
-					// Show inline button only when very close to bottom (100px or less)
-					// This keeps the floating button visible longer
-					setIsAtBottom(distanceFromBottom <= 100);
+					// Show inline button only when very close to bottom
+					// Mobile: 50px threshold, Desktop: 150px threshold for less flickering
+					const threshold = isMobile ? 50 : 150;
+					setIsAtBottom(distanceFromBottom <= threshold);
 					
 					ticking = false;
 				});
@@ -356,14 +547,14 @@ export default function SchedulePage() {
 		};
 
 		window.addEventListener('scroll', handleScroll, { passive: true });
-		window.addEventListener('resize', handleScroll, { passive: true }); // Also handle window resize
+		window.addEventListener('resize', handleScroll, { passive: true });
 		handleScroll(); // Initial check
 
 		return () => {
 			window.removeEventListener('scroll', handleScroll);
 			window.removeEventListener('resize', handleScroll);
 		};
-	}, []);
+	}, [isMobile]);
 
 	// Show loading while auth is being checked
 	if (loading) {
@@ -375,7 +566,7 @@ export default function SchedulePage() {
 		);
 	}
 
-	// Don&apos;t show schedule if no user - let AuthContext handle redirect
+	// Don't show schedule if no user - let AuthContext handle redirect
 	if (!user) {
 		return (
 			<div className="min-h-screen flex items-center justify-center">
@@ -386,7 +577,6 @@ export default function SchedulePage() {
 
 	return (
 		<div className="min-h-screen" ref={containerRef}>
-
 			<div className={styles.scheduleContainer}>
 				<div className={styles.monthSelectionContainer}>
 					<div className={styles.monthSelector}>
@@ -412,7 +602,7 @@ export default function SchedulePage() {
 
 				{scheduleData.hasScheduleData ? (
 					<>
-						{/* User Schedule Section - no sticky functionality */}
+						{/* User Schedule Section */}
 						{scheduleData.userSchedule && (
 							<div ref={userScheduleRef} className={styles.userScheduleContainer}>
 								<h2 className={styles.sectionTitle}>Your Schedule</h2>
@@ -422,55 +612,9 @@ export default function SchedulePage() {
 									ref={userTableRef}
 								>
 									<table className={styles.scheduleTable}>
-										<thead>
-											<tr className={styles.tableHeader}>
-												<th className={`${styles.stickyCol} ${styles.employeeId}`}>員編</th>
-												<th className={`${styles.stickyCol} ${styles.employeeName}`}>姓名</th>
-												<th className={styles.colRank}>職位</th>
-												<th className={styles.colBase}>基地</th>
-												{scheduleData.allDates.map(date => (
-													<th key={date} className={styles.dateCol}>
-														<div>{formatDate(date)}</div>
-														<div className={styles.dayOfWeek}>({getDayOfWeek(date)})</div>
-													</th>
-												))}
-											</tr>
-										</thead>
+										{renderTableHeader()}
 										<tbody>
-											<tr>
-												<td className={`${styles.stickyCol} ${styles.employeeIdCell}`}>
-													{scheduleData.userSchedule.employeeID}
-												</td>
-												<td className={`${styles.stickyCol} ${styles.employeeNameCell}`}>
-													{scheduleData.userSchedule.name || '-'}
-												</td>
-												<td className={styles.rankCell}>
-													{scheduleData.userSchedule.rank || '-'}
-												</td>
-												<td className={styles.baseCell}>
-													{scheduleData.userSchedule.base}
-												</td>
-												{scheduleData.allDates.map(date => {
-													const duty = scheduleData.userSchedule.days[date];
-													const displayDuty = duty || "空";
-													const formattedDuty = formatDutyText(displayDuty);
-													const bgColorClass = getDutyBackgroundColor(duty);
-													const fontSizeClass = getDutyFontSize(displayDuty);
-													const sameEmployees = getEmployeesWithSameDuty(date, duty);
-
-													return (
-														<td
-															key={date}
-															className={`${styles.dutyCell} ${bgColorClass}`}
-															title={generateTooltipContent(date, duty, sameEmployees)}
-														>
-															<div className={`${styles.dutyContent} ${styles[fontSizeClass]}`}>
-																{formattedDuty}
-															</div>
-														</td>
-													);
-												})}
-											</tr>
+											{renderTableRow(scheduleData.userSchedule, true)}
 										</tbody>
 									</table>
 								</div>
@@ -508,24 +652,7 @@ export default function SchedulePage() {
 							</div>
 						</div>
 
-						{/* Floating Header when scrolled */}
-						{isHeaderFloating && (
-							<div className={styles.floatingHeader}>
-								<div className={styles.floatingHeaderContent}>
-									<h3 className={styles.floatingHeaderTitle}>Crew Schedule Dates</h3>
-									<div className={styles.floatingHeaderDates}>
-										{scheduleData.allDates.map(date => (
-											<div key={date} className={styles.floatingDateCol}>
-												<div>{formatDate(date)}</div>
-												<div className={styles.floatingDayOfWeek}>({getDayOfWeek(date)})</div>
-											</div>
-										))}
-									</div>
-								</div>
-							</div>
-						)}
-
-						{/* Crew Schedule Table - with synchronized scrolling and selection */}
+						{/* Crew Schedule Table */}
 						<div className={styles.crewScheduleSection}>
 							<div 
 								className={styles.tableContainer} 
@@ -533,72 +660,34 @@ export default function SchedulePage() {
 								ref={crewTableRef}
 							>
 								<table className={styles.scheduleTable}>
-									<thead>
-										<tr className={styles.tableHeader}>
-											<th className={`${styles.stickyCol} ${styles.employeeId}`}>員編</th>
-											<th className={`${styles.stickyCol} ${styles.employeeName}`}>姓名</th>
-											<th className={styles.colRank}>職位</th>
-											<th className={styles.colBase}>基地</th>
-											{scheduleData.allDates.map(date => (
-												<th key={date} className={styles.dateCol}>
-													<div>{formatDate(date)}</div>
-													<div className={styles.dayOfWeek}>({getDayOfWeek(date)})</div>
-												</th>
-											))}
-										</tr>
-									</thead>
+									{renderTableHeader()}
 									<tbody>
-										{scheduleData.otherSchedules.map(schedule => (
-											<tr key={schedule.employeeID}>
-												<td className={`${styles.stickyCol} ${styles.employeeIdCell}`}>
-													{schedule.employeeID}
-												</td>
-												<td className={`${styles.stickyCol} ${styles.employeeNameCell}`}>
-													{schedule.name || '-'}
-												</td>
-												<td className={styles.rankCell}>
-													{schedule.rank || '-'}
-												</td>
-												<td className={styles.baseCell}>
-													{schedule.base}
-												</td>
-												{scheduleData.allDates.map(date => {
-													const duty = schedule.days[date];
-													const displayDuty = duty || "空";
-													const formattedDuty = formatDutyText(displayDuty);
-													const bgColorClass = getDutyBackgroundColor(duty);
-													const fontSizeClass = getDutyFontSize(displayDuty);
-													const sameEmployees = getEmployeesWithSameDuty(date, duty);
-													const isSelected = selectedDuties.some(item =>
-														item.employeeId === schedule.employeeID && item.date === date
-													);
-
-													return (
-														<td
-															key={date}
-															className={`${styles.dutyCell} ${styles.selectable} ${bgColorClass} ${isSelected ? styles.selected : ''}`}
-															title={generateTooltipContent(date, duty, sameEmployees)}
-															onClick={() => handleDutySelect(
-																schedule.employeeID,
-																schedule.name,
-																date,
-																duty
-															)}
-														>
-															<div className={`${styles.dutyContent} ${styles[fontSizeClass]}`}>
-																{formattedDuty}
-															</div>
-														</td>
-													);
-												})}
-											</tr>
-										))}
+										{scheduleData.otherSchedules.map(schedule => 
+											renderTableRow(schedule, false)
+										)}
 									</tbody>
 								</table>
 							</div>
 						</div>
 
-						{/* FIXED: Smart Submit Button - always visible, switches between floating and inline */}
+						{/* Mobile Info Button for consistent same-duty viewing */}
+						{isMobile && (
+							<MobileInfoButton 
+								onClick={toggleMobileInfoMode}
+								isActive={mobileInfoMode}
+							/>
+						)}
+
+						{/* Mobile Selection Summary */}
+						{isMobile && (
+							<SelectionSummary 
+								selectedDuties={selectedDuties}
+								onClear={handleClearAll}
+								formatDate={formatDate}
+							/>
+						)}
+
+						{/* Smart Submit Button - switches between floating and inline */}
 						{!isAtBottom && (
 							<div className={styles.submitButtonFullWidth}>
 								<button 

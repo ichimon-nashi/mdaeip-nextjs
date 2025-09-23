@@ -2,6 +2,7 @@
 
 import { useRouter } from 'next/navigation';
 import { usePathname } from 'next/navigation';
+import { useEffect } from 'react';
 import Image from 'next/image';
 import { X, Calendar, Clock, Users, Settings, MapPin, FileText, Utensils, NotebookPen, Crown, Shield, User, Star } from 'lucide-react';
 import styles from '../styles/NavigationDrawer.module.css';
@@ -9,6 +10,31 @@ import styles from '../styles/NavigationDrawer.module.css';
 const NavigationDrawer = ({ isOpen, onClose, userDetails }) => {
     const router = useRouter();
     const pathname = usePathname();
+
+    // Prevent body scroll when drawer is open on mobile
+    useEffect(() => {
+        if (isOpen) {
+            // Store current scroll position
+            const scrollY = window.scrollY;
+            // Add class to body to prevent scrolling
+            document.body.classList.add('drawer-open');
+            document.body.style.top = `-${scrollY}px`;
+        } else {
+            // Remove class and restore scroll position
+            const scrollY = document.body.style.top;
+            document.body.classList.remove('drawer-open');
+            document.body.style.top = '';
+            if (scrollY) {
+                window.scrollTo(0, parseInt(scrollY || '0') * -1);
+            }
+        }
+
+        // Cleanup on unmount
+        return () => {
+            document.body.classList.remove('drawer-open');
+            document.body.style.top = '';
+        };
+    }, [isOpen]);
 
     // Get user level from userDetails, trying multiple possible property names
     const userLevel = parseInt(
@@ -18,15 +44,6 @@ const NavigationDrawer = ({ isOpen, onClose, userDetails }) => {
         1
     );
     
-    // Debug log to check access level
-    console.log('User Level Debug:', {
-        access_level: userDetails?.access_level,
-        accessLevel: userDetails?.accessLevel,
-        level: userDetails?.level,
-        parsedUserLevel: userLevel,
-        userDetails: userDetails
-    });
-
     // Define access levels and their properties
     const accessLevels = {
         1: { 
@@ -68,6 +85,13 @@ const NavigationDrawer = ({ isOpen, onClose, userDetails }) => {
         }
         router.push(path);
         onClose();
+    };
+
+    // Close drawer when clicking backdrop
+    const handleBackdropClick = (e) => {
+        if (e.target === e.currentTarget) {
+            onClose();
+        }
     };
 
     const menuItems = [
@@ -127,7 +151,7 @@ const NavigationDrawer = ({ isOpen, onClose, userDetails }) => {
             {isOpen && (
                 <div 
                     className={styles.drawerBackdrop}
-                    onClick={onClose}
+                    onClick={handleBackdropClick}
                 />
             )}
             
