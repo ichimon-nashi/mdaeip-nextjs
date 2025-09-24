@@ -14,7 +14,7 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey);
 export const authHelpers = {
 	// Sign in user
 	async signIn(employeeID, password) {
-		console.log("🔍 Starting login process for employee:", employeeID);
+		console.log("🔐 Starting login process for employee:", employeeID);
 		
 		try {
 			// Query the mdaeip_users table directly
@@ -34,9 +34,9 @@ export const authHelpers = {
 			console.log("✅ User found in database:", data.name);
 
 			// Compare the provided password with the hashed password
-			console.log("🔐 Comparing passwords...");
+			console.log("🔍 Comparing passwords...");
 			const passwordMatch = await bcrypt.compare(password, data.password);
-			console.log("🔐 Password match result:", passwordMatch);
+			console.log("🔍 Password match result:", passwordMatch);
 
 			if (!passwordMatch) {
 				console.log("❌ Password does not match");
@@ -151,4 +151,108 @@ export const remarksHelpers = {
 			return { data: null, error: error.message };
 		}
 	},
+};
+
+// Helper functions for schedule operations
+export const scheduleHelpers = {
+	// Get all available schedule months
+	async getAvailableMonths() {
+		try {
+			const { data, error } = await supabase
+				.from("mdaeip_schedule_months")
+				.select("month")
+				.order("month", { ascending: false });
+
+			return { data: data?.map(item => item.month) || [], error };
+		} catch (error) {
+			return { data: [], error: error.message };
+		}
+	},
+
+	// Get all schedules for a specific month
+	async getSchedulesForMonth(month) {
+		try {
+			const { data, error } = await supabase
+				.from("mdaeip_schedules")
+				.select(`
+					employee_id,
+					duties,
+					mdaeip_schedule_months!inner(month)
+				`)
+				.eq("mdaeip_schedule_months.month", month);
+
+			if (error) throw error;
+
+			return { 
+				data: data?.map(item => ({
+					employeeID: item.employee_id,
+					duties: item.duties
+				})) || [], 
+				error: null 
+			};
+		} catch (error) {
+			return { data: [], error: error.message };
+		}
+	},
+
+	// Add or update a complete month's schedule (Admin only)
+	async upsertMonthSchedule(month, scheduleData, userAccessLevel) {
+		if (userAccessLevel !== 99) {
+			return { error: "Access denied. Admin privileges required." };
+		}
+
+		try {
+			// Start transaction by upserting the month
+			const { data: monthData, error: monthError } = await supabase
+				.from("mdaeip_schedule_months")
+				.upsert([{ month }], { onConflict: "month" })
+				.select("id")
+				.single();
+
+			if (monthError) throw monthError;
+
+			const monthId = monthData.id;
+
+			// Delete existing schedules for this month
+			await supabase
+				.from("mdaeip_schedules")
+				.delete()
+				.eq("month_id", monthId);
+
+			// Insert new schedules
+			const scheduleInserts = scheduleData.crew_schedules.map(schedule => ({
+				month_id: monthId,
+				employee_id: schedule.employeeID,
+				duties: schedule.duties
+			}));
+
+			const { error: insertError } = await supabase
+				.from("mdaeip_schedules")
+				.insert(scheduleInserts);
+
+			if (insertError) throw insertError;
+
+			return { success: true };
+		} catch (error) {
+			return { error: error.message };
+		}
+	},
+
+	// Delete a month's schedule (Admin only)
+	async deleteMonthSchedule(month, userAccessLevel) {
+		if (userAccessLevel !== 99) {
+			return { error: "Access denied. Admin privileges required." };
+		}
+
+		try {
+			const { error } = await supabase
+				.from("mdaeip_schedule_months")
+				.delete()
+				.eq("month", month);
+
+			return { error };
+		} catch (error) {
+			return { error: error.message };
+		}
+	}
 };

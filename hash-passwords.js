@@ -7,6 +7,7 @@ const bcrypt = require("bcryptjs");
 const approvedUsers = [
 	{ id: "59161", name: "王儀珺", password: "123456" },
 	{ id: "59230", name: "葉蓉婷", password: "123456" },
+	{ id: "51856", name: "黃郁涵", password: "twiggy" },
 ];
 
 async function hashAllPasswords() {

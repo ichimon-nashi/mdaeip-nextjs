@@ -11,24 +11,95 @@ import {
   getEmployeeSchedule, 
   getSchedulesByBase,
   getEmployeeById,
-  dataRoster 
+  getAvailableMonths
 } from '../../lib/DataRoster';
 
 // Mobile detection hook
 const useIsMobile = () => {
-	const [isMobile, setIsMobile] = useState(false);
+	const [isMobile, setIsMobile] = useState(() => {
+		if (typeof window !== 'undefined') {
+			return window.innerWidth <= 768;
+		}
+		return false;
+	});
 
 	useEffect(() => {
+		if (typeof window === 'undefined') return;
+
 		const checkDevice = () => {
 			setIsMobile(window.innerWidth <= 768);
 		};
 
 		checkDevice();
+		
 		window.addEventListener('resize', checkDevice);
 		return () => window.removeEventListener('resize', checkDevice);
 	}, []);
 
 	return isMobile;
+};
+
+// Admin Upload Modal Component
+const AdminUploadModal = ({ isOpen, onClose, onUpload }) => {
+	const [jsonData, setJsonData] = useState('');
+	const [isUploading, setIsUploading] = useState(false);
+
+	if (!isOpen) return null;
+
+	const handleUpload = async () => {
+		if (!jsonData.trim()) {
+			toast.error('請輸入班表資料');
+			return;
+		}
+
+		try {
+			setIsUploading(true);
+			const scheduleData = JSON.parse(jsonData);
+			await onUpload(scheduleData);
+			setJsonData('');
+			onClose();
+		} catch (error) {
+			toast.error(`JSON格式錯誤: ${error.message}`);
+		} finally {
+			setIsUploading(false);
+		}
+	};
+
+	return (
+		<div className={styles.modalOverlay} onClick={onClose}>
+			<div className={styles.modalContent} onClick={(e) => e.stopPropagation()}>
+				<div className={styles.modalHeader}>
+					<h3>上傳班表資料 (管理員)</h3>
+					<button className={styles.modalClose} onClick={onClose}>×</button>
+				</div>
+				<div className={styles.modalBody}>
+					<textarea
+						value={jsonData}
+						onChange={(e) => setJsonData(e.target.value)}
+						placeholder="請貼上JSON格式的班表資料..."
+						className={styles.jsonTextarea}
+						rows={15}
+					/>
+				</div>
+				<div className={styles.modalFooter}>
+					<button
+						className={styles.cancelButton}
+						onClick={onClose}
+						disabled={isUploading}
+					>
+						取消
+					</button>
+					<button
+						className={styles.uploadButton}
+						onClick={handleUpload}
+						disabled={isUploading}
+					>
+						{isUploading ? '上傳中...' : '上傳班表'}
+					</button>
+				</div>
+			</div>
+		</div>
+	);
 };
 
 // Touch-friendly selection summary component for mobile
@@ -65,7 +136,7 @@ const MobileInfoButton = ({ onClick, isActive }) => (
 		className={`${styles.mobileInfoButton} ${isActive ? styles.active : ''}`}
 		onClick={onClick}
 	>
-		{isActive ? '🔍' : '📋'}
+		{isActive ? '🔍' : 'ℹ️'}
 	</button>
 );
 
@@ -79,17 +150,55 @@ export default function SchedulePage() {
 	// Mobile info mode state
 	const [mobileInfoMode, setMobileInfoMode] = useState(false);
 
+	// Admin upload modal state
+	const [showUploadModal, setShowUploadModal] = useState(false);
+
 	// Refs for synchronized scrolling (removed sticky functionality)
 	const userTableRef = useRef(null);
 	const crewTableRef = useRef(null);
 	const userScheduleRef = useRef(null);
 
-	// Set default tab based on user's base
+	// Available months state
+	const [availableMonths, setAvailableMonths] = useState([]);
+	const [currentMonth, setCurrentMonth] = useState('');
+	const [activeTab, setActiveTab] = useState('TSA');
+	const [isAtBottom, setIsAtBottom] = useState(false);
+	const [isHeaderFloating, setIsHeaderFloating] = useState(false);
+	const crewSectionRef = useRef(null);
+	const containerRef = useRef(null);
+	const [selectedDuties, setSelectedDuties] = useState([]);
+	const [highlightedDates, setHighlightedDates] = useState({});
+
+	// Load available months
 	useEffect(() => {
-		if (user?.base) {
+		const loadMonths = async () => {
+			try {
+				const months = await getAvailableMonths();
+				// Sort months to show latest at bottom (8月, 9月, 10月)
+				const sortedMonths = months.sort((a, b) => {
+					const monthA = parseInt(a.match(/(\d+)月/)?.[1] || '0');
+					const monthB = parseInt(b.match(/(\d+)月/)?.[1] || '0');
+					return monthA - monthB;
+				});
+				setAvailableMonths(sortedMonths);
+				if (sortedMonths.length > 0 && !currentMonth) {
+					setCurrentMonth(sortedMonths[sortedMonths.length - 1]); // Most recent month (last in sorted array)
+				}
+			} catch (error) {
+				console.error('Error loading months:', error);
+				toast.error('載入月份資料失敗');
+			}
+		};
+
+		loadMonths();
+	}, [currentMonth]);
+
+	// Set default tab based on user's base (only after user is loaded)
+	useEffect(() => {
+		if (user?.base && activeTab === 'TSA') {
 			setActiveTab(user.base);
 		}
-	}, [user?.base]);
+	}, [user?.base, activeTab]);
 
 	// Redirect to login if not authenticated
 	useEffect(() => {
@@ -98,67 +207,75 @@ export default function SchedulePage() {
 		}
 	}, [user, loading, router]);
 
-	// Dynamically get available months from dataRoster
-	const availableMonths = useMemo(() => {
-		return dataRoster.map(monthData => monthData.month);
-	}, []);
+	// Updated scheduleData to use async database calls
+	const [scheduleData, setScheduleData] = useState({
+		allSchedules: [],
+		hasScheduleData: false,
+		userSchedule: null,
+		allDates: [],
+		otherSchedules: []
+	});
 
-	const findLatestMonthWithData = useCallback(() => {
-		// Return the last month in the array (most recent)
-		return availableMonths[availableMonths.length - 1] || availableMonths[0];
-	}, [availableMonths]);
+	// Load schedule data when month or tab changes
+	useEffect(() => {
+		const loadScheduleData = async () => {
+			if (!currentMonth) {
+				setScheduleData({
+					allSchedules: [],
+					hasScheduleData: false,
+					userSchedule: null,
+					allDates: [],
+					otherSchedules: []
+				});
+				return;
+			}
 
-	const [currentMonth, setCurrentMonth] = useState(() => findLatestMonthWithData());
-	const [activeTab, setActiveTab] = useState('TSA'); // Will be updated in useEffect
-	const [isAtBottom, setIsAtBottom] = useState(false);
-	const [isHeaderFloating, setIsHeaderFloating] = useState(false);
-	const crewSectionRef = useRef(null);
-	const containerRef = useRef(null);
-	const [selectedDuties, setSelectedDuties] = useState([]);
-	const [highlightedDates, setHighlightedDates] = useState({});
+			try {
+				const allSchedules = await getAllSchedulesForMonth(currentMonth);
+				const hasScheduleData = allSchedules.length > 0;
+				const userSchedule = user?.id ? await getEmployeeSchedule(user.id, currentMonth) : null;
 
-	// Updated scheduleData to use real data from DataRoster with date filtering
-	const scheduleData = useMemo(() => {
-		const allSchedules = getAllSchedulesForMonth(currentMonth);
-		const hasScheduleData = allSchedules.length > 0;
-		const userSchedule = user?.id ? getEmployeeSchedule(user.id, currentMonth) : null;
+				const allDates = hasScheduleData ? 
+					(() => {
+						const firstSchedule = allSchedules[0];
+						if (firstSchedule && firstSchedule.days) {
+							const dates = Object.keys(firstSchedule.days).sort();
+							
+							const currentYear = currentMonth.includes('2025') ? 2025 : new Date().getFullYear();
+							const monthNumber = currentMonth.match(/(\d{2})月/)?.[1];
+							
+							if (monthNumber) {
+								return dates.filter(date => {
+									const dateObj = new Date(date);
+									return dateObj.getFullYear() === currentYear && 
+										   (dateObj.getMonth() + 1) === parseInt(monthNumber);
+								});
+							}
+							
+							return dates;
+						}
+						return [];
+					})() : [];
 
-		const allDates = hasScheduleData ? 
-			(() => {
-				// Get all unique dates from the first schedule and sort them
-				const firstSchedule = allSchedules[0];
-				if (firstSchedule && firstSchedule.days) {
-					const dates = Object.keys(firstSchedule.days).sort();
-					
-					// Filter dates to only include current month to avoid next month spillover
-					const currentYear = currentMonth.includes('2025') ? 2025 : new Date().getFullYear();
-					const monthNumber = currentMonth.match(/(\d{2})月/)?.[1];
-					
-					if (monthNumber) {
-						return dates.filter(date => {
-							const dateObj = new Date(date);
-							return dateObj.getFullYear() === currentYear && 
-								   (dateObj.getMonth() + 1) === parseInt(monthNumber);
-						});
-					}
-					
-					return dates;
-				}
-				return [];
-			})() : [];
+				const otherSchedules = hasScheduleData ? 
+					await getSchedulesByBase(currentMonth, activeTab).then(schedules => 
+						schedules.filter(schedule => schedule.employeeID !== user?.id)
+					) : [];
 
-		const otherSchedules = hasScheduleData ? 
-			getSchedulesByBase(currentMonth, activeTab).filter(schedule => 
-				schedule.employeeID !== user?.id
-			) : [];
-
-		return {
-			allSchedules,
-			hasScheduleData,
-			userSchedule,
-			allDates,
-			otherSchedules
+				setScheduleData({
+					allSchedules,
+					hasScheduleData,
+					userSchedule,
+					allDates,
+					otherSchedules
+				});
+			} catch (error) {
+				console.error('Error loading schedule data:', error);
+				toast.error('載入班表資料失敗');
+			}
 		};
+
+		loadScheduleData();
 	}, [currentMonth, activeTab, user?.id]);
 
 	// Helper functions
@@ -175,7 +292,6 @@ export default function SchedulePage() {
 
 	// Function to check if text contains a valid date pattern
 	const isValidDate = useCallback((text) => {
-		// Check for date patterns like M/D, MM/D, M/DD, MM/DD
 		const datePattern = /^(\d{1,2})\/(\d{1,2})$/;
 		const match = text.match(datePattern);
 		
@@ -184,7 +300,6 @@ export default function SchedulePage() {
 		const month = parseInt(match[1]);
 		const day = parseInt(match[2]);
 		
-		// Valid month (1-12) and day (1-31)
 		return month >= 1 && month <= 12 && day >= 1 && day <= 31;
 	}, []);
 
@@ -192,19 +307,16 @@ export default function SchedulePage() {
 	const formatDutyText = useCallback((duty) => {
 		if (!duty) return duty;
 		
-		// Keep these specific duties with "/" as they are
 		const keepSlashDuties = ['P/L', 'A/L', 'S/L'];
 		
 		if (keepSlashDuties.includes(duty)) {
 			return duty;
 		}
 		
-		// Don't modify if it's a valid date
 		if (isValidDate(duty)) {
 			return duty;
 		}
 		
-		// For all other duties, replace "/" with line break
 		return duty.replace(/\//g, '\n');
 	}, [isValidDate]);
 
@@ -268,11 +380,9 @@ export default function SchedulePage() {
 	// Mobile-friendly tooltip replacement
 	const handleDutyInfo = useCallback((employeeId, name, date, duty, sameEmployees) => {
 		if (!isMobile) {
-			// Desktop: use regular tooltip (handled by title attribute)
 			return;
 		}
 
-		// Mobile: show toast with same duty info
 		if (sameEmployees.length > 0) {
 			const displayDuty = duty || "空";
 			const employeeList = sameEmployees.slice(0, 3).map(emp => 
@@ -307,16 +417,14 @@ export default function SchedulePage() {
 			return;
 		}
 
-		// If in mobile info mode, show duty info instead of selecting
 		if (isMobile && mobileInfoMode) {
 			const sameEmployees = getEmployeesWithSameDuty(date, duty);
 			handleDutyInfo(employeeId, name, date, duty, sameEmployees);
 			return;
 		}
 
-		// Add haptic feedback for mobile devices
 		if (window.navigator && window.navigator.vibrate) {
-			window.navigator.vibrate(50); // Short vibration
+			window.navigator.vibrate(50);
 		}
 
 		const displayDuty = duty === "" ? "空" : duty;
@@ -350,7 +458,7 @@ export default function SchedulePage() {
 		}
 	}, [scheduleData.hasScheduleData, selectedDuties, isMobile, mobileInfoMode, formatDate, getEmployeesWithSameDuty, handleDutyInfo]);
 
-	// Handle duty change button click - with toast notifications
+	// Handle duty change button click
 	const handleDutyChangeClick = useCallback(() => {
 		if (!scheduleData.hasScheduleData) {
 			toast("此月份沒有班表資料，無法申請換班！", { icon: '⌚', duration: 3000 });
@@ -358,18 +466,16 @@ export default function SchedulePage() {
 		}
 
 		if (selectedDuties.length === 0) {
-			toast("想換班還不選人嗎!極屌啊!", { icon: '😑', duration: 3000 });
+			toast("想換班還不選人嗎!極屌啊!", { icon: '😐', duration: 3000 });
 			return;
 		}
 
-		// Check if all selected duties belong to the same employee
 		const uniqueEmployeeIds = [...new Set(selectedDuties.map(duty => duty.employeeId))];
 		if (uniqueEmployeeIds.length > 1) {
-			toast("這位太太，一張換班單只能跟一位換班!", { icon: '😑', duration: 3000 });
+			toast("這位太太，一張換班單只能跟一位換班!", { icon: '😐', duration: 3000 });
 			return;
 		}
 
-		// Prepare data to pass to duty change page
 		const dutyChangeData = {
 			firstID: user?.id || "",
 			firstName: user?.name || "",
@@ -377,28 +483,25 @@ export default function SchedulePage() {
 			allDuties: selectedDuties
 		};
 
-		// Store data in localStorage for Next.js navigation
 		localStorage.setItem('dutyChangeData', JSON.stringify(dutyChangeData));
-
-		// Navigate to duty change page
 		router.push('/duty-change');
 	}, [selectedDuties, router, user, currentMonth, scheduleData.hasScheduleData]);
 
-	// Handle month change - with toast notification
-	const handleMonthChange = useCallback((event) => {
+	// Handle month change
+	const handleMonthChange = useCallback(async (event) => {
 		const newMonth = event.target.value;
 		setCurrentMonth(newMonth);
 		setSelectedDuties([]);
 		setHighlightedDates({});
 
-		// Check if data exists and show notification
-		const newMonthData = getAllSchedulesForMonth(newMonth);
-		if (!newMonthData || newMonthData.length === 0) {
+		const newSchedules = await getAllSchedulesForMonth(newMonth);
+		if (!newSchedules || newSchedules.length === 0) {
 			toast(`${newMonth}尚無班表資料`, { icon: '📅', duration: 2000 });
 		}
 	}, []);
 
 	const handleTabChange = useCallback((base) => {
+		console.log(`Tab changed to: ${base}`);
 		setActiveTab(base);
 		setSelectedDuties([]);
 		setHighlightedDates({});
@@ -410,6 +513,38 @@ export default function SchedulePage() {
 		toast('已清除所有選擇', { icon: '🗑️', duration: 2000 });
 	}, []);
 
+	// Admin upload function
+	const handleAdminUpload = useCallback(async (scheduleData) => {
+		try {
+			const response = await fetch('/api/schedule/upload', {
+				method: 'POST',
+				headers: {
+					'Content-Type': 'application/json',
+				},
+				body: JSON.stringify({
+					scheduleData,
+					userId: user.id,
+					userAccessLevel: user.access_level
+				}),
+			});
+
+			const result = await response.json();
+
+			if (result.success) {
+				toast.success('班表上傳成功！');
+				// Refresh available months
+				const months = await getAvailableMonths();
+				setAvailableMonths(months);
+				// Reload current schedule data
+				window.location.reload();
+			} else {
+				toast.error(`上傳失敗: ${result.error}`);
+			}
+		} catch (error) {
+			toast.error(`上傳錯誤: ${error.message}`);
+		}
+	}, [user]);
+
 	// Mobile-aware table header rendering
 	const renderTableHeader = useCallback(() => (
 		<thead>
@@ -418,8 +553,12 @@ export default function SchedulePage() {
 					<th className={`${styles.stickyCol} ${styles.employeeId}`}>員編</th>
 				)}
 				<th className={`${styles.stickyCol} ${styles.employeeName}`}>姓名</th>
-				<th className={styles.colRank}>職位</th>
-				<th className={styles.colBase}>基地</th>
+				{!isMobile && (
+					<>
+						<th className={styles.colRank}>職位</th>
+						<th className={styles.colBase}>基地</th>
+					</>
+				)}
 				{scheduleData.allDates.map(date => (
 					<th key={date} className={styles.dateCol}>
 						<div>{formatDate(date)}</div>
@@ -430,7 +569,7 @@ export default function SchedulePage() {
 		</thead>
 	), [scheduleData.allDates, formatDate, getDayOfWeek, isMobile]);
 
-	// Mobile-aware table row rendering
+	// Mobile-aware table row rendering with badges and proper tooltips
 	const renderTableRow = useCallback((schedule, isUserSchedule = false) => (
 		<tr key={schedule.employeeID}>
 			{!isMobile && (
@@ -439,14 +578,30 @@ export default function SchedulePage() {
 				</td>
 			)}
 			<td className={`${styles.stickyCol} ${styles.employeeNameCell}`}>
-				{schedule.name || '-'}
+				<div className={styles.nameContainer}>
+					<div className={styles.employeeName}>{schedule.name || '-'}</div>
+					{isMobile && (
+						<div className={styles.badgeContainer}>
+							{schedule.rank && (
+								<span className={styles.rankBadge}>{schedule.rank}</span>
+							)}
+							<span className={`${styles.baseBadge} ${styles[`base${schedule.base}`]}`}>
+								{schedule.base}
+							</span>
+						</div>
+					)}
+				</div>
 			</td>
-			<td className={styles.rankCell}>
-				{schedule.rank || '-'}
-			</td>
-			<td className={styles.baseCell}>
-				{schedule.base}
-			</td>
+			{!isMobile && (
+				<>
+					<td className={styles.rankCell}>
+						{schedule.rank || '-'}
+					</td>
+					<td className={styles.baseCell}>
+						{schedule.base}
+					</td>
+				</>
+			)}
 			{scheduleData.allDates.map(date => {
 				const duty = schedule.days[date];
 				const displayDuty = duty || "空";
@@ -462,7 +617,7 @@ export default function SchedulePage() {
 					<td
 						key={date}
 						className={`${styles.dutyCell} ${!isUserSchedule ? styles.selectable : ''} ${bgColorClass} ${isSelected ? styles.selected : ''}`}
-						{...(!isMobile && { title: generateTooltipContent(date, duty, sameEmployees) })}
+						title={!isMobile ? generateTooltipContent(date, duty, sameEmployees) : undefined}
 						onClick={() => {
 							if (!isUserSchedule) {
 								handleDutySelect(schedule.employeeID, schedule.name, date, duty);
@@ -478,44 +633,7 @@ export default function SchedulePage() {
 		</tr>
 	), [scheduleData.allDates, selectedDuties, formatDutyText, getDutyBackgroundColor, getDutyFontSize, getEmployeesWithSameDuty, generateTooltipContent, handleDutySelect, isMobile]);
 
-	// Synchronized horizontal scrolling
-	useEffect(() => {
-		const userTable = userTableRef.current;
-		const crewTable = crewTableRef.current;
-
-		if (userTable && crewTable) {
-			let userScrolling = false;
-			let crewScrolling = false;
-
-			const syncUserToCrewScroll = (e) => {
-				if (crewScrolling) return;
-				userScrolling = true;
-				crewTable.scrollLeft = e.target.scrollLeft;
-				requestAnimationFrame(() => {
-					userScrolling = false;
-				});
-			};
-
-			const syncCrewToUserScroll = (e) => {
-				if (userScrolling) return;
-				crewScrolling = true;
-				userTable.scrollLeft = e.target.scrollLeft;
-				requestAnimationFrame(() => {
-					crewScrolling = false;
-				});
-			};
-
-			userTable.addEventListener('scroll', syncUserToCrewScroll, { passive: true });
-			crewTable.addEventListener('scroll', syncCrewToUserScroll, { passive: true });
-
-			return () => {
-				if (userTable) userTable.removeEventListener('scroll', syncUserToCrewScroll);
-				if (crewTable) crewTable.removeEventListener('scroll', syncCrewToUserScroll);
-			};
-		}
-	}, [scheduleData.hasScheduleData]);
-
-	// Bottom detection for button positioning
+	// Improved bottom detection with better threshold management
 	useEffect(() => {
 		let ticking = false;
 		
@@ -532,13 +650,13 @@ export default function SchedulePage() {
 						document.documentElement.offsetHeight
 					);
 					
-					// Calculate distance from bottom
 					const distanceFromBottom = documentHeight - (scrollTop + windowHeight);
+					const threshold = isMobile ? 80 : 200;
+					const newIsAtBottom = distanceFromBottom <= threshold;
 					
-					// Show inline button only when very close to bottom
-					// Mobile: 50px threshold, Desktop: 150px threshold for less flickering
-					const threshold = isMobile ? 50 : 150;
-					setIsAtBottom(distanceFromBottom <= threshold);
+					if (newIsAtBottom !== isAtBottom) {
+						setIsAtBottom(newIsAtBottom);
+					}
 					
 					ticking = false;
 				});
@@ -546,18 +664,60 @@ export default function SchedulePage() {
 			}
 		};
 
-		window.addEventListener('scroll', handleScroll, { passive: true });
+		let scrollTimeout;
+		const throttledHandleScroll = () => {
+			if (scrollTimeout) clearTimeout(scrollTimeout);
+			scrollTimeout = setTimeout(handleScroll, 50);
+		};
+
+		window.addEventListener('scroll', throttledHandleScroll, { passive: true });
 		window.addEventListener('resize', handleScroll, { passive: true });
-		handleScroll(); // Initial check
+		handleScroll();
 
 		return () => {
-			window.removeEventListener('scroll', handleScroll);
+			window.removeEventListener('scroll', throttledHandleScroll);
 			window.removeEventListener('resize', handleScroll);
+			if (scrollTimeout) clearTimeout(scrollTimeout);
 		};
-	}, [isMobile]);
+	}, [isMobile, isAtBottom]);
 
-	// Show loading while auth is being checked
-	if (loading) {
+	// Synchronized horizontal scrolling between user and crew tables
+	useEffect(() => {
+		const userTable = userTableRef.current;
+		const crewTable = crewTableRef.current;
+		
+		if (!userTable || !crewTable) return;
+		
+		let isUserScrolling = false;
+		let isCrewScrolling = false;
+		
+		const syncUserToCrew = () => {
+			if (!isCrewScrolling) {
+				isUserScrolling = true;
+				crewTable.scrollLeft = userTable.scrollLeft;
+				setTimeout(() => { isUserScrolling = false; }, 50);
+			}
+		};
+		
+		const syncCrewToUser = () => {
+			if (!isUserScrolling) {
+				isCrewScrolling = true;
+				userTable.scrollLeft = crewTable.scrollLeft;
+				setTimeout(() => { isCrewScrolling = false; }, 50);
+			}
+		};
+		
+		userTable.addEventListener('scroll', syncUserToCrew, { passive: true });
+		crewTable.addEventListener('scroll', syncCrewToUser, { passive: true });
+		
+		return () => {
+			userTable.removeEventListener('scroll', syncUserToCrew);
+			crewTable.removeEventListener('scroll', syncCrewToUser);
+		};
+	}, [scheduleData.userSchedule, scheduleData.otherSchedules]);
+
+	// Show loading while auth is being checked or while initializing
+	if (loading || !currentMonth) {
 		return (
 			<div className="min-h-screen flex items-center justify-center">
 				<div className="spinner"></div>
@@ -591,6 +751,15 @@ export default function SchedulePage() {
 								<option key={month} value={month}>{month}</option>
 							))}
 						</select>
+						{user.access_level === 99 && (
+							<button
+								className={styles.adminUploadButton}
+								onClick={() => setShowUploadModal(true)}
+								title="管理員上傳班表"
+							>
+								📤 上傳班表
+							</button>
+						)}
 					</div>
 					<h1 className={styles.scheduleHeading}>{currentMonth}班表</h1>
 					{!scheduleData.hasScheduleData && (
@@ -687,7 +856,7 @@ export default function SchedulePage() {
 							/>
 						)}
 
-						{/* Smart Submit Button - switches between floating and inline */}
+						{/* Smart Submit Button - switches between floating and inline with reduced flickering */}
 						{!isAtBottom && (
 							<div className={styles.submitButtonFullWidth}>
 								<button 
@@ -717,6 +886,15 @@ export default function SchedulePage() {
 							<p>請選擇其他月份或等待資料更新</p>
 						</div>
 					</div>
+				)}
+
+				{/* Admin Upload Modal */}
+				{user.access_level === 99 && (
+					<AdminUploadModal
+						isOpen={showUploadModal}
+						onClose={() => setShowUploadModal(false)}
+						onUpload={handleAdminUpload}
+					/>
 				)}
 			</div>
 		</div>

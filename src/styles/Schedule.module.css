@@ -1,4 +1,4 @@
-/* SCHEDULE PAGE - Mobile Optimized with Fixes */
+/* SCHEDULE PAGE - Mobile Optimized with Badge System and Improved UX */
 
 .scheduleContainer {
 	width: 100%;
@@ -246,6 +246,73 @@
 	white-space: nowrap;
 }
 
+/* Mobile badge system for rank and base */
+.nameContainer {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+	gap: 0.375rem;
+	padding: 0.25rem;
+}
+
+.employeeName {
+	font-weight: 600;
+	color: #111827;
+	text-align: center;
+	line-height: 1.2;
+}
+
+.badgeContainer {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 0.375rem;
+	justify-content: center;
+	align-items: center;
+}
+
+.rankBadge,
+.baseBadge {
+	display: inline-block;
+	padding: 0.25rem 0.5rem;
+	border-radius: 0.375rem;
+	font-size: 0.75rem;
+	font-weight: 600;
+	text-transform: uppercase;
+	letter-spacing: 0.025em;
+	white-space: nowrap;
+	line-height: 1.2;
+}
+
+.rankBadge {
+	background-color: #e5e7eb;
+	color: #374151;
+	border: 1px solid #d1d5db;
+}
+
+.baseBadge {
+	color: white;
+	font-weight: 700;
+	text-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+}
+
+/* Base-specific badge colors */
+.baseTSA {
+	background: linear-gradient(135deg, #ef4444, #dc2626);
+}
+
+.baseRMQ {
+	background: linear-gradient(135deg, #10b981, #059669);
+}
+
+.baseKHH {
+	background: linear-gradient(135deg, #3b82f6, #2563eb);
+}
+
+.baseALL {
+	background: linear-gradient(135deg, #8b5cf6, #7c3aed);
+}
+
 .rankCell,
 .baseCell {
 	padding: 0.75rem;
@@ -353,7 +420,7 @@
 	color: #dc2626;
 }
 
-/* Full-width duty change button */
+/* Improved full-width duty change button with reduced flickering */
 .submitButtonFullWidth {
 	position: fixed;
 	bottom: 20px;
@@ -365,6 +432,7 @@
 	box-shadow: 0 8px 32px rgba(0, 0, 0, 0.08);
 	background: none;
 	z-index: 1000;
+	transition: opacity 0.3s ease, transform 0.3s ease;
 }
 
 /* Inline button when at bottom of page */
@@ -374,6 +442,7 @@
 	max-width: 600px;
 	backdrop-filter: blur(15px);
 	border-radius: 12px;
+	transition: opacity 0.3s ease, transform 0.3s ease;
 }
 
 .dutyChangeButtonFull {
@@ -475,35 +544,32 @@
 		display: none !important;
 	}
 	
+	/* Hide rank and base columns on mobile (replaced by badges) */
+	.colRank,
+	.colBase,
+	.rankCell,
+	.baseCell {
+		display: none !important;
+	}
+	
 	/* Adjust employee name column positioning */
 	.employeeName,
 	.employeeNameCell {
 		left: 0 !important;
-		width: 80px;
-		min-width: 80px;
+		width: 100px;
+		min-width: 100px;
 	}
 	
 	.employeeNameCell {
 		font-size: 0.8rem;
-		padding: 0.5rem 0.375rem;
+		padding: 0.75rem 0.5rem;
+		text-align: left;
 	}
 	
-	/* Smaller column widths on mobile */
-	.colRank,
-	.colBase {
-		width: 60px;
-		min-width: 60px;
-	}
-	
-	.rankCell,
-	.baseCell {
-		font-size: 0.75rem;
-		padding: 0.5rem 0.25rem;
-	}
-	
+	/* Smaller column widths on mobile for more duty space */
 	.dateCol {
-		width: 50px;
-		min-width: 50px;
+		width: 55px;
+		min-width: 55px;
 		font-size: 0.7rem;
 	}
 	
@@ -515,7 +581,10 @@
 	/* Larger touch targets for duty cells */
 	.dutyCell {
 		min-height: 3rem;
-		padding: 0.375rem 0.125rem;
+		padding: 0.5rem 0.25rem;
+		width: 55px;
+		min-width: 55px;
+		max-width: 55px;
 	}
 	
 	.dutyContent {
@@ -555,21 +624,21 @@
 	/* Mobile tab container - evenly spaced to prevent misclicks */
 	.tabContainer {
 		display: flex;
-		justify-content: space-between; /* Changed from center to space-between */
+		justify-content: space-between;
 		align-items: center;
 		padding: 0 0.5rem;
-		gap: 0; /* Remove gap since we're using space-between */
+		gap: 0;
 		margin-bottom: 0.75rem;
 	}
 
 	.tab {
-		flex: 1; /* Each tab takes equal space */
-		padding: 0.6rem 0.5rem; /* Adjusted padding for mobile */
+		flex: 1;
+		padding: 0.6rem 0.5rem;
 		font-size: 0.8rem;
 		border-radius: 18px;
-		margin: 0 0.125rem; /* Small margin between tabs */
+		margin: 0 0.125rem;
 		text-align: center;
-		min-width: 0; /* Allow text to shrink */
+		min-width: 0;
 	}
 
 	.tab:hover {
@@ -577,7 +646,7 @@
 	}
 
 	.tab.active {
-		transform: translateY(-1px) scale(1.02); /* Reduced scale to prevent overlap */
+		transform: translateY(-1px) scale(1.02);
 	}
 
 	.tab.active::after {
@@ -605,36 +674,45 @@
 	.submitButtonInline {
 		margin: 1.5rem auto;
 	}
+
+	/* Badge styling adjustments for mobile */
+	.badgeContainer {
+		margin-top: 0.125rem;
+	}
+
+	.rankBadge,
+	.baseBadge {
+		font-size: 0.5rem;
+		padding: 0.0625rem 0.25rem;
+	}
 }
 
 /* Extra small screens */
 @media (max-width: 480px) {
 	.employeeName,
 	.employeeNameCell {
-		width: 70px;
-		min-width: 70px;
+		width: 95px;
+		min-width: 95px;
 	}
 	
 	.employeeNameCell {
 		font-size: 0.75rem;
-		padding: 0.375rem 0.25rem;
+		padding: 0.5rem 0.375rem;
+	}
+
+	.nameContainer {
+		min-height: 3.25rem;
+		gap: 0.375rem;
 	}
 	
-	.colRank,
-	.colBase {
-		width: 50px;
-		min-width: 50px;
-	}
-	
-	.rankCell,
-	.baseCell {
-		font-size: 0.7rem;
-		padding: 0.375rem 0.125rem;
+	.employeeName {
+		font-size: 0.8rem;
+		line-height: 1.2;
 	}
 	
 	.dateCol {
-		width: 45px;
-		min-width: 45px;
+		width: 50px;
+		min-width: 50px;
 		font-size: 0.65rem;
 	}
 	
@@ -643,8 +721,11 @@
 	}
 	
 	.dutyCell {
-		min-height: 2.5rem;
-		padding: 0.25rem 0.125rem;
+		min-height: 2.75rem;
+		padding: 0.375rem 0.125rem;
+		width: 50px;
+		min-width: 50px;
+		max-width: 50px;
 	}
 	
 	.dutyContent {
@@ -656,6 +737,14 @@
 		padding: 0.5rem 0.25rem;
 		font-size: 0.75rem;
 		border-radius: 15px;
+	}
+
+	/* Maintain readable badges on very small screens */
+	.rankBadge,
+	.baseBadge {
+		font-size: 0.6rem;
+		padding: 0.15rem 0.3rem;
+		border-radius: 0.2rem;
 	}
 }
 
@@ -800,29 +889,30 @@
 
 	/* Desktop-specific adjustment to prevent button flickering */
 	.submitButtonFullWidth {
-		bottom: 30px; /* Increased bottom spacing on desktop */
+		bottom: 30px;
 	}
 }
 
-/* Mobile duty info button for consistent same-duty viewing */
+/* Improved mobile duty info button with distinct color scheme */
 .mobileInfoButton {
 	position: fixed;
 	bottom: 20px;
-	right: 20px; /* Aligned with right edge of duty change button */
+	right: 20px;
 	width: 50px;
 	height: 50px;
 	border-radius: 50%;
-	background: linear-gradient(135deg, #6366f1, #4f46e5);
+	background: linear-gradient(135deg, #f59e0b, #d97706);
 	color: white;
 	border: none;
-	box-shadow: 0 4px 12px rgba(99, 102, 241, 0.4);
+	box-shadow: 0 4px 12px rgba(245, 158, 11, 0.4);
 	display: none;
 	align-items: center;
 	justify-content: center;
 	cursor: pointer;
 	transition: all 0.3s ease;
-	z-index: 1100; /* Higher than duty change button (1000) */
+	z-index: 1100;
 	font-size: 1.2rem;
+	text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
 }
 
 .mobileInfoButton:active {
@@ -830,28 +920,27 @@
 }
 
 .mobileInfoButton.active {
-	background: linear-gradient(135deg, #10b981, #059669);
-	box-shadow: 0 4px 12px rgba(16, 185, 129, 0.4);
+	background: linear-gradient(135deg, #dc2626, #b91c1c);
+	box-shadow: 0 4px 12px rgba(220, 38, 38, 0.4);
+	animation: pulse 2s infinite;
 }
 
-/* Full-width duty change button */
-.submitButtonFullWidth {
-	position: fixed;
-	bottom: 20px;
-	left: 20px;
-	right: 20px; /* Back to full width */
-	padding: 1.2rem 0;
-	backdrop-filter: blur(2px);
-	border-radius: 12px;
-	box-shadow: 0 8px 32px rgba(0, 0, 0, 0.08);
-	background: none;
-	z-index: 1000;
+@keyframes pulse {
+	0% {
+		box-shadow: 0 4px 12px rgba(220, 38, 38, 0.4);
+	}
+	50% {
+		box-shadow: 0 6px 20px rgba(220, 38, 38, 0.6);
+	}
+	100% {
+		box-shadow: 0 4px 12px rgba(220, 38, 38, 0.4);
+	}
 }
 
+/* Improved duty change button positioning */
 .dutyChangeButtonFull {
 	width: 100%;
 	padding: 1rem 2rem;
-	padding-right: 70px; /* Add right padding to make space for info button */
 	border-radius: 0.5rem;
 	font-size: 1.125rem;
 	font-weight: 600;
@@ -874,18 +963,25 @@
 		left: 10px;
 		right: 10px;
 		bottom: 10px;
+		/* Smoother transitions */
+		transition: opacity 0.4s ease-in-out, transform 0.4s ease-in-out;
+	}
+	
+	.submitButtonInline {
+		transition: opacity 0.4s ease-in-out, transform 0.4s ease-in-out;
 	}
 	
 	.dutyChangeButtonFull {
 		font-size: 1rem;
 		padding: 0.875rem 1.5rem;
-		padding-right: 70px; /* Maintain space for info button on mobile */
 	}
 }
 
 @media (max-width: 480px) {
-	.dutyChangeButtonFull {
-		padding-right: 65px; /* Slightly less padding on very small screens */
+	.mobileInfoButton {
+		width: 45px;
+		height: 45px;
+		font-size: 1.1rem;
 	}
 }
 
@@ -907,18 +1003,18 @@
 	min-height: 100vh;
 }
 
-/* Prevent layout shifts during tab changes */
+/* Prevent layout shifts during tab changes and reduce button flickering */
 .scheduleContainer {
 	width: 100%;
 	padding: 0 0.5rem;
-	padding-bottom: 8rem; /* Reduced for mobile */
-	min-height: calc(100vh - 4rem); /* Maintain minimum height */
+	padding-bottom: 8rem;
+	min-height: calc(100vh - 4rem);
 	position: relative;
 }
 
 .crewScheduleSection {
-	min-height: 200px; /* Prevent sudden height changes */
-	transition: none; /* Remove any transitions that might cause shifting */
+	min-height: 200px;
+	transition: none;
 }
 
 .tableContainer {
@@ -929,5 +1025,216 @@
 	border-radius: 0.5rem;
 	overflow-y: hidden;
 	-webkit-overflow-scrolling: touch;
-	position: relative; /* Ensure stable positioning */
+	position: relative;
+}
+
+/* Admin upload button */
+.adminUploadButton {
+	margin-left: 1rem;
+	padding: 0.5rem 1rem;
+	background: linear-gradient(135deg, #f59e0b, #d97706);
+	color: white;
+	border: none;
+	border-radius: 0.375rem;
+	font-size: 0.875rem;
+	font-weight: 600;
+	cursor: pointer;
+	transition: all 0.3s ease;
+	box-shadow: 0 2px 4px rgba(245, 158, 11, 0.3);
+}
+
+.adminUploadButton:hover {
+	background: linear-gradient(135deg, #d97706, #b45309);
+	transform: translateY(-1px);
+	box-shadow: 0 4px 8px rgba(245, 158, 11, 0.4);
+}
+
+/* Modal styles */
+.modalOverlay {
+	position: fixed;
+	top: 0;
+	left: 0;
+	right: 0;
+	bottom: 0;
+	background: rgba(0, 0, 0, 0.7);
+	backdrop-filter: blur(4px);
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	z-index: 2000;
+	padding: 1rem;
+}
+
+.modalContent {
+	background: white;
+	border-radius: 1rem;
+	box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3);
+	width: 100%;
+	max-width: 800px;
+	max-height: 90vh;
+	overflow: hidden;
+	display: flex;
+	flex-direction: column;
+}
+
+.modalHeader {
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	padding: 1.5rem 2rem;
+	border-bottom: 1px solid #e5e7eb;
+	background: #f9fafb;
+}
+
+.modalHeader h3 {
+	margin: 0;
+	font-size: 1.25rem;
+	font-weight: 600;
+	color: #111827;
+}
+
+.modalClose {
+	background: none;
+	border: none;
+	font-size: 1.5rem;
+	cursor: pointer;
+	color: #6b7280;
+	padding: 0.25rem;
+	border-radius: 0.25rem;
+	transition: all 0.2s ease;
+}
+
+.modalClose:hover {
+	background: #e5e7eb;
+	color: #374151;
+}
+
+.modalBody {
+	padding: 2rem;
+	flex: 1;
+	overflow-y: auto;
+}
+
+.jsonTextarea {
+	width: 100%;
+	min-height: 400px;
+	padding: 1rem;
+	border: 2px solid #e5e7eb;
+	border-radius: 0.5rem;
+	font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+	font-size: 0.875rem;
+	line-height: 1.5;
+	resize: vertical;
+	outline: none;
+	transition: border-color 0.2s ease;
+}
+
+.jsonTextarea:focus {
+	border-color: #3b82f6;
+	box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+}
+
+.modalFooter {
+	display: flex;
+	justify-content: flex-end;
+	gap: 1rem;
+	padding: 1.5rem 2rem;
+	border-top: 1px solid #e5e7eb;
+	background: #f9fafb;
+}
+
+.cancelButton {
+	padding: 0.75rem 1.5rem;
+	background: white;
+	color: #374151;
+	border: 1px solid #d1d5db;
+	border-radius: 0.5rem;
+	font-weight: 500;
+	cursor: pointer;
+	transition: all 0.2s ease;
+}
+
+.cancelButton:hover:not(:disabled) {
+	background: #f9fafb;
+	border-color: #9ca3af;
+}
+
+.uploadButton {
+	padding: 0.75rem 1.5rem;
+	background: linear-gradient(135deg, #10b981, #059669);
+	color: white;
+	border: none;
+	border-radius: 0.5rem;
+	font-weight: 600;
+	cursor: pointer;
+	transition: all 0.2s ease;
+}
+
+.uploadButton:hover:not(:disabled) {
+	background: linear-gradient(135deg, #059669, #047857);
+	transform: translateY(-1px);
+}
+
+.uploadButton:disabled,
+.cancelButton:disabled {
+	opacity: 0.5;
+	cursor: not-allowed;
+	transform: none;
+}
+
+@media (max-width: 768px) {
+	.adminUploadButton {
+		margin-left: 0.5rem;
+		padding: 0.5rem 0.75rem;
+		font-size: 0.75rem;
+	}
+
+	.modalContent {
+		margin: 0.5rem;
+		max-height: 95vh;
+	}
+
+	.modalHeader,
+	.modalFooter {
+		padding: 1rem 1.5rem;
+	}
+
+	.modalBody {
+		padding: 1.5rem;
+	}
+
+	.jsonTextarea {
+		min-height: 300px;
+		font-size: 0.8rem;
+	}
+
+	.modalFooter {
+		flex-direction: column-reverse;
+	}
+
+	.cancelButton,
+	.uploadButton {
+		width: 100%;
+		justify-content: center;
+	}
+}
+.submitButtonFullWidth,
+.submitButtonInline {
+	will-change: opacity, transform;
+	backface-visibility: hidden;
+	-webkit-backface-visibility: hidden;
+}
+
+/* Improve mobile badge visibility */
+@media (max-width: 768px) {
+	.nameContainer {
+		min-height: 3rem;
+		justify-content: center;
+	}
+	
+	.employeeName {
+		font-size: 0.8rem;
+		line-height: 1.2;
+		margin-bottom: 0.125rem;
+	}
 }

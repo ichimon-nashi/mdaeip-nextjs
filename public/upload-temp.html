@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Schedule Upload</title>
+    <style>
+        body { font-family: Arial, sans-serif; padding: 20px; }
+        textarea { width: 100%; height: 400px; font-family: monospace; }
+        button { padding: 10px 20px; margin: 10px 0; background: #007bff; color: white; border: none; cursor: pointer; }
+        .result { margin: 10px 0; padding: 10px; border-radius: 5px; }
+        .success { background: #d4edda; color: #155724; }
+        .error { background: #f8d7da; color: #721c24; }
+        .info { background: #d1ecf1; color: #0c5460; }
+    </style>
+</head>
+<body>
+    <h1>Schedule Data Upload</h1>
+    
+    <div>
+        <label>User ID (your employee ID):</label>
+        <input type="text" id="userId" placeholder="Enter your employee ID">
+    </div>
+    
+    <div>
+        <label>Access Level:</label>
+        <input type="number" id="accessLevel" value="99">
+    </div>
+    
+    <div>
+        <label>Schedule Data (JavaScript object or JSON):</label>
+        <textarea id="scheduleData" placeholder="Paste your schedule data here (can be JavaScript object format without quotes)..."></textarea>
+    </div>
+    
+    <button onclick="uploadSchedule()">Upload Schedule</button>
+    
+    <div id="result"></div>
+
+    <script>
+        function fixJavaScriptObjectToJSON(jsString) {
+            try {
+                // First try to parse as valid JSON
+                JSON.parse(jsString);
+                return jsString; // Already valid JSON
+            } catch (e) {
+                // If JSON.parse fails, try to fix JavaScript object notation
+                let fixed = jsString;
+                
+                // Remove any JavaScript comments
+                fixed = fixed.replace(/\/\*[\s\S]*?\*\//g, ''); // Remove /* */ comments
+                fixed = fixed.replace(/\/\/.*$/gm, ''); // Remove // comments
+                
+                // Fix property names (add quotes around unquoted property names)
+                // This regex finds property names that aren't already quoted
+                fixed = fixed.replace(/([{,]\s*)([a-zA-Z_$][a-zA-Z0-9_$]*)\s*:/g, '$1"$2":');
+                
+                // Fix trailing commas
+                fixed = fixed.replace(/,(\s*[}\]])/g, '$1');
+                
+                // Ensure the object starts properly
+                if (!fixed.trim().startsWith('{')) {
+                    fixed = '{' + fixed + '}';
+                }
+                
+                return fixed;
+            }
+        }
+        
+        async function uploadSchedule() {
+            const userId = document.getElementById('userId').value;
+            const accessLevel = parseInt(document.getElementById('accessLevel').value);
+            const scheduleDataText = document.getElementById('scheduleData').value;
+            const resultDiv = document.getElementById('result');
+            
+            if (!userId || !scheduleDataText) {
+                resultDiv.innerHTML = '<div class="error">Please fill in User ID and Schedule Data</div>';
+                return;
+            }
+            
+            try {
+                // Try to fix the JavaScript object notation first
+                const fixedJsonString = fixJavaScriptObjectToJSON(scheduleDataText);
+                
+                // Show what we're trying to parse
+                console.log('Fixed JSON string:', fixedJsonString);
+                
+                const scheduleData = JSON.parse(fixedJsonString);
+                
+                resultDiv.innerHTML = '<div class="info">Parsing successful, uploading...</div>';
+                
+                const response = await fetch('/api/schedule/upload', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        scheduleData,
+                        userId,
+                        userAccessLevel: accessLevel
+                    })
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    resultDiv.innerHTML = '<div class="success">Schedule uploaded successfully!</div>';
+                } else {
+                    resultDiv.innerHTML = `<div class="error">Upload Error: ${result.error}</div>`;
+                }
+            } catch (error) {
+                resultDiv.innerHTML = `<div class="error">Parsing Error: ${error.message}<br><br>
+                    <strong>Tips:</strong><br>
+                    1. Make sure your object starts with { and ends with }<br>
+                    2. Remove any trailing commas<br>
+                    3. Check that all brackets are properly matched<br><br>
+                    <strong>Expected format:</strong><br>
+                    {<br>
+                    &nbsp;&nbsp;month: "2025年08月",<br>
+                    &nbsp;&nbsp;crew_schedules: [<br>
+                    &nbsp;&nbsp;&nbsp;&nbsp;{<br>
+                    &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;employeeID: "21701",<br>
+                    &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;duties: ["OFC", "", "A/L"]<br>
+                    &nbsp;&nbsp;&nbsp;&nbsp;}<br>
+                    &nbsp;&nbsp;]<br>
+                    }</div>`;
+            }
+        }
+    </script>
+</body>
+</html>
