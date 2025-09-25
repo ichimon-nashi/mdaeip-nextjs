@@ -1,11 +1,10 @@
 'use client'
 
-import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useRouter } from 'next/navigation';
 import toast from 'react-hot-toast';
 import styles from '../../styles/Schedule.module.css';
-// Import DataRoster functions
 import { 
   getAllSchedulesForMonth, 
   getEmployeeSchedule, 
@@ -14,7 +13,6 @@ import {
   getAvailableMonths
 } from '../../lib/DataRoster';
 
-// Mobile detection hook
 const useIsMobile = () => {
 	const [isMobile, setIsMobile] = useState(() => {
 		if (typeof window !== 'undefined') {
@@ -25,13 +23,8 @@ const useIsMobile = () => {
 
 	useEffect(() => {
 		if (typeof window === 'undefined') return;
-
-		const checkDevice = () => {
-			setIsMobile(window.innerWidth <= 768);
-		};
-
+		const checkDevice = () => setIsMobile(window.innerWidth <= 768);
 		checkDevice();
-		
 		window.addEventListener('resize', checkDevice);
 		return () => window.removeEventListener('resize', checkDevice);
 	}, []);
@@ -39,7 +32,6 @@ const useIsMobile = () => {
 	return isMobile;
 };
 
-// Admin Upload Modal Component
 const AdminUploadModal = ({ isOpen, onClose, onUpload }) => {
 	const [jsonData, setJsonData] = useState('');
 	const [isUploading, setIsUploading] = useState(false);
@@ -59,7 +51,7 @@ const AdminUploadModal = ({ isOpen, onClose, onUpload }) => {
 			setJsonData('');
 			onClose();
 		} catch (error) {
-			toast.error(`JSON格式錯誤: ${error.message}`);
+			toast.error('JSON格式錯誤: ' + error.message);
 		} finally {
 			setIsUploading(false);
 		}
@@ -70,7 +62,7 @@ const AdminUploadModal = ({ isOpen, onClose, onUpload }) => {
 			<div className={styles.modalContent} onClick={(e) => e.stopPropagation()}>
 				<div className={styles.modalHeader}>
 					<h3>上傳班表資料 (管理員)</h3>
-					<button className={styles.modalClose} onClick={onClose}>×</button>
+					<button className={styles.modalClose} onClick={onClose}>&times;</button>
 				</div>
 				<div className={styles.modalBody}>
 					<textarea
@@ -82,18 +74,10 @@ const AdminUploadModal = ({ isOpen, onClose, onUpload }) => {
 					/>
 				</div>
 				<div className={styles.modalFooter}>
-					<button
-						className={styles.cancelButton}
-						onClick={onClose}
-						disabled={isUploading}
-					>
+					<button className={styles.cancelButton} onClick={onClose} disabled={isUploading}>
 						取消
 					</button>
-					<button
-						className={styles.uploadButton}
-						onClick={handleUpload}
-						disabled={isUploading}
-					>
+					<button className={styles.uploadButton} onClick={handleUpload} disabled={isUploading}>
 						{isUploading ? '上傳中...' : '上傳班表'}
 					</button>
 				</div>
@@ -102,7 +86,6 @@ const AdminUploadModal = ({ isOpen, onClose, onUpload }) => {
 	);
 };
 
-// Touch-friendly selection summary component for mobile
 const SelectionSummary = ({ selectedDuties, onClear, formatDate }) => {
 	if (selectedDuties.length === 0) return null;
 
@@ -110,9 +93,7 @@ const SelectionSummary = ({ selectedDuties, onClear, formatDate }) => {
 		<div className={styles.mobileSelectionSummary}>
 			<div className={styles.selectionHeader}>
 				<span>已選擇 {selectedDuties.length} 項</span>
-				<button onClick={onClear} className={styles.clearButton}>
-					清除全部
-				</button>
+				<button onClick={onClear} className={styles.clearButton}>清除全部</button>
 			</div>
 			<div className={styles.selectionList}>
 				{selectedDuties.slice(0, 3).map((item, index) => (
@@ -130,84 +111,34 @@ const SelectionSummary = ({ selectedDuties, onClear, formatDate }) => {
 	);
 };
 
-// Mobile Info Button for consistent same-duty viewing
 const MobileInfoButton = ({ onClick, isActive }) => (
 	<button 
-		className={`${styles.mobileInfoButton} ${isActive ? styles.active : ''}`}
+		className={styles.mobileInfoButton + (isActive ? ' ' + styles.active : '')}
 		onClick={onClick}
 	>
-		{isActive ? '🔍' : 'ℹ️'}
+		{isActive ? '🔍' : '📋'}
 	</button>
 );
 
 export default function SchedulePage() {
-	const { user, loading, logout } = useAuth();
+	const { user, loading } = useAuth();
 	const router = useRouter();
-
-	// Mobile detection
 	const isMobile = useIsMobile();
 	
-	// Mobile info mode state
 	const [mobileInfoMode, setMobileInfoMode] = useState(false);
-
-	// Admin upload modal state
 	const [showUploadModal, setShowUploadModal] = useState(false);
-
-	// Refs for synchronized scrolling (removed sticky functionality)
 	const userTableRef = useRef(null);
 	const crewTableRef = useRef(null);
-	const userScheduleRef = useRef(null);
 
-	// Available months state
 	const [availableMonths, setAvailableMonths] = useState([]);
 	const [currentMonth, setCurrentMonth] = useState('');
 	const [activeTab, setActiveTab] = useState('TSA');
 	const [isAtBottom, setIsAtBottom] = useState(false);
-	const [isHeaderFloating, setIsHeaderFloating] = useState(false);
-	const crewSectionRef = useRef(null);
-	const containerRef = useRef(null);
 	const [selectedDuties, setSelectedDuties] = useState([]);
 	const [highlightedDates, setHighlightedDates] = useState({});
+	const [scheduleLoading, setScheduleLoading] = useState(false);
+	const [initialLoadComplete, setInitialLoadComplete] = useState(false);
 
-	// Load available months
-	useEffect(() => {
-		const loadMonths = async () => {
-			try {
-				const months = await getAvailableMonths();
-				// Sort months to show latest at bottom (8月, 9月, 10月)
-				const sortedMonths = months.sort((a, b) => {
-					const monthA = parseInt(a.match(/(\d+)月/)?.[1] || '0');
-					const monthB = parseInt(b.match(/(\d+)月/)?.[1] || '0');
-					return monthA - monthB;
-				});
-				setAvailableMonths(sortedMonths);
-				if (sortedMonths.length > 0 && !currentMonth) {
-					setCurrentMonth(sortedMonths[sortedMonths.length - 1]); // Most recent month (last in sorted array)
-				}
-			} catch (error) {
-				console.error('Error loading months:', error);
-				toast.error('載入月份資料失敗');
-			}
-		};
-
-		loadMonths();
-	}, [currentMonth]);
-
-	// Set default tab based on user's base (only after user is loaded)
-	useEffect(() => {
-		if (user?.base && activeTab === 'TSA') {
-			setActiveTab(user.base);
-		}
-	}, [user?.base, activeTab]);
-
-	// Redirect to login if not authenticated
-	useEffect(() => {
-		if (!loading && !user) {
-			router.push('/');
-		}
-	}, [user, loading, router]);
-
-	// Updated scheduleData to use async database calls
 	const [scheduleData, setScheduleData] = useState({
 		allSchedules: [],
 		hasScheduleData: false,
@@ -216,7 +147,39 @@ export default function SchedulePage() {
 		otherSchedules: []
 	});
 
-	// Load schedule data when month or tab changes
+	useEffect(() => {
+		const loadMonths = async () => {
+			try {
+				const months = await getAvailableMonths();
+				const sortedMonths = months.sort((a, b) => {
+					const monthA = parseInt(a.match(/(\d+)月/)?.[1] || '0');
+					const monthB = parseInt(b.match(/(\d+)月/)?.[1] || '0');
+					return monthA - monthB;
+				});
+				setAvailableMonths(sortedMonths);
+				if (sortedMonths.length > 0 && !currentMonth) {
+					setCurrentMonth(sortedMonths[sortedMonths.length - 1]);
+				}
+			} catch (error) {
+				console.error('Error loading months:', error);
+				toast.error('載入月份資料失敗');
+			}
+		};
+		loadMonths();
+	}, [currentMonth]);
+
+	useEffect(() => {
+		if (user?.base && !initialLoadComplete) {
+			setActiveTab(user.base);
+		}
+	}, [user?.base, initialLoadComplete]);
+
+	useEffect(() => {
+		if (!loading && !user) {
+			console.log('User not authenticated, AuthContext will handle redirect...');
+		}
+	}, [user, loading]);
+
 	useEffect(() => {
 		const loadScheduleData = async () => {
 			if (!currentMonth) {
@@ -240,7 +203,6 @@ export default function SchedulePage() {
 						const firstSchedule = allSchedules[0];
 						if (firstSchedule && firstSchedule.days) {
 							const dates = Object.keys(firstSchedule.days).sort();
-							
 							const currentYear = currentMonth.includes('2025') ? 2025 : new Date().getFullYear();
 							const monthNumber = currentMonth.match(/(\d{2})月/)?.[1];
 							
@@ -251,16 +213,15 @@ export default function SchedulePage() {
 										   (dateObj.getMonth() + 1) === parseInt(monthNumber);
 								});
 							}
-							
 							return dates;
 						}
 						return [];
 					})() : [];
 
 				const otherSchedules = hasScheduleData ? 
-					await getSchedulesByBase(currentMonth, activeTab).then(schedules => 
-						schedules.filter(schedule => schedule.employeeID !== user?.id)
-					) : [];
+					await getSchedulesByBase(currentMonth, activeTab).then(schedules => {
+						return schedules.filter(schedule => schedule.employeeID !== user?.id);
+					}) : [];
 
 				setScheduleData({
 					allSchedules,
@@ -269,6 +230,11 @@ export default function SchedulePage() {
 					allDates,
 					otherSchedules
 				});
+				
+				if (!initialLoadComplete) {
+					setInitialLoadComplete(true);
+				}
+				
 			} catch (error) {
 				console.error('Error loading schedule data:', error);
 				toast.error('載入班表資料失敗');
@@ -276,9 +242,8 @@ export default function SchedulePage() {
 		};
 
 		loadScheduleData();
-	}, [currentMonth, activeTab, user?.id]);
+	}, [currentMonth, activeTab, user?.id, initialLoadComplete]);
 
-	// Helper functions
 	const getDayOfWeek = useCallback((dateStr) => {
 		const date = new Date(dateStr);
 		const days = ['日', '一', '二', '三', '四', '五', '六'];
@@ -287,43 +252,28 @@ export default function SchedulePage() {
 
 	const formatDate = useCallback((dateStr) => {
 		const date = new Date(dateStr);
-		return `${(date.getMonth() + 1).toString().padStart(2, '0')}/${date.getDate().toString().padStart(2, '0')}`;
+		return (date.getMonth() + 1).toString().padStart(2, '0') + '/' + date.getDate().toString().padStart(2, '0');
 	}, []);
 
-	// Function to check if text contains a valid date pattern
 	const isValidDate = useCallback((text) => {
 		const datePattern = /^(\d{1,2})\/(\d{1,2})$/;
 		const match = text.match(datePattern);
-		
 		if (!match) return false;
-		
 		const month = parseInt(match[1]);
 		const day = parseInt(match[2]);
-		
 		return month >= 1 && month <= 12 && day >= 1 && day <= 31;
 	}, []);
 
-	// Function to format duty text - replace "/" with line breaks except for specific cases
 	const formatDutyText = useCallback((duty) => {
 		if (!duty) return duty;
-		
 		const keepSlashDuties = ['P/L', 'A/L', 'S/L'];
-		
-		if (keepSlashDuties.includes(duty)) {
-			return duty;
-		}
-		
-		if (isValidDate(duty)) {
-			return duty;
-		}
-		
+		if (keepSlashDuties.includes(duty)) return duty;
+		if (isValidDate(duty)) return duty;
 		return duty.replace(/\//g, '\n');
 	}, [isValidDate]);
 
-	// Function to get appropriate font size based on text length
 	const getDutyFontSize = useCallback((duty) => {
 		if (!duty) return 'dutyFontNormal';
-		
 		const length = duty.length;
 		if (length <= 2) return 'dutyFontNormal';
 		if (length <= 3) return 'dutyFontMedium';
@@ -332,26 +282,17 @@ export default function SchedulePage() {
 	}, []);
 
 	const getDutyBackgroundColor = useCallback((duty) => {
-		if (duty === '休' || duty === '例' || duty === 'G') {
-			return styles.dutyOff;
-		} else if (duty === 'A/L') {
-			return styles.dutyLeave;
-		} else if (duty === '福補') {
-			return styles.dutyWelfare;
-		} else if (duty === '空' || duty === '') {
-			return styles.dutyEmpty;
-		} else if (duty === 'SH1' || duty === 'SH2') {
-			return styles.dutyHomestandby;
-		} else if (duty === '課' || duty === '訓' || duty === '訓D1' || duty === '訓D2' || duty === '訓D3' || duty === '會務') {
-			return styles.dutyTraining;
-		}
+		if (duty === '休' || duty === '例' || duty === 'G') return styles.dutyOff;
+		if (duty === 'A/L') return styles.dutyLeave;
+		if (duty === '福補') return styles.dutyWelfare;
+		if (duty === '空' || duty === '') return styles.dutyEmpty;
+		if (duty === 'SH1' || duty === 'SH2') return styles.dutyHomestandby;
+		if (duty === '課' || duty === '訓' || duty === '訓D1' || duty === '訓D2' || duty === '訓D3' || duty === '會務') return styles.dutyTraining;
 		return '';
 	}, []);
 
-	// Get employees with same duty for tooltip
 	const getEmployeesWithSameDuty = useCallback((date, duty) => {
 		if (!duty || !scheduleData.hasScheduleData) return [];
-
 		return scheduleData.allSchedules
 			.filter(schedule => schedule.days[date] === duty && schedule.employeeID !== user?.id)
 			.map(schedule => ({
@@ -362,44 +303,36 @@ export default function SchedulePage() {
 			}));
 	}, [scheduleData.allSchedules, scheduleData.hasScheduleData, user?.id]);
 
-	// Generate tooltip content
 	const generateTooltipContent = useCallback((date, duty, sameEmployees) => {
 		const displayDuty = duty || "空";
-
 		if (sameEmployees.length === 0) {
-			return `${displayDuty} - No other employees`;
+			return displayDuty + ' - No other employees';
 		}
-
-		let content = `Same duties(${displayDuty}):\n`;
-		const employeeList = sameEmployees.map(emp => `${emp.id} ${emp.name || 'N/A'}`).join('\n');
-		content += employeeList;
-
-		return content;
+		let content = 'Same duties(' + displayDuty + '):\n';
+		const employeeList = sameEmployees.map(emp => emp.id + ' ' + (emp.name || 'N/A')).join('\n');
+		return content + employeeList;
 	}, []);
 
-	// Mobile-friendly tooltip replacement
 	const handleDutyInfo = useCallback((employeeId, name, date, duty, sameEmployees) => {
-		if (!isMobile) {
-			return;
-		}
-
-		if (sameEmployees.length > 0) {
-			const displayDuty = duty || "空";
-			const employeeList = sameEmployees.slice(0, 3).map(emp => 
-				`${emp.id} ${emp.name || 'N/A'}`
-			).join(', ');
-			const moreCount = sameEmployees.length > 3 ? `等${sameEmployees.length}人` : '';
-			
-			toast(`${displayDuty}: ${employeeList}${moreCount}`, {
-				icon: 'ℹ️',
-				duration: 3000,
-				position: 'bottom-center'
-			});
-		}
+		if (!isMobile || sameEmployees.length === 0) return;
+		const displayDuty = duty || "空";
+		const employeeList = sameEmployees.slice(0, 3).map(emp => 
+			emp.id + ' ' + (emp.name || 'N/A')
+		).join(', ');
+		const moreCount = sameEmployees.length > 3 ? '等' + sameEmployees.length + '人' : '';
+		toast(displayDuty + ': ' + employeeList + moreCount, {
+			icon: 'ℹ️',
+			duration: 3000,
+			position: 'bottom-center'
+		});
 	}, [isMobile]);
 
-	// Mobile info mode toggle
+	const lastToggleTime = useRef(0);
 	const toggleMobileInfoMode = useCallback(() => {
+		const now = Date.now();
+		if (now - lastToggleTime.current < 1000) return;
+		lastToggleTime.current = now;
+		
 		setMobileInfoMode(prev => {
 			const newMode = !prev;
 			toast(newMode ? '查看模式：點擊班表查看相同班別' : '選擇模式：點擊班表選擇換班', {
@@ -410,7 +343,6 @@ export default function SchedulePage() {
 		});
 	}, []);
 
-	// Mobile-enhanced duty selection with haptic feedback
 	const handleDutySelect = useCallback((employeeId, name, date, duty) => {
 		if (!scheduleData.hasScheduleData) {
 			toast("此月份沒有班表資料！", { icon: '📅', duration: 3000 });
@@ -437,7 +369,7 @@ export default function SchedulePage() {
 			newSelectedDuties.splice(existingIndex, 1);
 			setSelectedDuties(newSelectedDuties);
 			if (isMobile) {
-				toast(`取消選擇 ${name} 的 ${formatDate(date)} (${displayDuty})`, { 
+				toast('取消選擇 ' + name + ' 的 ' + formatDate(date) + ' (' + displayDuty + ')', { 
 					icon: '❌', 
 					duration: 2000 
 				});
@@ -450,7 +382,7 @@ export default function SchedulePage() {
 				duty: displayDuty
 			}]);
 			if (isMobile) {
-				toast(`選擇 ${name} 的 ${formatDate(date)} (${displayDuty})`, { 
+				toast('選擇 ' + name + ' 的 ' + formatDate(date) + ' (' + displayDuty + ')', { 
 					icon: '✅', 
 					duration: 2000 
 				});
@@ -458,21 +390,27 @@ export default function SchedulePage() {
 		}
 	}, [scheduleData.hasScheduleData, selectedDuties, isMobile, mobileInfoMode, formatDate, getEmployeesWithSameDuty, handleDutyInfo]);
 
-	// Handle duty change button click
+	const handleTabChange = useCallback(async (base) => {
+		if (scheduleLoading || activeTab === base) return;
+		setActiveTab(base);
+		setSelectedDuties([]);
+		setHighlightedDates({});
+	}, [activeTab, scheduleLoading]);
+
 	const handleDutyChangeClick = useCallback(() => {
 		if (!scheduleData.hasScheduleData) {
-			toast("此月份沒有班表資料，無法申請換班！", { icon: '⌚', duration: 3000 });
+			toast("此月份沒有班表資料！無法申請換班！", { icon: '⌚', duration: 3000 });
 			return;
 		}
 
 		if (selectedDuties.length === 0) {
-			toast("想換班還不選人嗎!極屌啊!", { icon: '😐', duration: 3000 });
+			toast("想換班還不選人嗎!極屌啊!", { icon: '😎', duration: 3000 });
 			return;
 		}
 
 		const uniqueEmployeeIds = [...new Set(selectedDuties.map(duty => duty.employeeId))];
 		if (uniqueEmployeeIds.length > 1) {
-			toast("這位太太，一張換班單只能跟一位換班!", { icon: '😐', duration: 3000 });
+			toast("這位太太！一張換班單只能跟一位換班!", { icon: '😎', duration: 3000 });
 			return;
 		}
 
@@ -487,7 +425,6 @@ export default function SchedulePage() {
 		router.push('/duty-change');
 	}, [selectedDuties, router, user, currentMonth, scheduleData.hasScheduleData]);
 
-	// Handle month change
 	const handleMonthChange = useCallback(async (event) => {
 		const newMonth = event.target.value;
 		setCurrentMonth(newMonth);
@@ -496,31 +433,20 @@ export default function SchedulePage() {
 
 		const newSchedules = await getAllSchedulesForMonth(newMonth);
 		if (!newSchedules || newSchedules.length === 0) {
-			toast(`${newMonth}尚無班表資料`, { icon: '📅', duration: 2000 });
+			toast(newMonth + '尚無班表資料', { icon: '📅', duration: 2000 });
 		}
 	}, []);
 
-	const handleTabChange = useCallback((base) => {
-		console.log(`Tab changed to: ${base}`);
-		setActiveTab(base);
-		setSelectedDuties([]);
-		setHighlightedDates({});
-	}, []);
-
-	// Clear all selections (for mobile summary)
 	const handleClearAll = useCallback(() => {
 		setSelectedDuties([]);
 		toast('已清除所有選擇', { icon: '🗑️', duration: 2000 });
 	}, []);
 
-	// Admin upload function
 	const handleAdminUpload = useCallback(async (scheduleData) => {
 		try {
 			const response = await fetch('/api/schedule/upload', {
 				method: 'POST',
-				headers: {
-					'Content-Type': 'application/json',
-				},
+				headers: { 'Content-Type': 'application/json' },
 				body: JSON.stringify({
 					scheduleData,
 					userId: user.id,
@@ -532,33 +458,24 @@ export default function SchedulePage() {
 
 			if (result.success) {
 				toast.success('班表上傳成功！');
-				// Refresh available months
 				const months = await getAvailableMonths();
 				setAvailableMonths(months);
-				// Reload current schedule data
 				window.location.reload();
 			} else {
-				toast.error(`上傳失敗: ${result.error}`);
+				toast.error('上傳失敗: ' + result.error);
 			}
 		} catch (error) {
-			toast.error(`上傳錯誤: ${error.message}`);
+			toast.error('上傳錯誤: ' + error.message);
 		}
 	}, [user]);
 
-	// Mobile-aware table header rendering
 	const renderTableHeader = useCallback(() => (
 		<thead>
 			<tr className={styles.tableHeader}>
 				{!isMobile && (
-					<th className={`${styles.stickyCol} ${styles.employeeId}`}>員編</th>
+					<th className={styles.stickyCol + ' ' + styles.employeeId}>員編</th>
 				)}
-				<th className={`${styles.stickyCol} ${styles.employeeName}`}>姓名</th>
-				{!isMobile && (
-					<>
-						<th className={styles.colRank}>職位</th>
-						<th className={styles.colBase}>基地</th>
-					</>
-				)}
+				<th className={styles.stickyCol + ' ' + styles.employeeName}>姓名</th>
 				{scheduleData.allDates.map(date => (
 					<th key={date} className={styles.dateCol}>
 						<div>{formatDate(date)}</div>
@@ -569,39 +486,26 @@ export default function SchedulePage() {
 		</thead>
 	), [scheduleData.allDates, formatDate, getDayOfWeek, isMobile]);
 
-	// Mobile-aware table row rendering with badges and proper tooltips
 	const renderTableRow = useCallback((schedule, isUserSchedule = false) => (
 		<tr key={schedule.employeeID}>
 			{!isMobile && (
-				<td className={`${styles.stickyCol} ${styles.employeeIdCell}`}>
+				<td className={styles.stickyCol + ' ' + styles.employeeIdCell}>
 					{schedule.employeeID}
 				</td>
 			)}
-			<td className={`${styles.stickyCol} ${styles.employeeNameCell}`}>
+			<td className={styles.stickyCol + ' ' + styles.employeeNameCell}>
 				<div className={styles.nameContainer}>
 					<div className={styles.employeeName}>{schedule.name || '-'}</div>
-					{isMobile && (
-						<div className={styles.badgeContainer}>
-							{schedule.rank && (
-								<span className={styles.rankBadge}>{schedule.rank}</span>
-							)}
-							<span className={`${styles.baseBadge} ${styles[`base${schedule.base}`]}`}>
-								{schedule.base}
-							</span>
-						</div>
-					)}
+					<div className={styles.badgeContainer}>
+						{schedule.rank && (
+							<span className={styles.rankBadge}>{schedule.rank}</span>
+						)}
+						<span className={styles.baseBadge + ' ' + styles['base' + schedule.base]}>
+							{schedule.base}
+						</span>
+					</div>
 				</div>
 			</td>
-			{!isMobile && (
-				<>
-					<td className={styles.rankCell}>
-						{schedule.rank || '-'}
-					</td>
-					<td className={styles.baseCell}>
-						{schedule.base}
-					</td>
-				</>
-			)}
 			{scheduleData.allDates.map(date => {
 				const duty = schedule.days[date];
 				const displayDuty = duty || "空";
@@ -613,10 +517,15 @@ export default function SchedulePage() {
 					item.employeeId === schedule.employeeID && item.date === date
 				);
 
+				let className = styles.dutyCell;
+				if (!isUserSchedule) className += ' ' + styles.selectable;
+				if (bgColorClass) className += ' ' + bgColorClass;
+				if (isSelected) className += ' ' + styles.selected;
+
 				return (
 					<td
 						key={date}
-						className={`${styles.dutyCell} ${!isUserSchedule ? styles.selectable : ''} ${bgColorClass} ${isSelected ? styles.selected : ''}`}
+						className={className}
 						title={!isMobile ? generateTooltipContent(date, duty, sameEmployees) : undefined}
 						onClick={() => {
 							if (!isUserSchedule) {
@@ -624,7 +533,7 @@ export default function SchedulePage() {
 							}
 						}}
 					>
-						<div className={`${styles.dutyContent} ${styles[fontSizeClass]}`}>
+						<div className={styles.dutyContent + ' ' + styles[fontSizeClass]}>
 							{formattedDuty}
 						</div>
 					</td>
@@ -633,7 +542,6 @@ export default function SchedulePage() {
 		</tr>
 	), [scheduleData.allDates, selectedDuties, formatDutyText, getDutyBackgroundColor, getDutyFontSize, getEmployeesWithSameDuty, generateTooltipContent, handleDutySelect, isMobile]);
 
-	// Improved bottom detection with better threshold management
 	useEffect(() => {
 		let ticking = false;
 		
@@ -657,7 +565,6 @@ export default function SchedulePage() {
 					if (newIsAtBottom !== isAtBottom) {
 						setIsAtBottom(newIsAtBottom);
 					}
-					
 					ticking = false;
 				});
 				ticking = true;
@@ -681,7 +588,6 @@ export default function SchedulePage() {
 		};
 	}, [isMobile, isAtBottom]);
 
-	// Synchronized horizontal scrolling between user and crew tables
 	useEffect(() => {
 		const userTable = userTableRef.current;
 		const crewTable = crewTableRef.current;
@@ -716,27 +622,41 @@ export default function SchedulePage() {
 		};
 	}, [scheduleData.userSchedule, scheduleData.otherSchedules]);
 
-	// Show loading while auth is being checked or while initializing
-	if (loading || !currentMonth) {
+	if (loading) {
 		return (
-			<div className="min-h-screen flex items-center justify-center">
-				<div className="spinner"></div>
-				<p>Loading...</p>
+			<div className={styles.loadingScreen}>
+				<div className={styles.loadingContent}>
+					<div className={styles.loadingSpinner}></div>
+					<p className={styles.loadingScreenText}>驗證登入狀態...</p>
+				</div>
 			</div>
 		);
 	}
 
-	// Don't show schedule if no user - let AuthContext handle redirect
 	if (!user) {
 		return (
-			<div className="min-h-screen flex items-center justify-center">
-				<p>Redirecting to login...</p>
+			<div className={styles.loadingScreen}>
+				<div className={styles.loadingContent}>
+					<div className={styles.loadingSpinner}></div>
+					<p className={styles.loadingScreenText}>轉向登入頁面...</p>
+				</div>
+			</div>
+		);
+	}
+
+	if (!initialLoadComplete && !currentMonth) {
+		return (
+			<div className={styles.loadingScreen}>
+				<div className={styles.loadingContent}>
+					<div className={styles.loadingSpinner}></div>
+					<p className={styles.loadingScreenText}>載入班表資料中...</p>
+				</div>
 			</div>
 		);
 	}
 
 	return (
-		<div className="min-h-screen" ref={containerRef}>
+		<div className={styles.mainContainer}>
 			<div className={styles.scheduleContainer}>
 				<div className={styles.monthSelectionContainer}>
 					<div className={styles.monthSelector}>
@@ -771,15 +691,10 @@ export default function SchedulePage() {
 
 				{scheduleData.hasScheduleData ? (
 					<>
-						{/* User Schedule Section */}
 						{scheduleData.userSchedule && (
-							<div ref={userScheduleRef} className={styles.userScheduleContainer}>
+							<div className={styles.userScheduleContainer}>
 								<h2 className={styles.sectionTitle}>Your Schedule</h2>
-								<div 
-									className={styles.tableContainer} 
-									id="user-schedule-table"
-									ref={userTableRef}
-								>
+								<div className={styles.tableContainer} ref={userTableRef}>
 									<table className={styles.scheduleTable}>
 										{renderTableHeader()}
 										<tbody>
@@ -790,56 +705,60 @@ export default function SchedulePage() {
 							</div>
 						)}
 
-						{/* Filter Tabs */}
-						<div ref={crewSectionRef} className={styles.crewSection}>
+						<div className={styles.crewSection}>
 							<h2 className={styles.sectionTitle}>Crew Members&apos; Schedule</h2>
 							<div className={styles.tabContainer}>
 								<button
-									className={`${styles.tab} ${styles.TSATab} ${activeTab === 'TSA' ? styles.active : ''}`}
+									className={styles.tab + ' ' + styles.TSATab + (activeTab === 'TSA' ? ' ' + styles.active : '')}
 									onClick={() => handleTabChange('TSA')}
+									disabled={scheduleLoading}
 								>
-									TSA
+									{scheduleLoading && activeTab === 'TSA' ? 'Loading...' : 'TSA'}
 								</button>
 								<button
-									className={`${styles.tab} ${styles.RMQTab} ${activeTab === 'RMQ' ? styles.active : ''}`}
+									className={styles.tab + ' ' + styles.RMQTab + (activeTab === 'RMQ' ? ' ' + styles.active : '')}
 									onClick={() => handleTabChange('RMQ')}
+									disabled={scheduleLoading}
 								>
-									RMQ
+									{scheduleLoading && activeTab === 'RMQ' ? 'Loading...' : 'RMQ'}
 								</button>
 								<button
-									className={`${styles.tab} ${styles.KHHTab} ${activeTab === 'KHH' ? styles.active : ''}`}
+									className={styles.tab + ' ' + styles.KHHTab + (activeTab === 'KHH' ? ' ' + styles.active : '')}
 									onClick={() => handleTabChange('KHH')}
+									disabled={scheduleLoading}
 								>
-									KHH
+									{scheduleLoading && activeTab === 'KHH' ? 'Loading...' : 'KHH'}
 								</button>
 								<button
-									className={`${styles.tab} ${styles.AllTab} ${activeTab === 'ALL' ? styles.active : ''}`}
+									className={styles.tab + ' ' + styles.AllTab + (activeTab === 'ALL' ? ' ' + styles.active : '')}
 									onClick={() => handleTabChange('ALL')}
+									disabled={scheduleLoading}
 								>
-									ALL
+									{scheduleLoading && activeTab === 'ALL' ? 'Loading...' : 'ALL'}
 								</button>
 							</div>
 						</div>
 
-						{/* Crew Schedule Table */}
 						<div className={styles.crewScheduleSection}>
-							<div 
-								className={styles.tableContainer} 
-								id="crew-schedule-table"
-								ref={crewTableRef}
-							>
-								<table className={styles.scheduleTable}>
-									{renderTableHeader()}
-									<tbody>
-										{scheduleData.otherSchedules.map(schedule => 
-											renderTableRow(schedule, false)
-										)}
-									</tbody>
-								</table>
-							</div>
+							{scheduleLoading ? (
+								<div className={styles.loadingContainer}>
+									<div className={styles.loadingSpinner}></div>
+									<span className={styles.loadingText}>載入{activeTab}班表資料...</span>
+								</div>
+							) : (
+								<div className={styles.tableContainer} ref={crewTableRef}>
+									<table className={styles.scheduleTable}>
+										{renderTableHeader()}
+										<tbody>
+											{scheduleData.otherSchedules.map(schedule => 
+												renderTableRow(schedule, false)
+											)}
+										</tbody>
+									</table>
+								</div>
+							)}
 						</div>
 
-						{/* Mobile Info Button for consistent same-duty viewing */}
 						{isMobile && (
 							<MobileInfoButton 
 								onClick={toggleMobileInfoMode}
@@ -847,7 +766,6 @@ export default function SchedulePage() {
 							/>
 						)}
 
-						{/* Mobile Selection Summary */}
 						{isMobile && (
 							<SelectionSummary 
 								selectedDuties={selectedDuties}
@@ -856,7 +774,6 @@ export default function SchedulePage() {
 							/>
 						)}
 
-						{/* Smart Submit Button - switches between floating and inline with reduced flickering */}
 						{!isAtBottom && (
 							<div className={styles.submitButtonFullWidth}>
 								<button 
@@ -888,7 +805,6 @@ export default function SchedulePage() {
 					</div>
 				)}
 
-				{/* Admin Upload Modal */}
 				{user.access_level === 99 && (
 					<AdminUploadModal
 						isOpen={showUploadModal}

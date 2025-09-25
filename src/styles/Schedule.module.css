@@ -144,21 +144,41 @@
 	box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
 }
 
-/* Fixed background colors for tabs to prevent shifting */
+/* FIXED: Tab background colors without !important on base styles, with proper active states */
 .TSATab {
-	background: linear-gradient(135deg, #ff6b6b, #ee5a52) !important;
+	background: linear-gradient(135deg, #ff6b6b, #ee5a52);
+}
+
+.TSATab.active {
+	background: linear-gradient(135deg, #ff5252, #e53935) !important;
+	border-color: rgba(255, 255, 255, 0.9) !important;
 }
 
 .RMQTab {
-	background: linear-gradient(135deg, #4ecdc4, #44a08d) !important;
+	background: linear-gradient(135deg, #4ecdc4, #44a08d);
+}
+
+.RMQTab.active {
+	background: linear-gradient(135deg, #3fc1b8, #3a9c8a) !important;
+	border-color: rgba(255, 255, 255, 0.9) !important;
 }
 
 .KHHTab {
-	background: linear-gradient(135deg, #45b7d1, #3498db) !important;
+	background: linear-gradient(135deg, #45b7d1, #3498db);
+}
+
+.KHHTab.active {
+	background: linear-gradient(135deg, #3498db, #2980b9) !important;
+	border-color: rgba(255, 255, 255, 0.9) !important;
 }
 
 .AllTab {
-	background: linear-gradient(135deg, #96ceb4, #85c9a5) !important;
+	background: linear-gradient(135deg, #96ceb4, #85c9a5);
+}
+
+.AllTab.active {
+	background: linear-gradient(135deg, #85c9a5, #7bb3a0) !important;
+	border-color: rgba(255, 255, 255, 0.9) !important;
 }
 
 .tableContainer {
@@ -206,8 +226,8 @@
 
 .employeeName {
 	left: 100px;
-	width: 100px;
-	min-width: 100px;
+	width: 120px;
+	min-width: 120px;
 }
 
 .colRank,
@@ -246,7 +266,7 @@
 	white-space: nowrap;
 }
 
-/* Mobile badge system for rank and base */
+/* Badge system for rank and base - now also used on desktop */
 .nameContainer {
 	display: flex;
 	flex-direction: column;
@@ -311,6 +331,30 @@
 
 .baseALL {
 	background: linear-gradient(135deg, #8b5cf6, #7c3aed);
+}
+
+/* Desktop: larger badges with better readability */
+@media (min-width: 769px) {
+	.rankBadge,
+	.baseBadge {
+		font-size: 0.8rem;
+		padding: 0.3rem 0.6rem;
+		border-radius: 0.4rem;
+	}
+	
+	.nameContainer {
+		min-height: 2.5rem;
+		gap: 0.5rem;
+	}
+	
+	.employeeNameCell {
+		min-width: 140px;
+		width: 140px;
+	}
+	
+	.employeeName {
+		font-size: 0.9rem;
+	}
 }
 
 .rankCell,
@@ -937,23 +981,6 @@
 	}
 }
 
-/* Improved duty change button positioning */
-.dutyChangeButtonFull {
-	width: 100%;
-	padding: 1rem 2rem;
-	border-radius: 0.5rem;
-	font-size: 1.125rem;
-	font-weight: 600;
-	color: #ffffff;
-	background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 50%, #1e40af 100%);
-	border: none;
-	cursor: pointer;
-	transition: all 0.3s ease;
-	box-shadow: 0 4px 15px rgba(37, 99, 235, 0.4);
-	position: relative;
-	overflow: hidden;
-}
-
 @media (max-width: 768px) {
 	.mobileInfoButton {
 		display: flex;
@@ -1218,6 +1245,7 @@
 		justify-content: center;
 	}
 }
+
 .submitButtonFullWidth,
 .submitButtonInline {
 	will-change: opacity, transform;
@@ -1237,4 +1265,83 @@
 		line-height: 1.2;
 		margin-bottom: 0.125rem;
 	}
+}
+
+/* Loading container styles */
+.loadingContainer {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	min-height: 200px;
+	background: white;
+	border-radius: 0.5rem;
+	border: 1px solid #e5e7eb;
+}
+
+.loadingSpinner {
+	width: 2rem;
+	height: 2rem;
+	border: 4px solid #e5e7eb;
+	border-top: 4px solid #3b82f6;
+	border-radius: 50%;
+	animation: spin 1s linear infinite;
+}
+
+.loadingText {
+	margin-left: 0.75rem;
+	color: #6b7280;
+	font-weight: 500;
+}
+
+@keyframes spin {
+	0% { transform: rotate(0deg); }
+	100% { transform: rotate(360deg); }
+}
+
+/* Loading screen styles for authentication states */
+.loadingScreen {
+	min-height: 100vh;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	background: linear-gradient(135deg, #1e3a8a, #7c3aed, #db2777);
+}
+
+.loadingContent {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: 1rem;
+}
+
+.loadingScreenText {
+	color: white;
+	font-size: 1.125rem;
+	font-weight: 500;
+	margin: 0;
+}
+
+/* Main container */
+.mainContainer {
+	min-height: 100vh;
+}
+
+.loadingSpinner {
+	width: 2rem;
+	height: 2rem;
+	border: 4px solid #e5e7eb;
+	border-top: 4px solid #3b82f6;
+	border-radius: 50%;
+	animation: spin 1s linear infinite;
+}
+
+.loadingText {
+	margin-left: 0.75rem;
+	color: #6b7280;
+	font-weight: 500;
+}
+
+@keyframes spin {
+	0% { transform: rotate(0deg); }
+	100% { transform: rotate(360deg); }
 }

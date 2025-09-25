@@ -177,6 +177,9 @@ export const getAllSchedulesForMonth = async (month) => {
 	}
 
 	try {
+		// Use month directly - no conversion needed since DB stores in Chinese format
+		console.log(`Querying database for month: ${month}`);
+		
 		const { data, error } = await scheduleHelpers.getSchedulesForMonth(month);
 		
 		if (error) {
@@ -184,15 +187,42 @@ export const getAllSchedulesForMonth = async (month) => {
 			return [];
 		}
 
+		console.log(`Raw database response for ${month}:`, data);
+		console.log(`Database returned ${data ? data.length : 0} records`);
+
+		if (!data || data.length === 0) {
+			console.log('No schedule data found for month:', month);
+			return [];
+		}
+
 		// Transform the data to match your existing format
 		const transformedSchedules = data.map(schedule => {
+			console.log('Processing schedule record:', schedule);
+			
 			const employee = employeeMap.get(schedule.employeeID);
-			if (!employee) return null;
+			if (!employee) {
+				console.warn(`Employee not found for ID: ${schedule.employeeID}`);
+				return null;
+			}
 			
 			// Convert duties array to days object
 			const days = {};
-			const year = month.substring(0, 4);
-			const monthNum = month.substring(5, 7);
+			// Extract year and month from Chinese format (2025年08月)
+			const yearMatch = month.match(/(\d{4})年/);
+			const monthMatch = month.match(/(\d{1,2})月/);
+			
+			if (!yearMatch || !monthMatch) {
+				console.error(`Invalid month format: ${month}`);
+				return null;
+			}
+			
+			const year = yearMatch[1];
+			const monthNum = monthMatch[1].padStart(2, '0');
+			
+			if (!schedule.duties || !Array.isArray(schedule.duties)) {
+				console.error(`Invalid duties data for employee ${schedule.employeeID}:`, schedule.duties);
+				return null;
+			}
 			
 			schedule.duties.forEach((duty, index) => {
 				const dayNum = (index + 1).toString().padStart(2, '0');
@@ -200,14 +230,26 @@ export const getAllSchedulesForMonth = async (month) => {
 				days[dateKey] = duty;
 			});
 			
-			return {
+			const transformed = {
 				employeeID: schedule.employeeID,
 				name: employee.name,
 				rank: employee.rank,
 				base: employee.base,
 				days: days
 			};
+			
+			console.log(`Transformed schedule for ${employee.name} (${employee.base}):`, {
+				id: transformed.employeeID,
+				name: transformed.name,
+				base: transformed.base,
+				sampleDays: Object.entries(transformed.days).slice(0, 3)
+			});
+			
+			return transformed;
 		}).filter(Boolean);
+
+		console.log(`Total transformed schedules: ${transformedSchedules.length}`);
+		console.log('Bases in transformed schedules:', [...new Set(transformedSchedules.map(s => s.base))]);
 
 		// Cache the result
 		scheduleCache.set(cacheKey, transformedSchedules);
@@ -242,10 +284,22 @@ export const getSchedulesByBase = async (month, base) => {
 		return scheduleCache.get(cacheKey);
 	}
 	
+	console.log(`getSchedulesByBase called with month: ${month}, base: ${base}`);
+	
 	const allSchedules = await getAllSchedulesForMonth(month);
+	console.log(`Got ${allSchedules.length} schedules from getAllSchedulesForMonth`);
+	console.log(`Available bases in schedules:`, [...new Set(allSchedules.map(s => s.base))]);
+	
 	const filteredSchedules = base === 'ALL' ? 
 		allSchedules : 
-		allSchedules.filter(schedule => schedule.base === base);
+		allSchedules.filter(schedule => {
+			const matches = schedule.base === base;
+			console.log(`Employee ${schedule.name} (${schedule.employeeID}) base: ${schedule.base}, matches ${base}: ${matches}`);
+			return matches;
+		});
+	
+	console.log(`Filtered schedules for base ${base}: ${filteredSchedules.length}`);
+	console.log(`Filtered employees:`, filteredSchedules.map(s => `${s.name} (${s.base})`));
 	
 	// Cache filtered results for future use
 	scheduleCache.set(cacheKey, filteredSchedules);
