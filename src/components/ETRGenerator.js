@@ -157,7 +157,7 @@ const ETRGenerator = () => {
 		return (
 			ccomDataToBeCopied +
 			"\n\n" +
-			"二、公告抽單合格，摘要如下:" +
+			"二、公告抽問合格，摘要如下:" +
 			"\r\n" +
 			bulletinDataToBeCopied +
 			"\n\n" +
@@ -182,37 +182,37 @@ const ETRGenerator = () => {
 					switch (dayOfWeek) {
 						case "Monday":
 							randomCCOMQuestion.push(
-								`1. 依公告抽單飛安暨主題加強宣導月題庫。抽單 F2${ccomData[i]["questionList"][0]}，抽單結果正常。`
+								`1. 依公告抽問飛安暨主題加強宣導月題庫。抽問 F2${ccomData[i]["questionList"][0]}，抽問結果正常。`
 							);
 							break;
 						case "Tuesday":
 							randomCCOMQuestion.push(
-								`1. 依公告抽單飛安暨主題加強宣導月題庫。抽單 F2${ccomData[i]["questionList"][1]}，抽單結果正常。`
+								`1. 依公告抽問飛安暨主題加強宣導月題庫。抽問 F2${ccomData[i]["questionList"][1]}，抽問結果正常。`
 							);
 							break;
 						case "Wednesday":
 							randomCCOMQuestion.push(
-								`1. 依公告抽單飛安暨主題加強宣導月題庫。抽單 F2${ccomData[i]["questionList"][2]}，抽單結果正常。`
+								`1. 依公告抽問飛安暨主題加強宣導月題庫。抽問 F2${ccomData[i]["questionList"][2]}，抽問結果正常。`
 							);
 							break;
 						case "Thursday":
 							randomCCOMQuestion.push(
-								`1. 依公告抽單飛安暨主題加強宣導月題庫。抽單 F2${ccomData[i]["questionList"][3]}，抽單結果正常。`
+								`1. 依公告抽問飛安暨主題加強宣導月題庫。抽問 F2${ccomData[i]["questionList"][3]}，抽問結果正常。`
 							);
 							break;
 						case "Friday":
 							randomCCOMQuestion.push(
-								`1. 依公告抽單飛安暨主題加強宣導月題庫。抽單 F2${ccomData[i]["questionList"][4]}，抽單結果正常。`
+								`1. 依公告抽問飛安暨主題加強宣導月題庫。抽問 F2${ccomData[i]["questionList"][4]}，抽問結果正常。`
 							);
 							break;
 						case "Saturday":
 							randomCCOMQuestion.push(
-								`1. 依公告抽單飛安暨主題加強宣導月題庫。抽單 F2${ccomData[i]["questionList"][5]}，抽單結果正常。`
+								`1. 依公告抽問飛安暨主題加強宣導月題庫。抽問 F2${ccomData[i]["questionList"][5]}，抽問結果正常。`
 							);
 							break;
 						case "Sunday":
 							randomCCOMQuestion.push(
-								`1. 依公告抽單飛安暨主題加強宣導月題庫。抽單 F2${ccomData[i]["questionList"][6]}，抽單結果正常。`
+								`1. 依公告抽問飛安暨主題加強宣導月題庫。抽問 F2${ccomData[i]["questionList"][6]}，抽問結果正常。`
 							);
 							break;
 						default:
@@ -223,7 +223,7 @@ const ETRGenerator = () => {
 						Math.random() * ccomData[i]["questionList"].length
 					);
 					randomCCOMQuestion.push(
-						`1. 抽單 F2 CCOM Ch.${ccomData[i]["questionList"][randomNumber]}，抽單結果正常。`
+						`1. 抽問 F2 CCOM Ch.${ccomData[i]["questionList"][randomNumber]}，抽問結果正常。`
 					);
 				}
 			}
@@ -394,16 +394,16 @@ const ETRGenerator = () => {
 				</div>
 
 				<fieldset className={styles.ccomContainer}>
-					<legend>CCOM抽單</legend>
+					<legend>CCOM抽問</legend>
 					<div id="ccomData" ref={ccomDataRef}>
-						<h2>一、飛安抽單合格，摘要如下：</h2>
+						<h2>一、飛安抽問合格，摘要如下：</h2>
 						{getCCOMQuestion()}
 					</div>
 				</fieldset>
 
 				<fieldset className={styles.bulletinContainer}>
 					<legend>
-						公告宣導/抽單
+						公告宣導/抽問
 						{(user?.access_level >= 99 || user?.accessLevel >= 99) && (
 							<button
 								onClick={() => setShowAddBulletin(true)}
@@ -460,7 +460,7 @@ const ETRGenerator = () => {
 						</div>
 					</div>
 					<div>
-						<h2>二、公告抽單合格，摘要如下:</h2>
+						<h2>二、公告抽問合格，摘要如下:</h2>
 						<div className={styles.bulletinDataContainer}>
 							<div className={styles.leftColumn}>
 								{bulletinTimeStamp}
