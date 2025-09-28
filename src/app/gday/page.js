@@ -1,14 +1,12 @@
-// src/app/gday/page.js - Alternative version WITHOUT navbar
+// src/app/gday/page.js - Updated version with dynamic user and UI improvements
 'use client'
 
 import React, { useState, useRef, useEffect } from 'react'
 import Head from 'next/head'
-import { Calendar, Camera, X, Copy } from 'lucide-react'
+import { Calendar, Camera, X, Copy, User, ChevronDown, ChevronUp } from 'lucide-react'
 import { toast, Toaster } from 'react-hot-toast'
+import { useAuth } from '../../contexts/AuthContext' // Adjust path as needed
 import styles from '../../styles/GDayPlanner.module.css'
-
-// If you have an auth context, import it here
-// import { useAuth } from '../../contexts/AuthContext'
 
 const GDayPlanner = () => {
     // State management
@@ -21,13 +19,12 @@ const GDayPlanner = () => {
     const [showMonthPicker, setShowMonthPicker] = useState(false)
     const [selectedLeaveType, setSelectedLeaveType] = useState(null)
     const [isTouchDevice, setIsTouchDevice] = useState(false)
+    const [showLeaveTypes, setShowLeaveTypes] = useState(true)
     
-    // Replace this with your actual auth context
-    // const { user } = useAuth()
-    
-    // Get user data from your auth system
+    // Get user data from auth context
+    const { user } = useAuth()
     const userDetails = { 
-        name: '韓建豪' // Replace with: user?.name || '使用者'
+        name: user?.name || user?.user_metadata?.name || user?.email?.split('@')[0] || '使用者'
     }
     const plannerRef = useRef(null)
 
@@ -340,6 +337,13 @@ const GDayPlanner = () => {
         }
 
         try {
+            // Hide leave types before screenshot
+            const wasVisible = showLeaveTypes
+            setShowLeaveTypes(false)
+            
+            // Wait a bit for the UI to update
+            await new Promise(resolve => setTimeout(resolve, 100))
+            
             // Dynamically import html2canvas
             const html2canvas = (await import('html2canvas')).default
 
@@ -362,9 +366,14 @@ const GDayPlanner = () => {
             document.body.removeChild(link)
 
             toast.success('截圖已成功儲存！', { duration: 3000, position: 'top-center' })
+            
+            // Restore leave types visibility
+            setShowLeaveTypes(wasVisible)
         } catch (error) {
             console.error('Error generating screenshot:', error)
             toast.error('截圖產生失敗，請重試', { duration: 3000, position: 'top-center' })
+            // Restore leave types visibility on error too
+            setShowLeaveTypes(wasVisible)
         }
     }
 
@@ -381,12 +390,16 @@ const GDayPlanner = () => {
                 onDragOver={handleDragOver}
                 onDrop={handleEmptyAreaDrop}
             >
-                {/* NO NAVBAR - assumes your layout already has one */}
-                
                 <div ref={plannerRef} className={styles.plannerContent}>
-                    {/* Header */}
+                    {/* Enhanced Header with User Info */}
                     <div className={styles.plannerHeader}>
-                        <h1 className={styles.plannerTitle}>{userDetails?.name} G-Day 假期規劃表</h1>
+                        <div className={styles.userSection}>
+                            <div className={styles.userInfo}>
+                                <User className={styles.userIcon} />
+                                <span className={styles.userName}>{userDetails.name}</span>
+                            </div>
+                        </div>
+                        <h1 className={styles.plannerTitle}>G-Day 假期規劃表</h1>
                         <div className={styles.navigationContainer}>
                             <div className={styles.datePickerWrapper}>
                                 <div className={styles.datePickerContainer}>
@@ -437,11 +450,21 @@ const GDayPlanner = () => {
                         </div>
                     </div>
 
-                    {/* Leave Types */}
+                    {/* Leave Types Accordion */}
                     <div className={styles.leaveTypesSection}>
                         <div className={styles.leaveTypesHeader}>
-                            <h3 className={styles.leaveTypesTitle}>假期類型</h3>
-                            {isTouchDevice && selectedLeaveType && (
+                            <button 
+                                onClick={() => setShowLeaveTypes(!showLeaveTypes)}
+                                className={styles.accordionButton}
+                                title="點擊顯示/隱藏假期類型"
+                            >
+                                <h3 className={styles.leaveTypesTitle}>假期類型</h3>
+                                {showLeaveTypes ? 
+                                    <ChevronUp className={styles.accordionIcon} /> : 
+                                    <ChevronDown className={styles.accordionIcon} />
+                                }
+                            </button>
+                            {isTouchDevice && selectedLeaveType && showLeaveTypes && (
                                 <button
                                     onClick={clearSelection}
                                     className={styles.clearSelectionBtn}
@@ -452,22 +475,25 @@ const GDayPlanner = () => {
                                 </button>
                             )}
                         </div>
-                        <div className={styles.leaveTypesGrid}>
-                            {leaveTypes.map((leaveType) => (
-                                <div
-                                    key={leaveType.id}
-                                    draggable={!isTouchDevice}
-                                    onDragStart={(e) => handleDragStart(e, leaveType)}
-                                    onClick={() => handleLeaveTypeClick(leaveType)}
-                                    className={`${styles.leaveTypeItem} ${styles[`leave${leaveType.id.charAt(0).toUpperCase() + leaveType.id.slice(1)}`]} ${
-                                        isTouchDevice && selectedLeaveType?.id === leaveType.id ? styles.selected : ''
-                                    }`}
-                                    title={leaveType.description}
-                                >
-                                    <span className={styles.leaveTypeLabel}>{leaveType.label}</span>
-                                </div>
-                            ))}
-                        </div>
+                        
+                        {showLeaveTypes && (
+                            <div className={styles.leaveTypesGrid}>
+                                {leaveTypes.map((leaveType) => (
+                                    <div
+                                        key={leaveType.id}
+                                        draggable={!isTouchDevice}
+                                        onDragStart={(e) => handleDragStart(e, leaveType)}
+                                        onClick={() => handleLeaveTypeClick(leaveType)}
+                                        className={`${styles.leaveTypeItem} ${styles[`leave${leaveType.id.charAt(0).toUpperCase() + leaveType.id.slice(1)}`]} ${
+                                            isTouchDevice && selectedLeaveType?.id === leaveType.id ? styles.selected : ''
+                                        }`}
+                                        title={leaveType.description}
+                                    >
+                                        <span className={styles.leaveTypeLabel}>{leaveType.label}</span>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
                     </div>
 
                     {/* Calendar */}
@@ -517,28 +543,6 @@ const GDayPlanner = () => {
                                 )
                             })}
                         </div>
-                    </div>
-
-                    {/* Instructions */}
-                    <div className={styles.instructions}>
-                        {isTouchDevice ? (
-                            <>
-                                <p className={styles.instructionText}>
-                                    <Calendar className={styles.instructionIcon} />
-                                    點選假期類別後，再點選日期進行安排
-                                </p>
-                                <p className={styles.instructionNote}>點選已安排的假期可移除（需確認）</p>
-                            </>
-                        ) : (
-                            <>
-                                <p className={styles.instructionText}>
-                                    <Calendar className={styles.instructionIcon} />
-                                    把假期類型拖拉到指定日期上進行規劃
-                                </p>
-                                <p className={styles.instructionNote}>拖拉已安排的假期到空白處可刪除</p>
-                            </>
-                        )}
-                        <p className={styles.instructionNote}>點選年份或月份可快速切換</p>
                     </div>
                 </div>
 
