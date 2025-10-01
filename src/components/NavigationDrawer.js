@@ -4,7 +4,7 @@ import { useRouter } from 'next/navigation';
 import { usePathname } from 'next/navigation';
 import { useEffect } from 'react';
 import Image from 'next/image';
-import { X, Calendar, Clock, Users, Settings, MapPin, FileText, Utensils, NotebookPen, Crown, Shield, User, Star } from 'lucide-react';
+import { X, Calendar, Clock, Users, Settings, MapPin, FileText, Utensils, NotebookPen, Crown, Shield, User, Star, Database } from 'lucide-react';
 import styles from '../styles/NavigationDrawer.module.css';
 
 const NavigationDrawer = ({ isOpen, onClose, userDetails }) => {
@@ -130,6 +130,15 @@ const NavigationDrawer = ({ isOpen, onClose, userDetails }) => {
             path: '/etr-generator',
             color: '#dc2626',
             requiredLevel: 2
+        },
+        {
+            id: 'database-management',
+            title: '資料庫管理',
+            description: '班表、派遣表、使用者管理',
+            icon: <Database size={24} />,
+            path: '/database-management',
+            color: '#f77f00',
+            requiredLevel: 99
         },
         {
             id: 'patch-notes',
@@ -277,7 +286,7 @@ const NavigationDrawer = ({ isOpen, onClose, userDetails }) => {
                 {/* Footer */}
                 <div className={styles.drawerFooter}>
                     <div className={styles.appVersion}>
-                        豪神APP v3.1.1
+                        豪神APP v3.2.5
                     </div>
                 </div>
             </div>

@@ -6,12 +6,13 @@ import { useRouter } from 'next/navigation';
 import toast from 'react-hot-toast';
 import styles from '../../styles/Schedule.module.css';
 import { 
-  getAllSchedulesForMonth, 
-  getEmployeeSchedule, 
-  getSchedulesByBase,
-  getEmployeeById,
-  getAvailableMonths
+	getAllSchedulesForMonth, 
+	getEmployeeSchedule, 
+	getSchedulesByBase,
+	getEmployeeById,
+	getAvailableMonths
 } from '../../lib/DataRoster';
+import { flightDutyHelpers } from '../../lib/supabase';
 
 const useIsMobile = () => {
 	const [isMobile, setIsMobile] = useState(() => {
@@ -30,60 +31,6 @@ const useIsMobile = () => {
 	}, []);
 
 	return isMobile;
-};
-
-const AdminUploadModal = ({ isOpen, onClose, onUpload }) => {
-	const [jsonData, setJsonData] = useState('');
-	const [isUploading, setIsUploading] = useState(false);
-
-	if (!isOpen) return null;
-
-	const handleUpload = async () => {
-		if (!jsonData.trim()) {
-			toast.error('請輸入班表資料');
-			return;
-		}
-
-		try {
-			setIsUploading(true);
-			const scheduleData = JSON.parse(jsonData);
-			await onUpload(scheduleData);
-			setJsonData('');
-			onClose();
-		} catch (error) {
-			toast.error('JSON格式錯誤: ' + error.message);
-		} finally {
-			setIsUploading(false);
-		}
-	};
-
-	return (
-		<div className={styles.modalOverlay} onClick={onClose}>
-			<div className={styles.modalContent} onClick={(e) => e.stopPropagation()}>
-				<div className={styles.modalHeader}>
-					<h3>上傳班表資料 (管理員)</h3>
-					<button className={styles.modalClose} onClick={onClose}>&times;</button>
-				</div>
-				<div className={styles.modalBody}>
-					<textarea
-						value={jsonData}
-						onChange={(e) => setJsonData(e.target.value)}
-						placeholder="請貼上JSON格式的班表資料..."
-						className={styles.jsonTextarea}
-						rows={15}
-					/>
-				</div>
-				<div className={styles.modalFooter}>
-					<button className={styles.cancelButton} onClick={onClose} disabled={isUploading}>
-						取消
-					</button>
-					<button className={styles.uploadButton} onClick={handleUpload} disabled={isUploading}>
-						{isUploading ? '上傳中...' : '上傳班表'}
-					</button>
-				</div>
-			</div>
-		</div>
-	);
 };
 
 const SelectionSummary = ({ selectedDuties, onClear, formatDate }) => {
@@ -126,7 +73,6 @@ export default function SchedulePage() {
 	const isMobile = useIsMobile();
 	
 	const [mobileInfoMode, setMobileInfoMode] = useState(false);
-	const [showUploadModal, setShowUploadModal] = useState(false);
 	const userTableRef = useRef(null);
 	const crewTableRef = useRef(null);
 
@@ -137,7 +83,8 @@ export default function SchedulePage() {
 	const [selectedDuties, setSelectedDuties] = useState([]);
 	const [highlightedDates, setHighlightedDates] = useState({});
 	const [scheduleLoading, setScheduleLoading] = useState(false);
-	const [initialLoadComplete, setInitialLoadComplete] = useState(false);
+	const [initialLoad, setInitialLoad] = useState(true);
+	const [hasSetDefaultTab, setHasSetDefaultTab] = useState(false);
 
 	const [scheduleData, setScheduleData] = useState({
 		allSchedules: [],
@@ -147,57 +94,128 @@ export default function SchedulePage() {
 		otherSchedules: []
 	});
 
+	// Flight duty data state - REMOVED for performance
+	// const [flightDutyData, setFlightDutyData] = useState(new Map());
+	// const [flightDutyDetails, setFlightDutyDetails] = useState(new Map());
+
+	// Optimize initial load - load months only once
 	useEffect(() => {
 		const loadMonths = async () => {
+			if (!initialLoad) return;
+			
 			try {
+				console.log('Loading available months...');
 				const months = await getAvailableMonths();
+				console.log('Loaded months:', months);
+				
 				const sortedMonths = months.sort((a, b) => {
 					const monthA = parseInt(a.match(/(\d+)月/)?.[1] || '0');
 					const monthB = parseInt(b.match(/(\d+)月/)?.[1] || '0');
 					return monthA - monthB;
 				});
+				
 				setAvailableMonths(sortedMonths);
-				if (sortedMonths.length > 0 && !currentMonth) {
-					setCurrentMonth(sortedMonths[sortedMonths.length - 1]);
+				
+				if (sortedMonths.length > 0) {
+					const latestMonth = sortedMonths[sortedMonths.length - 1];
+					setCurrentMonth(latestMonth);
+					console.log('Set current month to:', latestMonth);
 				}
+				
+				setInitialLoad(false);
 			} catch (error) {
 				console.error('Error loading months:', error);
 				toast.error('載入月份資料失敗');
+				setInitialLoad(false);
 			}
 		};
+		
 		loadMonths();
-	}, [currentMonth]);
+	}, [initialLoad]);
 
+	// Set user's base as default tab only once after initial load
 	useEffect(() => {
-		if (user?.base && !initialLoadComplete) {
+		if (user?.base && !initialLoad && !hasSetDefaultTab && activeTab === 'TSA' && user.base !== 'TSA') {
 			setActiveTab(user.base);
+			setHasSetDefaultTab(true);
 		}
-	}, [user?.base, initialLoadComplete]);
+	}, [user?.base, initialLoad, hasSetDefaultTab, activeTab]);
 
+	// Redirect handling
 	useEffect(() => {
 		if (!loading && !user) {
 			console.log('User not authenticated, AuthContext will handle redirect...');
 		}
 	}, [user, loading]);
 
+	// Parse flight duty details from the flight duty string
+	const parseFlightDutyDetails = useCallback((flightDutyString) => {
+		if (!flightDutyString || flightDutyString.trim() === '') {
+			return null;
+		}
+
+		// Parse newline-separated format: "A2\n06:35:00-12:55:00\nAM"
+		const lines = flightDutyString.split('\n').map(line => line.trim());
+		
+		if (lines.length >= 3) {
+			const dutyCode = lines[0];
+			const timeRange = lines[1];
+			const dutyType = lines[2];
+			
+			// Parse time range "06:35:00-12:55:00"
+			const timeMatch = timeRange.match(/^(\d{2}:\d{2}:\d{2})-(\d{2}:\d{2}:\d{2})$/);
+			let reportingTime = null;
+			let endTime = null;
+			
+			if (timeMatch) {
+				reportingTime = timeMatch[1].substring(0, 5); // Convert "06:35:00" to "06:35"
+				endTime = timeMatch[2].substring(0, 5); // Convert "12:55:00" to "12:55"
+			}
+			
+			// Calculate total sectors (simplified estimation based on duty code)
+			let totalSectors = 1;
+			if (dutyCode.includes('2')) totalSectors = 2;
+			else if (dutyCode.includes('3')) totalSectors = 3;
+			else if (dutyCode.includes('4')) totalSectors = 4;
+			
+			return {
+				dutyCode: dutyCode,
+				reportingTime: reportingTime,
+				endTime: endTime,
+				dutyType: dutyType,
+				totalSectors: totalSectors
+			};
+		}
+		
+		// If no specific pattern matches, return the original string as duty code
+		return {
+			dutyCode: flightDutyString,
+			reportingTime: null,
+			endTime: null,
+			dutyType: null,
+			totalSectors: null
+		};
+	}, []);
+
+	// Main data loading effect - only runs when month or tab changes
 	useEffect(() => {
 		const loadScheduleData = async () => {
-			if (!currentMonth) {
-				setScheduleData({
-					allSchedules: [],
-					hasScheduleData: false,
-					userSchedule: null,
-					allDates: [],
-					otherSchedules: []
-				});
+			if (!currentMonth || initialLoad) {
 				return;
 			}
 
+			console.log('Loading schedule data for:', currentMonth, activeTab);
+			setScheduleLoading(true);
+
 			try {
+				// Load all schedules for the month (cached)
 				const allSchedules = await getAllSchedulesForMonth(currentMonth);
 				const hasScheduleData = allSchedules.length > 0;
+				
+				// Get user schedule
 				const userSchedule = user?.id ? await getEmployeeSchedule(user.id, currentMonth) : null;
 
+				// Calculate dates from schedules
 				const allDates = hasScheduleData ? 
 					(() => {
 						const firstSchedule = allSchedules[0];
@@ -218,6 +236,7 @@ export default function SchedulePage() {
 						return [];
 					})() : [];
 
+				// Get schedules by base (this is the expensive operation)
 				const otherSchedules = hasScheduleData ? 
 					await getSchedulesByBase(currentMonth, activeTab).then(schedules => {
 						return schedules.filter(schedule => schedule.employeeID !== user?.id);
@@ -231,18 +250,21 @@ export default function SchedulePage() {
 					otherSchedules
 				});
 				
-				if (!initialLoadComplete) {
-					setInitialLoadComplete(true);
-				}
+				// REMOVED: Flight duty loading for now to improve performance
+				// We'll implement the cross-reference approach later
+				
+				console.log('Schedule data loaded successfully');
 				
 			} catch (error) {
 				console.error('Error loading schedule data:', error);
 				toast.error('載入班表資料失敗');
+			} finally {
+				setScheduleLoading(false);
 			}
 		};
 
 		loadScheduleData();
-	}, [currentMonth, activeTab, user?.id, initialLoadComplete]);
+	}, [currentMonth, activeTab, user?.id, initialLoad]);
 
 	const getDayOfWeek = useCallback((dateStr) => {
 		const date = new Date(dateStr);
@@ -291,10 +313,14 @@ export default function SchedulePage() {
 		return '';
 	}, []);
 
-	const getEmployeesWithSameDuty = useCallback((date, duty) => {
+	const getEmployeesWithSameDuty = useCallback((date, duty, excludeEmployeeId = null) => {
 		if (!duty || !scheduleData.hasScheduleData) return [];
 		return scheduleData.allSchedules
-			.filter(schedule => schedule.days[date] === duty && schedule.employeeID !== user?.id)
+			.filter(schedule => 
+				schedule.days[date] === duty && 
+				schedule.employeeID !== user?.id &&
+				schedule.employeeID !== excludeEmployeeId
+			)
 			.map(schedule => ({
 				id: schedule.employeeID,
 				name: schedule.name || '',
@@ -303,29 +329,228 @@ export default function SchedulePage() {
 			}));
 	}, [scheduleData.allSchedules, scheduleData.hasScheduleData, user?.id]);
 
-	const generateTooltipContent = useCallback((date, duty, sameEmployees) => {
-		const displayDuty = duty || "空";
-		if (sameEmployees.length === 0) {
-			return displayDuty + ' - No other employees';
-		}
-		let content = 'Same duties(' + displayDuty + '):\n';
-		const employeeList = sameEmployees.map(emp => emp.id + ' ' + (emp.name || 'N/A')).join('\n');
-		return content + employeeList;
-	}, []);
+	// Flight duty cache for performance
+	const flightDutyCache = useRef(new Map());
 
-	const handleDutyInfo = useCallback((employeeId, name, date, duty, sameEmployees) => {
-		if (!isMobile || sameEmployees.length === 0) return;
+	// Fetch flight duty details for a specific duty and date
+	const getFlightDutyDetails = useCallback(async (dutyCode, date) => {
+		const cacheKey = `${dutyCode}-${date}-${currentMonth}`;
+		
+		// Check cache first
+		if (flightDutyCache.current.has(cacheKey)) {
+			return flightDutyCache.current.get(cacheKey);
+		}
+
+		try {
+			const { data, error } = await flightDutyHelpers.getFlightDutyDetails(dutyCode, date, currentMonth);
+			
+			if (error) {
+				console.error('Error fetching flight duty details:', error);
+				return null;
+			}
+
+			// Cache the result
+			flightDutyCache.current.set(cacheKey, data);
+			return data;
+		} catch (error) {
+			console.error('Error in getFlightDutyDetails:', error);
+			return null;
+		}
+	}, [currentMonth]);
+
+	// Enhanced tooltip content with flight duty cross-reference
+	const generateTooltipContent = useCallback(async (employeeId, date, duty, sameEmployees) => {
 		const displayDuty = duty || "空";
-		const employeeList = sameEmployees.slice(0, 3).map(emp => 
-			emp.id + ' ' + (emp.name || 'N/A')
-		).join(', ');
-		const moreCount = sameEmployees.length > 3 ? '等' + sameEmployees.length + '人' : '';
-		toast(displayDuty + ': ' + employeeList + moreCount, {
-			icon: 'ℹ️',
-			duration: 3000,
-			position: 'bottom-center'
+		let content = displayDuty;
+		
+		// Try to get flight duty details if duty looks like a flight duty code
+		if (duty && duty.length >= 2 && /^[A-Z]\d+$/.test(duty)) {
+			try {
+				const flightDetails = await getFlightDutyDetails(duty, date);
+				
+				if (flightDetails) {
+					content += '\n\n【飛行班表詳情】';
+					if (flightDetails.duty_code) {
+						content += '\n班型: ' + flightDetails.duty_code;
+					}
+					if (flightDetails.reporting_time) {
+						content += '\n報到時間: ' + flightDetails.reporting_time;
+					}
+					if (flightDetails.end_time) {
+						content += '\n結束時間: ' + flightDetails.end_time;
+					}
+					if (flightDetails.duty_type) {
+						content += '\n班別類型: ' + flightDetails.duty_type;
+					}
+					if (flightDetails.total_sectors) {
+						content += '\n腿數: ' + flightDetails.total_sectors;
+					}
+				}
+			} catch (error) {
+				console.error('Error getting flight duty details for tooltip:', error);
+			}
+		}
+		
+		// Add same duty employees
+		if (sameEmployees.length > 0) {
+			content += '\n\n【相同任務】';
+			const employeeList = sameEmployees.slice(0, 5).map(emp => emp.id + ' ' + (emp.name || 'N/A')).join(', ');
+			content += '\n' + employeeList;
+			if (sameEmployees.length > 5) {
+				content += ' 等' + sameEmployees.length + '人';
+			}
+		} else {
+			content += '\n\n【相同班別】無';
+		}
+		
+		return content;
+	}, [getFlightDutyDetails]);
+
+	// Tooltip state for async loading
+	const [tooltipData, setTooltipData] = useState({
+		visible: false,
+		content: '',
+		x: 0,
+		y: 0
+	});
+	const tooltipTimeoutRef = useRef(null);
+
+	// Enhanced mobile info with better formatting
+	const handleDutyInfo = useCallback(async (employeeId, name, date, duty, sameEmployees) => {
+		if (!isMobile) return;
+		
+		const displayDuty = duty || "空";
+		
+		// Try to get flight duty details for mobile info
+		if (duty && duty.length >= 2 && /^[A-Z]\d+$/.test(duty)) {
+			try {
+				const flightDetails = await getFlightDutyDetails(duty, date);
+				if (flightDetails) {
+					// Format as requested: H2 : 4腿\n08:00 --> 15:20\n--相同任務--\n員工列表
+					let message = `${flightDetails.duty_code}`;
+					
+					if (flightDetails.total_sectors) {
+						message += ` : ${flightDetails.total_sectors}腿`;
+					}
+					
+					if (flightDetails.reporting_time && flightDetails.end_time) {
+						// Convert time format from "08:00:00" to "08:00"
+						const startTime = flightDetails.reporting_time.substring(0, 5);
+						const endTime = flightDetails.end_time.substring(0, 5);
+						message += `\n${startTime} --> ${endTime}`;
+					}
+					
+					// Add same duty employees (excluding the hovered employee)
+					if (mobileInfoMode && sameEmployees.length > 0) {
+						message += '\n\n--相同任務--';
+						sameEmployees.forEach(emp => {
+							message += `\n${emp.id} ${emp.name || 'N/A'}`;
+						});
+					}
+					
+					toast(message, {
+						icon: '✈️',
+						duration: 5000,
+						position: 'bottom-center',
+						style: {
+							background: '#333',
+							color: '#fff',
+							fontSize: '14px',
+							lineHeight: '1.4',
+							whiteSpace: 'pre-line'
+						}
+					});
+					return;
+				}
+			} catch (error) {
+				console.error('Error getting flight duty details for mobile:', error);
+			}
+		}
+		
+		// Fallback for non-flight duties or if flight details failed
+		if (mobileInfoMode && sameEmployees.length > 0) {
+			let message = `${displayDuty}\n\n--相同任務--`;
+			sameEmployees.forEach(emp => {
+				message += `\n${emp.id} ${emp.name || 'N/A'}`;
+			});
+			
+			toast(message, {
+				icon: 'ℹ️',
+				duration: 4000,
+				position: 'bottom-center',
+				style: {
+					whiteSpace: 'pre-line'
+				}
+			});
+		}
+	}, [isMobile, mobileInfoMode, getFlightDutyDetails]);
+
+	// Handle mouse enter for tooltips with flight duty details
+	const handleDutyMouseEnter = useCallback(async (event, employeeId, date, duty, sameEmployees) => {
+		if (isMobile) return; // Skip tooltips on mobile
+		
+		// Prevent execution during render
+		if (!event || !event.target) return;
+		
+		// Clear any existing timeout
+		if (tooltipTimeoutRef.current) {
+			clearTimeout(tooltipTimeoutRef.current);
+		}
+
+		// Show tooltip immediately for better UX
+		const displayDuty = duty || "空";
+		let content = displayDuty;
+		
+		// Try to get flight duty details
+		if (duty && duty.length >= 2 && /^[A-Z]\d+$/.test(duty)) {
+			try {
+				const flightDetails = await getFlightDutyDetails(duty, date);
+				
+				if (flightDetails) {
+					content = `${flightDetails.duty_code}`;
+					
+					if (flightDetails.total_sectors) {
+						content += ` : ${flightDetails.total_sectors}腿`;
+					}
+					
+					if (flightDetails.reporting_time && flightDetails.end_time) {
+						const startTime = flightDetails.reporting_time.substring(0, 5);
+						const endTime = flightDetails.end_time.substring(0, 5);
+						content += `\n${startTime} --> ${endTime}`;
+					}
+					
+					// Remove (AM)/(PM) duty type display
+				}
+			} catch (error) {
+				console.error('Error getting flight duty details for tooltip:', error);
+			}
+		}
+		
+		// Add same duty employees (excluding the hovered employee)
+		if (sameEmployees.length > 0) {
+			content += '\n\n--相同任務--';
+			sameEmployees.forEach(emp => {
+				content += `\n${emp.id} ${emp.name || 'N/A'}`;
+			});
+		}
+
+		// Show custom tooltip immediately
+		const rect = event.target.getBoundingClientRect();
+		setTooltipData({
+			visible: true,
+			content: content,
+			x: rect.left + rect.width / 2,
+			y: rect.top - 10
 		});
-	}, [isMobile]);
+	}, [isMobile, getFlightDutyDetails]);
+
+	// Handle mouse leave for tooltips
+	const handleDutyMouseLeave = useCallback(() => {
+		if (tooltipTimeoutRef.current) {
+			clearTimeout(tooltipTimeoutRef.current);
+		}
+		setTooltipData(prev => ({ ...prev, visible: false }));
+	}, []);
 
 	const lastToggleTime = useRef(0);
 	const toggleMobileInfoMode = useCallback(() => {
@@ -427,47 +652,17 @@ export default function SchedulePage() {
 
 	const handleMonthChange = useCallback(async (event) => {
 		const newMonth = event.target.value;
+		if (newMonth === currentMonth) return;
+		
 		setCurrentMonth(newMonth);
 		setSelectedDuties([]);
 		setHighlightedDates({});
-
-		const newSchedules = await getAllSchedulesForMonth(newMonth);
-		if (!newSchedules || newSchedules.length === 0) {
-			toast(newMonth + '尚無班表資料', { icon: '📅', duration: 2000 });
-		}
-	}, []);
+	}, [currentMonth]);
 
 	const handleClearAll = useCallback(() => {
 		setSelectedDuties([]);
 		toast('已清除所有選擇', { icon: '🗑️', duration: 2000 });
 	}, []);
-
-	const handleAdminUpload = useCallback(async (scheduleData) => {
-		try {
-			const response = await fetch('/api/schedule/upload', {
-				method: 'POST',
-				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({
-					scheduleData,
-					userId: user.id,
-					userAccessLevel: user.access_level
-				}),
-			});
-
-			const result = await response.json();
-
-			if (result.success) {
-				toast.success('班表上傳成功！');
-				const months = await getAvailableMonths();
-				setAvailableMonths(months);
-				window.location.reload();
-			} else {
-				toast.error('上傳失敗: ' + result.error);
-			}
-		} catch (error) {
-			toast.error('上傳錯誤: ' + error.message);
-		}
-	}, [user]);
 
 	const renderTableHeader = useCallback(() => (
 		<thead>
@@ -526,10 +721,17 @@ export default function SchedulePage() {
 					<td
 						key={date}
 						className={className}
-						title={!isMobile ? generateTooltipContent(date, duty, sameEmployees) : undefined}
+						onMouseEnter={(e) => handleDutyMouseEnter(e, schedule.employeeID, date, duty, sameEmployees)}
+						onMouseLeave={handleDutyMouseLeave}
 						onClick={() => {
 							if (!isUserSchedule) {
-								handleDutySelect(schedule.employeeID, schedule.name, date, duty);
+								if (isMobile && mobileInfoMode) {
+									handleDutyInfo(schedule.employeeID, schedule.name, date, duty, sameEmployees);
+								} else if (!isMobile) {
+									handleDutySelect(schedule.employeeID, schedule.name, date, duty);
+								} else {
+									handleDutySelect(schedule.employeeID, schedule.name, date, duty);
+								}
 							}
 						}}
 					>
@@ -542,6 +744,7 @@ export default function SchedulePage() {
 		</tr>
 	), [scheduleData.allDates, selectedDuties, formatDutyText, getDutyBackgroundColor, getDutyFontSize, getEmployeesWithSameDuty, generateTooltipContent, handleDutySelect, isMobile]);
 
+	// Scroll effects
 	useEffect(() => {
 		let ticking = false;
 		
@@ -588,6 +791,7 @@ export default function SchedulePage() {
 		};
 	}, [isMobile, isAtBottom]);
 
+	// Table sync effects
 	useEffect(() => {
 		const userTable = userTableRef.current;
 		const crewTable = crewTableRef.current;
@@ -622,6 +826,7 @@ export default function SchedulePage() {
 		};
 	}, [scheduleData.userSchedule, scheduleData.otherSchedules]);
 
+	// Loading states
 	if (loading) {
 		return (
 			<div className={styles.loadingScreen}>
@@ -644,7 +849,7 @@ export default function SchedulePage() {
 		);
 	}
 
-	if (!initialLoadComplete && !currentMonth) {
+	if (initialLoad || (!currentMonth && availableMonths.length === 0)) {
 		return (
 			<div className={styles.loadingScreen}>
 				<div className={styles.loadingContent}>
@@ -657,6 +862,32 @@ export default function SchedulePage() {
 
 	return (
 		<div className={styles.mainContainer}>
+			{/* Custom Tooltip */}
+			{tooltipData.visible && (
+				<div 
+					style={{
+						position: 'fixed',
+						left: tooltipData.x - 75, // Center horizontally
+						top: tooltipData.y - 80, // Position above the cell
+						backgroundColor: '#2d3748',
+						color: '#ffffff',
+						padding: '12px 16px',
+						borderRadius: '8px',
+						fontSize: '13px',
+						fontFamily: 'monospace',
+						whiteSpace: 'pre-line',
+						zIndex: 9999,
+						pointerEvents: 'none',
+						maxWidth: '250px',
+						boxShadow: '0 4px 12px rgba(0,0,0,0.4)',
+						border: '1px solid #4a5568',
+						lineHeight: '1.4'
+					}}
+				>
+					{tooltipData.content}
+				</div>
+			)}
+			
 			<div className={styles.scheduleContainer}>
 				<div className={styles.monthSelectionContainer}>
 					<div className={styles.monthSelector}>
@@ -666,30 +897,27 @@ export default function SchedulePage() {
 							value={currentMonth}
 							onChange={handleMonthChange}
 							className={styles.monthDropdown}
+							disabled={scheduleLoading}
 						>
 							{availableMonths.map(month => (
 								<option key={month} value={month}>{month}</option>
 							))}
 						</select>
-						{user.access_level === 99 && (
-							<button
-								className={styles.adminUploadButton}
-								onClick={() => setShowUploadModal(true)}
-								title="管理員上傳班表"
-							>
-								📤 上傳班表
-							</button>
-						)}
 					</div>
 					<h1 className={styles.scheduleHeading}>{currentMonth}班表</h1>
-					{!scheduleData.hasScheduleData && (
+					{!scheduleData.hasScheduleData && !scheduleLoading && (
 						<div className={styles.noDataWarning}>
 							⚠️ 此月份尚無班表資料
 						</div>
 					)}
 				</div>
 
-				{scheduleData.hasScheduleData ? (
+				{scheduleLoading ? (
+					<div className={styles.loadingContainer}>
+						<div className={styles.loadingSpinner}></div>
+						<span className={styles.loadingText}>載入{activeTab}班表資料...</span>
+					</div>
+				) : scheduleData.hasScheduleData ? (
 					<>
 						{scheduleData.userSchedule && (
 							<div className={styles.userScheduleContainer}>
@@ -713,50 +941,43 @@ export default function SchedulePage() {
 									onClick={() => handleTabChange('TSA')}
 									disabled={scheduleLoading}
 								>
-									{scheduleLoading && activeTab === 'TSA' ? 'Loading...' : 'TSA'}
+									TSA
 								</button>
 								<button
 									className={styles.tab + ' ' + styles.RMQTab + (activeTab === 'RMQ' ? ' ' + styles.active : '')}
 									onClick={() => handleTabChange('RMQ')}
 									disabled={scheduleLoading}
 								>
-									{scheduleLoading && activeTab === 'RMQ' ? 'Loading...' : 'RMQ'}
+									RMQ
 								</button>
 								<button
 									className={styles.tab + ' ' + styles.KHHTab + (activeTab === 'KHH' ? ' ' + styles.active : '')}
 									onClick={() => handleTabChange('KHH')}
 									disabled={scheduleLoading}
 								>
-									{scheduleLoading && activeTab === 'KHH' ? 'Loading...' : 'KHH'}
+									KHH
 								</button>
 								<button
 									className={styles.tab + ' ' + styles.AllTab + (activeTab === 'ALL' ? ' ' + styles.active : '')}
 									onClick={() => handleTabChange('ALL')}
 									disabled={scheduleLoading}
 								>
-									{scheduleLoading && activeTab === 'ALL' ? 'Loading...' : 'ALL'}
+									ALL
 								</button>
 							</div>
 						</div>
 
 						<div className={styles.crewScheduleSection}>
-							{scheduleLoading ? (
-								<div className={styles.loadingContainer}>
-									<div className={styles.loadingSpinner}></div>
-									<span className={styles.loadingText}>載入{activeTab}班表資料...</span>
-								</div>
-							) : (
-								<div className={styles.tableContainer} ref={crewTableRef}>
-									<table className={styles.scheduleTable}>
-										{renderTableHeader()}
-										<tbody>
-											{scheduleData.otherSchedules.map(schedule => 
-												renderTableRow(schedule, false)
-											)}
-										</tbody>
-									</table>
-								</div>
-							)}
+							<div className={styles.tableContainer} ref={crewTableRef}>
+								<table className={styles.scheduleTable}>
+									{renderTableHeader()}
+									<tbody>
+										{scheduleData.otherSchedules.map(schedule => 
+											renderTableRow(schedule, false)
+										)}
+									</tbody>
+								</table>
+							</div>
 						</div>
 
 						{isMobile && (
@@ -779,6 +1000,7 @@ export default function SchedulePage() {
 								<button 
 									className={styles.dutyChangeButtonFull}
 									onClick={handleDutyChangeClick}
+									disabled={scheduleLoading}
 								>
 									提交換班申請 ({selectedDuties.length} 項選擇)
 								</button>
@@ -790,6 +1012,7 @@ export default function SchedulePage() {
 								<button 
 									className={styles.dutyChangeButtonFull}
 									onClick={handleDutyChangeClick}
+									disabled={scheduleLoading}
 								>
 									提交換班申請 ({selectedDuties.length} 項選擇)
 								</button>
@@ -803,14 +1026,6 @@ export default function SchedulePage() {
 							<p>請選擇其他月份或等待資料更新</p>
 						</div>
 					</div>
-				)}
-
-				{user.access_level === 99 && (
-					<AdminUploadModal
-						isOpen={showUploadModal}
-						onClose={() => setShowUploadModal(false)}
-						onUpload={handleAdminUpload}
-					/>
 				)}
 			</div>
 		</div>

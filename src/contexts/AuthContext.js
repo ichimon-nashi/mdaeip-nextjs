@@ -16,15 +16,14 @@ export const useAuth = () => {
 export const AuthProvider = ({ children }) => {
 	const [user, setUser] = useState(null);
 	const [loading, setLoading] = useState(true);
-	const [isRedirecting, setIsRedirecting] = useState(false);
 	const router = useRouter();
 	const pathname = usePathname();
 
-	// Initialize auth state
+	// Initialize auth state - only run once
 	useEffect(() => {
 		console.log("🔥 AuthContext initializing...");
 		
-		const initAuth = async () => {
+		const initAuth = () => {
 			try {
 				if (typeof window !== 'undefined') {
 					const savedUser = localStorage.getItem('mdaeip_user');
@@ -48,46 +47,29 @@ export const AuthProvider = ({ children }) => {
 		};
 
 		initAuth();
-	}, []);
+	}, []); // Empty dependency array - only run once
 
-	// Handle redirects based on auth state and current path
+	// Simplified redirect logic - only run after loading is complete
 	useEffect(() => {
-		// Don't redirect while loading or already redirecting
-		if (loading || isRedirecting) return;
+		if (loading) return; // Don't redirect while loading
 
 		console.log("🔄 Checking redirect logic:", { 
 			hasUser: !!user, 
 			pathname, 
-			loading, 
-			isRedirecting 
+			loading
 		});
 
-		// Only handle redirects for specific paths
 		const isLoginPage = pathname === '/';
 		const isSchedulePage = pathname === '/schedule';
 
 		if (isLoginPage && user) {
 			console.log("👤 User logged in, redirecting to schedule");
-			setIsRedirecting(true);
 			router.replace('/schedule');
 		} else if (isSchedulePage && !user) {
 			console.log("🔒 No user, redirecting to login");
-			setIsRedirecting(true);
 			router.replace('/');
 		}
-	}, [user, loading, pathname, router, isRedirecting]);
-
-	// Reset redirecting flag when pathname changes
-	useEffect(() => {
-		if (isRedirecting) {
-			// Small delay to prevent immediate re-triggering
-			const timer = setTimeout(() => {
-				setIsRedirecting(false);
-			}, 100);
-			
-			return () => clearTimeout(timer);
-		}
-	}, [pathname, isRedirecting]);
+	}, [user, loading, pathname, router]);
 
 	const login = async (employeeId, password) => {
 		console.log("🚀 Login function called");
@@ -129,7 +111,6 @@ export const AuthProvider = ({ children }) => {
 	const logout = () => {
 		console.log("👋 Logout called");
 		setUser(null);
-		setIsRedirecting(true);
 		if (typeof window !== 'undefined') {
 			localStorage.removeItem('mdaeip_user');
 		}
@@ -159,7 +140,7 @@ export const AuthProvider = ({ children }) => {
 
 	const value = {
 		user,
-		loading: loading || isRedirecting, // Include redirecting in loading state
+		loading, // Simplified - no combining with redirect state
 		login,
 		logout,
 		changePassword,
@@ -168,9 +149,8 @@ export const AuthProvider = ({ children }) => {
 
 	console.log("🎯 AuthContext rendering with:", { 
 		hasUser: !!user, 
-		loading: loading || isRedirecting,
-		pathname,
-		isRedirecting
+		loading,
+		pathname
 	});
 
 	return (

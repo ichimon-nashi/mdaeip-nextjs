@@ -1,4 +1,4 @@
-import { scheduleHelpers } from './supabase';
+import { scheduleHelpers, flightDutyHelpers } from "./supabase";
 
 const scheduleCache = new Map();
 const employeeCache = new Map();
@@ -146,7 +146,7 @@ export const employeeList = [
 ];
 
 // Employee lookup map for O(1) access
-const employeeMap = new Map(employeeList.map(emp => [emp.id, emp]));
+const employeeMap = new Map(employeeList.map((emp) => [emp.id, emp]));
 
 // Helper function to get employee details by ID
 export const getEmployeeById = (id) => {
@@ -158,12 +158,12 @@ export const getAvailableMonths = async () => {
 	try {
 		const { data, error } = await scheduleHelpers.getAvailableMonths();
 		if (error) {
-			console.error('Error fetching available months:', error);
+			console.error("Error fetching available months:", error);
 			return [];
 		}
 		return data;
 	} catch (error) {
-		console.error('Error in getAvailableMonths:', error);
+		console.error("Error in getAvailableMonths:", error);
 		return [];
 	}
 };
@@ -171,19 +171,18 @@ export const getAvailableMonths = async () => {
 // Get all schedules for a specific month from database
 export const getAllSchedulesForMonth = async (month) => {
 	const cacheKey = month;
-	
+
 	if (scheduleCache.has(cacheKey)) {
 		return scheduleCache.get(cacheKey);
 	}
 
 	try {
-		// Use month directly - no conversion needed since DB stores in Chinese format
 		console.log(`Querying database for month: ${month}`);
-		
+
 		const { data, error } = await scheduleHelpers.getSchedulesForMonth(month);
-		
+
 		if (error) {
-			console.error('Error fetching schedules:', error);
+			console.error("Error fetching schedules:", error);
 			return [];
 		}
 
@@ -191,72 +190,73 @@ export const getAllSchedulesForMonth = async (month) => {
 		console.log(`Database returned ${data ? data.length : 0} records`);
 
 		if (!data || data.length === 0) {
-			console.log('No schedule data found for month:', month);
+			console.log("No schedule data found for month:", month);
 			return [];
 		}
 
 		// Transform the data to match your existing format
-		const transformedSchedules = data.map(schedule => {
-			console.log('Processing schedule record:', schedule);
-			
-			const employee = employeeMap.get(schedule.employeeID);
-			if (!employee) {
-				console.warn(`Employee not found for ID: ${schedule.employeeID}`);
-				return null;
-			}
-			
-			// Convert duties array to days object
-			const days = {};
-			// Extract year and month from Chinese format (2025年08月)
-			const yearMatch = month.match(/(\d{4})年/);
-			const monthMatch = month.match(/(\d{1,2})月/);
-			
-			if (!yearMatch || !monthMatch) {
-				console.error(`Invalid month format: ${month}`);
-				return null;
-			}
-			
-			const year = yearMatch[1];
-			const monthNum = monthMatch[1].padStart(2, '0');
-			
-			if (!schedule.duties || !Array.isArray(schedule.duties)) {
-				console.error(`Invalid duties data for employee ${schedule.employeeID}:`, schedule.duties);
-				return null;
-			}
-			
-			schedule.duties.forEach((duty, index) => {
-				const dayNum = (index + 1).toString().padStart(2, '0');
-				const dateKey = `${year}-${monthNum}-${dayNum}`;
-				days[dateKey] = duty;
-			});
-			
-			const transformed = {
-				employeeID: schedule.employeeID,
-				name: employee.name,
-				rank: employee.rank,
-				base: employee.base,
-				days: days
-			};
-			
-			console.log(`Transformed schedule for ${employee.name} (${employee.base}):`, {
-				id: transformed.employeeID,
-				name: transformed.name,
-				base: transformed.base,
-				sampleDays: Object.entries(transformed.days).slice(0, 3)
-			});
-			
-			return transformed;
-		}).filter(Boolean);
+		const transformedSchedules = data
+			.map((schedule) => {
+				console.log("Processing schedule record:", schedule);
+
+				const employeeId = schedule.employee_id;
+				const employee = employeeMap.get(employeeId);
+
+				if (!employee) {
+					console.warn(`Employee not found for ID: ${employeeId}`);
+					return null;
+				}
+
+				// Convert duties array to days object
+				const days = {};
+				const yearMatch = month.match(/(\d{4})年/);
+				const monthMatch = month.match(/(\d{1,2})月/);
+
+				if (!yearMatch || !monthMatch) {
+					console.error(`Invalid month format: ${month}`);
+					return null;
+				}
+
+				const year = yearMatch[1];
+				const monthNum = monthMatch[1].padStart(2, "0");
+
+				if (!schedule.duties || !Array.isArray(schedule.duties)) {
+					console.error(`Invalid duties data for employee ${employeeId}:`, schedule.duties);
+					return null;
+				}
+
+				schedule.duties.forEach((duty, index) => {
+					const dayNum = (index + 1).toString().padStart(2, "0");
+					const dateKey = `${year}-${monthNum}-${dayNum}`;
+					days[dateKey] = duty;
+				});
+
+				const transformed = {
+					employeeID: employeeId,
+					name: employee.name,
+					rank: employee.rank,
+					base: employee.base,
+					days: days,
+				};
+
+				console.log(`Transformed schedule for ${employee.name} (${employee.base}):`, {
+					id: transformed.employeeID,
+					name: transformed.name,
+					base: transformed.base,
+					sampleDays: Object.entries(transformed.days).slice(0, 3),
+				});
+
+				return transformed;
+			})
+			.filter(Boolean);
 
 		console.log(`Total transformed schedules: ${transformedSchedules.length}`);
-		console.log('Bases in transformed schedules:', [...new Set(transformedSchedules.map(s => s.base))]);
+		console.log("Bases in transformed schedules:", [...new Set(transformedSchedules.map((s) => s.base))]);
 
-		// Cache the result
 		scheduleCache.set(cacheKey, transformedSchedules);
 		return transformedSchedules;
-		
 	} catch (error) {
-		console.error('Error in getAllSchedulesForMonth:', error);
+		console.error("Error in getAllSchedulesForMonth:", error);
 		return [];
 	}
 };
@@ -264,14 +264,14 @@ export const getAllSchedulesForMonth = async (month) => {
 // Get employee schedule for a specific month
 export const getEmployeeSchedule = async (employeeId, month) => {
 	const cacheKey = `${employeeId}-${month}`;
-	
+
 	if (employeeCache.has(cacheKey)) {
 		return employeeCache.get(cacheKey);
 	}
-	
+
 	const allSchedules = await getAllSchedulesForMonth(month);
-	const schedule = allSchedules.find(s => s.employeeID === employeeId);
-	
+	const schedule = allSchedules.find((s) => s.employeeID === employeeId);
+
 	employeeCache.set(cacheKey, schedule || null);
 	return schedule || null;
 };
@@ -279,44 +279,346 @@ export const getEmployeeSchedule = async (employeeId, month) => {
 // Get schedules filtered by base
 export const getSchedulesByBase = async (month, base) => {
 	const cacheKey = `${month}-${base}`;
-	
+
 	if (scheduleCache.has(cacheKey)) {
 		return scheduleCache.get(cacheKey);
 	}
-	
+
 	console.log(`getSchedulesByBase called with month: ${month}, base: ${base}`);
-	
+
 	const allSchedules = await getAllSchedulesForMonth(month);
 	console.log(`Got ${allSchedules.length} schedules from getAllSchedulesForMonth`);
-	console.log(`Available bases in schedules:`, [...new Set(allSchedules.map(s => s.base))]);
-	
-	const filteredSchedules = base === 'ALL' ? 
-		allSchedules : 
-		allSchedules.filter(schedule => {
-			const matches = schedule.base === base;
-			console.log(`Employee ${schedule.name} (${schedule.employeeID}) base: ${schedule.base}, matches ${base}: ${matches}`);
-			return matches;
-		});
-	
+	console.log(`Available bases in schedules:`, [...new Set(allSchedules.map((s) => s.base))]);
+
+	const filteredSchedules =
+		base === "ALL"
+			? allSchedules
+			: allSchedules.filter((schedule) => {
+					const matches = schedule.base === base;
+					console.log(`Employee ${schedule.name} (${schedule.employeeID}) base: ${schedule.base}, matches ${base}: ${matches}`);
+					return matches;
+			  });
+
 	console.log(`Filtered schedules for base ${base}: ${filteredSchedules.length}`);
-	console.log(`Filtered employees:`, filteredSchedules.map(s => `${s.name} (${s.base})`));
-	
-	// Cache filtered results for future use
+	console.log(`Filtered employees:`, filteredSchedules.map((s) => `${s.name} (${s.base})`));
+
 	scheduleCache.set(cacheKey, filteredSchedules);
 	return filteredSchedules;
 };
 
 // Admin function to upload schedule data
 export const uploadScheduleData = async (scheduleData, userAccessLevel) => {
-	return await scheduleHelpers.upsertMonthSchedule(
-		scheduleData.month, 
-		scheduleData, 
-		userAccessLevel
-	);
+	return await scheduleHelpers.upsertMonthSchedule(scheduleData.month, scheduleData, userAccessLevel);
 };
 
 // Clear cache when needed (useful for development)
 export const clearScheduleCache = () => {
 	scheduleCache.clear();
 	employeeCache.clear();
+};
+
+// Flight duty cache
+const flightDutyCache = new Map();
+
+// Original flight duty functions (unchanged to maintain compatibility)
+export const getFlightDutyForEmployee = async (employeeId, month) => {
+	const cacheKey = `flight-${employeeId}-${month}`;
+
+	if (flightDutyCache.has(cacheKey)) {
+		return flightDutyCache.get(cacheKey);
+	}
+
+	try {
+		console.log(`Fetching flight duty for employee ${employeeId}, month ${month}`);
+
+		const { data, error } = await flightDutyHelpers.getFlightDutyForEmployee(employeeId, month);
+
+		if (error) {
+			console.error("Error fetching flight duty:", error);
+			return null;
+		}
+
+		const flightDuty = data && data.length > 0 ? {
+			employeeId: employeeId,
+			month: month,
+			duties: generateDailyDutiesFromSchedule(data, month)
+		} : null;
+
+		flightDutyCache.set(cacheKey, flightDuty);
+		return flightDuty;
+		
+	} catch (error) {
+		console.error("Error in getFlightDutyForEmployee:", error);
+		return null;
+	}
+};
+
+// Get flight duty data for all employees in a specific month
+export const getAllFlightDutiesForMonth = async (month) => {
+	const cacheKey = `all-flight-duties-${month}`;
+
+	if (flightDutyCache.has(cacheKey)) {
+		return flightDutyCache.get(cacheKey);
+	}
+
+	try {
+		console.log(`Fetching all flight duties for month ${month}`);
+
+		const { data, error } = await flightDutyHelpers.getFlightDutiesForMonth(month);
+
+		if (error) {
+			console.error("Error fetching all flight duties:", error);
+			return [];
+		}
+
+		flightDutyCache.set(cacheKey, data || []);
+		return data || [];
+		
+	} catch (error) {
+		console.error("Error in getAllFlightDutiesForMonth:", error);
+		return [];
+	}
+};
+
+// Helper function to generate daily duties array from schedule records
+const generateDailyDutiesFromSchedule = (scheduleRecords, month) => {
+	if (!scheduleRecords || scheduleRecords.length === 0) {
+		return [];
+	}
+
+	const yearMatch = month.match(/(\d{4})年/);
+	const monthMatch = month.match(/(\d{1,2})月/);
+	
+	if (!yearMatch || !monthMatch) {
+		console.error(`Invalid month format: ${month}`);
+		return [];
+	}
+	
+	const year = parseInt(yearMatch[1]);
+	const monthNum = parseInt(monthMatch[1]);
+	const daysInMonth = new Date(year, monthNum, 0).getDate();
+	
+	const duties = new Array(daysInMonth).fill('');
+	
+	scheduleRecords.forEach(record => {
+		const { 
+			duty_code, 
+			day_of_week, 
+			schedule_type, 
+			special_date, 
+			reporting_time, 
+			end_time, 
+			duty_type 
+		} = record;
+		
+		let dutyText = duty_code || '';
+		if (reporting_time && end_time) {
+			dutyText += `\n${reporting_time}-${end_time}`;
+		}
+		if (duty_type) {
+			dutyText += `\n${duty_type}`;
+		}
+		
+		if (schedule_type === 'special' && special_date) {
+			const dayIndex = special_date - 1;
+			if (dayIndex >= 0 && dayIndex < daysInMonth) {
+				duties[dayIndex] = dutyText;
+			}
+		} else if (schedule_type === 'regular') {
+			for (let day = 1; day <= daysInMonth; day++) {
+				const date = new Date(year, monthNum - 1, day);
+				let dayOfWeek = date.getDay();
+				
+				if (dayOfWeek === 0) dayOfWeek = 7;
+				
+				if (dayOfWeek === day_of_week) {
+					const dayIndex = day - 1;
+					if (!duties[dayIndex]) {
+						duties[dayIndex] = dutyText;
+					}
+				}
+			}
+		}
+	});
+	
+	return duties;
+};
+
+// Get flight duty for a specific date (original function)
+export const getFlightDutyForDate = async (employeeId, month, date) => {
+	const flightDuty = await getFlightDutyForEmployee(employeeId, month);
+
+	if (!flightDuty || !flightDuty.duties) {
+		return null;
+	}
+
+	const day = new Date(date).getDate();
+	const dutyIndex = day - 1;
+
+	if (dutyIndex >= 0 && dutyIndex < flightDuty.duties.length) {
+		return flightDuty.duties[dutyIndex];
+	}
+
+	return null;
+};
+
+// =============================================================================
+// MRT-SPECIFIC FLIGHT DUTY FUNCTIONS (New - for MRT Checker only)
+// =============================================================================
+
+// MRT-specific flight duty integration - doesn't affect other pages
+export const getFlightDutyForMRT = async (employeeId, month) => {
+	try {
+		console.log(`Fetching MRT flight duty for employee ${employeeId}, month ${month}`);
+
+		// First get the employee's schedule to see what duty codes they have
+		const employeeSchedule = await getEmployeeSchedule(employeeId, month);
+		
+		if (!employeeSchedule?.days) {
+			console.log('No schedule found for employee');
+			return null;
+		}
+
+		// Get flight duty data for the month
+		const { data: flightDuties, error } = await flightDutyHelpers.getFlightDutiesForMonth(month);
+
+		if (error || !flightDuties) {
+			console.log('No flight duty data available for month:', month);
+			return null;
+		}
+
+		// Create a map of duty codes to flight duty info
+		const flightDutyMap = {};
+		flightDuties.forEach(duty => {
+			if (!flightDutyMap[duty.duty_code]) {
+				flightDutyMap[duty.duty_code] = [];
+			}
+			flightDutyMap[duty.duty_code].push(duty);
+		});
+
+		// Process each day in the employee's schedule
+		const yearMatch = month.match(/(\d{4})年/);
+		const monthMatch = month.match(/(\d{1,2})月/);
+		
+		if (!yearMatch || !monthMatch) {
+			console.error(`Invalid month format: ${month}`);
+			return null;
+		}
+		
+		const year = parseInt(yearMatch[1]);
+		const monthNum = parseInt(monthMatch[1]);
+		const daysInMonth = new Date(year, monthNum, 0).getDate();
+
+		const dailyFlightInfo = {};
+
+		for (let day = 1; day <= daysInMonth; day++) {
+			const dayStr = day.toString().padStart(2, '0');
+			const monthStr = monthNum.toString().padStart(2, '0');
+			const dateKey = `${year}-${monthStr}-${dayStr}`;
+			
+			const dutyCode = employeeSchedule.days[dateKey];
+			
+			if (dutyCode && dutyCode.trim() && dutyCode !== '-' && flightDutyMap[dutyCode]) {
+				// Find the most relevant flight duty for this day
+				const dayOfWeek = new Date(year, monthNum - 1, day).getDay();
+				const adjustedDayOfWeek = dayOfWeek === 0 ? 7 : dayOfWeek;
+				
+				let bestMatch = null;
+				
+				// Look for special date first
+				bestMatch = flightDutyMap[dutyCode].find(duty => 
+					duty.schedule_type === 'special' && duty.special_date === day
+				);
+				
+				// If no special date, look for regular schedule
+				if (!bestMatch) {
+					bestMatch = flightDutyMap[dutyCode].find(duty => 
+						duty.schedule_type === 'regular' && duty.day_of_week === adjustedDayOfWeek
+					);
+				}
+				
+				// If still no match, take the first one
+				if (!bestMatch && flightDutyMap[dutyCode].length > 0) {
+					bestMatch = flightDutyMap[dutyCode][0];
+				}
+				
+				if (bestMatch) {
+					let flightInfo = dutyCode;
+					if (bestMatch.reporting_time && bestMatch.end_time) {
+						flightInfo += `\n${bestMatch.reporting_time}-${bestMatch.end_time}`;
+					}
+					if (bestMatch.total_sectors) {
+						flightInfo += `\n${bestMatch.total_sectors} sectors`;
+					}
+					if (bestMatch.duty_type) {
+						flightInfo += `\n${bestMatch.duty_type}`;
+					}
+					
+					// Use calendar date key format (month index, not month number)
+					dailyFlightInfo[`${year}-${monthNum - 1}-${day}`] = flightInfo;
+				}
+			}
+		}
+
+		return {
+			employeeId,
+			month,
+			flightInfo: dailyFlightInfo
+		};
+		
+	} catch (error) {
+		console.error("Error in getFlightDutyForMRT:", error);
+		return null;
+	}
+};
+
+// MRT-specific function to get flight duty details for a duty code and date
+export const getFlightDutyDetailsForMRT = async (dutyCode, date, month) => {
+	try {
+		const dateObj = new Date(date);
+		const dayOfWeek = dateObj.getDay() === 0 ? 7 : dateObj.getDay();
+		const day = dateObj.getDate();
+
+		console.log(`Querying MRT flight duty for duty_code: ${dutyCode}, day: ${day}, dayOfWeek: ${dayOfWeek}, month: ${month}`);
+
+		const { data: flightDuties, error } = await flightDutyHelpers.getFlightDutiesForMonth(month);
+
+		if (error || !flightDuties) {
+			console.log('No flight duty data available');
+			return null;
+		}
+
+		// Find matching flight duty record
+		let bestMatch = null;
+		
+		const matchingDuties = flightDuties.filter(duty => duty.duty_code === dutyCode);
+		
+		if (matchingDuties.length === 0) {
+			return null;
+		}
+
+		// Look for special date first
+		bestMatch = matchingDuties.find(duty => 
+			duty.schedule_type === 'special' && duty.special_date === day
+		);
+		
+		// If no special date, look for regular schedule
+		if (!bestMatch) {
+			bestMatch = matchingDuties.find(duty => 
+				duty.schedule_type === 'regular' && duty.day_of_week === dayOfWeek
+			);
+		}
+		
+		// If still no match, take the first one
+		if (!bestMatch) {
+			bestMatch = matchingDuties[0];
+		}
+
+		console.log(`Found MRT flight duty details:`, bestMatch);
+		return bestMatch;
+		
+	} catch (error) {
+		console.error("Error in getFlightDutyDetailsForMRT:", error);
+		return null;
+	}
 };

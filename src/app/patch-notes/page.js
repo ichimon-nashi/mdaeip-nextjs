@@ -62,7 +62,8 @@ const PatchNotes = () => {
             'GDay劃假系統': '#10B981',
             'BC擺盤訓練': '#8B5CF6',
             'eTR產生器': '#3B82F6',
-            'EIP系統': '#EF4444'
+            'EIP系統': '#EF4444',
+            '休時檢視器': '#8338ec'
         }
         return colors[appName.trim()] || '#6B7280'
     }
