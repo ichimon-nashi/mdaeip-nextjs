@@ -246,13 +246,20 @@ const ETRGenerator = () => {
 			}
 			return moment(criteria.date).isBefore(startDate, "day");
 		})
-		.sort((a, b) => moment(a.date + ' ' + a.time).valueOf() - moment(b.date + ' ' + b.time).valueOf())
+		.sort((a, b) => {
+			const timeCompare = moment(a.date + ' ' + a.time).valueOf() - moment(b.date + ' ' + b.time).valueOf();
+			if (timeCompare !== 0) return timeCompare;
+			// If same date/time, sort by bulletin_id
+			return (a.bulletin_id || '').localeCompare(b.bulletin_id || '');
+		})
 		.slice(-noOfBulletin)
 		.map((item) => {
+			// Format time to show only HH:mm (no seconds)
+			const timeFormatted = moment(item.time, "HH:mm:ss").format("HH:mm");
 			return (
 				<li
 					key={`id${item.id}${item.date}${item.time}`}
-				>{`${item.date} : ${item.time}`}</li>
+				>{`${item.date} : ${timeFormatted}`}</li>
 			);
 		});
 
@@ -264,7 +271,12 @@ const ETRGenerator = () => {
 			}
 			return moment(criteria.date).isBefore(startDate, "day");
 		})
-		.sort((a, b) => moment(a.date + ' ' + a.time).valueOf() - moment(b.date + ' ' + b.time).valueOf())
+		.sort((a, b) => {
+			const timeCompare = moment(a.date + ' ' + a.time).valueOf() - moment(b.date + ' ' + b.time).valueOf();
+			if (timeCompare !== 0) return timeCompare;
+			// If same date/time, sort by bulletin_id
+			return (a.bulletin_id || '').localeCompare(b.bulletin_id || '');
+		})
 		.slice(-noOfBulletin)
 		.map((item, index) => {
 			const timestamp = `${item.date} : ${item.time}`;
@@ -387,7 +399,13 @@ const ETRGenerator = () => {
 						<input
 							type="time"
 							value={selectedTime}
-							onChange={(e) => setSelectedTime(e.target.value)}
+							onChange={(e) => {
+								const timeValue = e.target.value;
+								// Ensure only HH:mm format (no seconds)
+								if (timeValue && timeValue.length <= 5) {
+									setSelectedTime(timeValue);
+								}
+							}}
 							style={{ marginLeft: "10px" }}
 						/>
 					</div>
