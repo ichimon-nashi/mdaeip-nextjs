@@ -6,7 +6,7 @@ import moment from "moment";
 import "react-datepicker/dist/react-datepicker.css";
 import toast from "react-hot-toast";
 import { Plus } from "lucide-react";
-import { ccomData } from "../data/ETRData"; // Import CCOM data that doesn't change
+import { ccomData } from "../data/ETRData";
 import { bulletinHelpers, remarksHelpers } from "../lib/supabase";
 import { useAuth } from "../contexts/AuthContext";
 
@@ -18,6 +18,7 @@ const ETRGenerator = () => {
 	const [startDate, setStartDate] = useState(Date.now());
 	const [selectedTime, setSelectedTime] = useState("23:59");
 	const [noOfBulletin, setNoOfBulletin] = useState(5);
+	const [is738Mission, setIs738Mission] = useState(false);
 	const [textToCopy, setTextToCopy] = useState("");
 	const [copyStatus, setCopyStatus] = useState(false);
 	const [bulletinData, setBulletinData] = useState([]);
@@ -31,17 +32,6 @@ const ETRGenerator = () => {
 	const bulletinDataRef = useRef(null);
 	const textAreaDataRef = useRef(null);
 	const audioRef = useRef(null);
-
-	// Debug user access level
-	console.log('ETR Generator - User Debug:', {
-		user: user,
-		access_level: user?.access_level,
-		accessLevel: user?.accessLevel,
-		level: user?.level,
-		hasLevel99Access: (user?.access_level >= 99 || user?.accessLevel >= 99),
-		userType: typeof user?.access_level,
-		userAccessLevelType: typeof user?.accessLevel
-	});
 
 	// Load data from Supabase on component mount
 	useEffect(() => {
@@ -76,6 +66,7 @@ const ETRGenerator = () => {
 		noOfBulletin,
 		bulletinData,
 		additionalRemarkData,
+		is738Mission,
 	]);
 
 	const loadData = async () => {
@@ -118,14 +109,16 @@ const ETRGenerator = () => {
 		// CCOM Data - Safe extraction with null checks
 		let ccomDataToBeCopied = "";
 		const h2CcomElement = ccomDataRef.current.querySelector("h2");
-		const pCcomElement = ccomDataRef.current.querySelector("p");
+		const pCcomElements = ccomDataRef.current.querySelectorAll("p");
 
 		if (h2CcomElement) {
 			ccomDataToBeCopied += h2CcomElement.textContent + "\r\n";
 		}
 
-		if (pCcomElement) {
-			ccomDataToBeCopied += pCcomElement.textContent;
+		if (pCcomElements && pCcomElements.length > 0) {
+			ccomDataToBeCopied += Array.from(pCcomElements)
+				.map((p) => p.textContent)
+				.join("\r\n");
 		}
 
 		// Bulletin Data - Safe extraction
@@ -179,56 +172,62 @@ const ETRGenerator = () => {
 				formattedMonth <= ccomData[i]["endDate"]
 			) {
 				if (ccomData[i]["chapter"] === "12") {
-					switch (dayOfWeek) {
-						case "Monday":
-							randomCCOMQuestion.push(
-								`1. 依公告抽問飛安暨主題加強宣導月題庫。抽問 F2${ccomData[i]["questionList"][0]}，抽問結果正常。`
-							);
-							break;
-						case "Tuesday":
-							randomCCOMQuestion.push(
-								`1. 依公告抽問飛安暨主題加強宣導月題庫。抽問 F2${ccomData[i]["questionList"][1]}，抽問結果正常。`
-							);
-							break;
-						case "Wednesday":
-							randomCCOMQuestion.push(
-								`1. 依公告抽問飛安暨主題加強宣導月題庫。抽問 F2${ccomData[i]["questionList"][2]}，抽問結果正常。`
-							);
-							break;
-						case "Thursday":
-							randomCCOMQuestion.push(
-								`1. 依公告抽問飛安暨主題加強宣導月題庫。抽問 F2${ccomData[i]["questionList"][3]}，抽問結果正常。`
-							);
-							break;
-						case "Friday":
-							randomCCOMQuestion.push(
-								`1. 依公告抽問飛安暨主題加強宣導月題庫。抽問 F2${ccomData[i]["questionList"][4]}，抽問結果正常。`
-							);
-							break;
-						case "Saturday":
-							randomCCOMQuestion.push(
-								`1. 依公告抽問飛安暨主題加強宣導月題庫。抽問 F2${ccomData[i]["questionList"][5]}，抽問結果正常。`
-							);
-							break;
-						case "Sunday":
-							randomCCOMQuestion.push(
-								`1. 依公告抽問飛安暨主題加強宣導月題庫。抽問 F2${ccomData[i]["questionList"][6]}，抽問結果正常。`
-							);
-							break;
-						default:
-							break;
+					// Day of week mapping (0-6 for array index)
+					const dayMapping = {
+						"Monday": 0,
+						"Tuesday": 1,
+						"Wednesday": 2,
+						"Thursday": 3,
+						"Friday": 4,
+						"Saturday": 5,
+						"Sunday": 6
+					};
+					
+					const dayIndex = dayMapping[dayOfWeek];
+					const questionRange = ccomData[i]["questionList"][dayIndex];
+					
+					if (is738Mission) {
+						randomCCOMQuestion.push(
+							`1. 依公告抽問飛安暨主題加強宣導月題庫。抽問 1R(0-0、${dayIndex + 1}-1)、3L(${dayIndex + 1}-2~${dayIndex + 1}-3)、3R(${dayIndex + 1}-4)，抽問結果正常。`
+						);
+					} else {
+						randomCCOMQuestion.push(
+							`1. 依公告抽問飛安暨主題加強宣導月題庫。抽問 F2${questionRange}，抽問結果正常。`
+						);
 					}
 				} else {
-					const randomNumber = Math.floor(
-						Math.random() * ccomData[i]["questionList"].length
-					);
-					randomCCOMQuestion.push(
-						`1. 抽問 F2 CCOM Ch.${ccomData[i]["questionList"][randomNumber]}，抽問結果正常。`
-					);
+					const questionList = ccomData[i]["questionList"];
+					
+					if (is738Mission) {
+						// Generate 3 different random questions
+						const selectedQuestions = [];
+						const availableIndices = [...Array(questionList.length).keys()];
+						
+						// Pick 3 unique random indices
+						for (let j = 0; j < 3 && availableIndices.length > 0; j++) {
+							const randomIndex = Math.floor(Math.random() * availableIndices.length);
+							const questionIndex = availableIndices[randomIndex];
+							selectedQuestions.push(questionList[questionIndex]);
+							availableIndices.splice(randomIndex, 1);
+						}
+						
+						randomCCOMQuestion.push(
+							`1. 抽問 1R CCOM Ch.${selectedQuestions[0]}，抽問結果正常。`,
+							`2. 抽問 3L CCOM Ch.${selectedQuestions[1]}，抽問結果正常。`,
+							`3. 抽問 3R CCOM Ch.${selectedQuestions[2]}，抽問結果正常。`
+						);
+					} else {
+						const randomNumber = Math.floor(
+							Math.random() * questionList.length
+						);
+						randomCCOMQuestion.push(
+							`1. 抽問 F2 CCOM Ch.${questionList[randomNumber]}，抽問結果正常。`
+						);
+					}
 				}
 			}
 		}
-		return <p>{randomCCOMQuestion}</p>;
+		return randomCCOMQuestion.map((q, idx) => <p key={idx}>{q}</p>);
 	};
 
 	// Helper function to check if bulletin time is before selected time
@@ -249,12 +248,10 @@ const ETRGenerator = () => {
 		.sort((a, b) => {
 			const timeCompare = moment(a.date + ' ' + a.time).valueOf() - moment(b.date + ' ' + b.time).valueOf();
 			if (timeCompare !== 0) return timeCompare;
-			// If same date/time, sort by bulletin_id
 			return (a.bulletin_id || '').localeCompare(b.bulletin_id || '');
 		})
 		.slice(-noOfBulletin)
 		.map((item) => {
-			// Format time to show only HH:mm (no seconds)
 			const timeFormatted = moment(item.time, "HH:mm:ss").format("HH:mm");
 			return (
 				<li
@@ -274,7 +271,6 @@ const ETRGenerator = () => {
 		.sort((a, b) => {
 			const timeCompare = moment(a.date + ' ' + a.time).valueOf() - moment(b.date + ' ' + b.time).valueOf();
 			if (timeCompare !== 0) return timeCompare;
-			// If same date/time, sort by bulletin_id
 			return (a.bulletin_id || '').localeCompare(b.bulletin_id || '');
 		})
 		.slice(-noOfBulletin)
@@ -303,7 +299,7 @@ const ETRGenerator = () => {
 			return false;
 		}
 		toast.success("Bulletin added successfully");
-		loadData(); // Reload data
+		loadData();
 		return true;
 	};
 
@@ -314,7 +310,7 @@ const ETRGenerator = () => {
 			return false;
 		}
 		toast.success("Remark added successfully");
-		loadData(); // Reload data
+		loadData();
 		return true;
 	};
 
@@ -401,13 +397,21 @@ const ETRGenerator = () => {
 							value={selectedTime}
 							onChange={(e) => {
 								const timeValue = e.target.value;
-								// Ensure only HH:mm format (no seconds)
 								if (timeValue && timeValue.length <= 5) {
 									setSelectedTime(timeValue);
 								}
 							}}
 							style={{ marginLeft: "10px" }}
 						/>
+						<label className={styles.checkboxLabel}>
+							<input
+								type="checkbox"
+								checked={is738Mission}
+								onChange={(e) => setIs738Mission(e.target.checked)}
+								className={styles.missionCheckbox}
+							/>
+							<span>738任務</span>
+						</label>
 					</div>
 				</div>
 
@@ -527,7 +531,6 @@ const ETRGenerator = () => {
 				</button>
 			</div>
 
-			{/* Modals */}
 			<AddBulletinModal
 				isOpen={showAddBulletin}
 				onClose={() => setShowAddBulletin(false)}

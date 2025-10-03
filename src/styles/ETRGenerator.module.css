@@ -114,6 +114,11 @@
 
 .datePickerContainer {
 	margin: 1rem 0;
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	flex-wrap: wrap;
+	justify-content: center;
 }
 
 .datePickerContainer input {
@@ -131,6 +136,25 @@
 	outline: none;
 	border-color: #3b82f6;
 	box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+}
+
+.checkboxLabel {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	color: #ffffff;
+	font-size: 1.1rem;
+	font-weight: 600;
+	cursor: pointer;
+	user-select: none;
+	text-shadow: 0 0 2px #ffffff, 0 0 1px #ffffff;
+}
+
+.missionCheckbox {
+	width: 20px;
+	height: 20px;
+	cursor: pointer;
+	accent-color: #3b82f6;
 }
 
 .etrContent legend {
