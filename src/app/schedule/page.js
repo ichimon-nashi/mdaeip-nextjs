@@ -236,7 +236,7 @@ export default function SchedulePage() {
 						return [];
 					})() : [];
 
-				// Get schedules by base (this is the expensive operation)
+				// Get schedules by base
 				const otherSchedules = hasScheduleData ? 
 					await getSchedulesByBase(currentMonth, activeTab).then(schedules => {
 						return schedules.filter(schedule => schedule.employeeID !== user?.id);
@@ -249,9 +249,6 @@ export default function SchedulePage() {
 					allDates,
 					otherSchedules
 				});
-				
-				// REMOVED: Flight duty loading for now to improve performance
-				// We'll implement the cross-reference approach later
 				
 				console.log('Schedule data loaded successfully');
 				
@@ -369,7 +366,7 @@ export default function SchedulePage() {
 				const flightDetails = await getFlightDutyDetails(duty, date);
 				
 				if (flightDetails) {
-					content += '\n\n【飛行班表詳情】';
+					content += '\n\n【飛班資訊】';
 					if (flightDetails.duty_code) {
 						content += '\n班型: ' + flightDetails.duty_code;
 					}
@@ -518,8 +515,6 @@ export default function SchedulePage() {
 						const endTime = flightDetails.end_time.substring(0, 5);
 						content += `\n${startTime} --> ${endTime}`;
 					}
-					
-					// Remove (AM)/(PM) duty type display
 				}
 			} catch (error) {
 				console.error('Error getting flight duty details for tooltip:', error);
@@ -560,7 +555,7 @@ export default function SchedulePage() {
 		
 		setMobileInfoMode(prev => {
 			const newMode = !prev;
-			toast(newMode ? '查看模式：點擊班表查看相同班別' : '選擇模式：點擊班表選擇換班', {
+			toast(newMode ? '查看模式：點選班表查看相同班別' : '選擇模式：點選班表選擇換班', {
 				icon: newMode ? '🔍' : '📋',
 				duration: 2000
 			});
@@ -629,13 +624,13 @@ export default function SchedulePage() {
 		}
 
 		if (selectedDuties.length === 0) {
-			toast("想換班還不選人嗎!極屌啊!", { icon: '😎', duration: 3000 });
+			toast("想換班還不選人喔!搞屁啊!", { icon: '🙄', duration: 3000 });
 			return;
 		}
 
 		const uniqueEmployeeIds = [...new Set(selectedDuties.map(duty => duty.employeeId))];
 		if (uniqueEmployeeIds.length > 1) {
-			toast("這位太太！一張換班單只能跟一位換班!", { icon: '😎', duration: 3000 });
+			toast("這位太太！一張換班單只能跟一位換班!", { icon: '🤨', duration: 3000 });
 			return;
 		}
 
