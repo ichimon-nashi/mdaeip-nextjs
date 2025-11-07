@@ -151,9 +151,23 @@ function DutyChangeContent() {
         const storedData = localStorage.getItem('dutyChangeData');
         if (!storedData) return;
 
-        try {
-            const parsedData = JSON.parse(storedData);
-            const firstRank = findCrewMemberRank(parsedData.firstID || "");
+        const loadData = async () => {
+            try {
+                const parsedData = JSON.parse(storedData);
+                console.log('=== useEffect Start ===');
+                console.log('parsedData:', parsedData);
+                console.log('parsedData.firstID:', parsedData.firstID);
+                console.log('parsedData.selectedDates:', parsedData.selectedDates);
+                console.log('parsedData.allDuties:', parsedData.allDuties);
+                console.log('parsedData.selectedMonth:', parsedData.selectedMonth);
+                
+                // If selectedDates is missing, use the dates from allDuties (they're swapping the same dates)
+                if (!parsedData.selectedDates && parsedData.allDuties && parsedData.allDuties.length > 0) {
+                    parsedData.selectedDates = parsedData.allDuties.map(duty => duty.date);
+                    console.log('selectedDates was missing, using dates from allDuties:', parsedData.selectedDates);
+                }
+                
+                const firstRank = findCrewMemberRank(parsedData.firstID || "");
             
             let firstDate = "";
             let firstTask = "";
@@ -171,9 +185,10 @@ function DutyChangeContent() {
                 secondName = firstDuty.name;
                 secondRank = findCrewMemberRank(secondID);
                 
+                // Format Person B's dates and duties (they're already in allDuties)
                 if (sortedDuties.length === 1) {
-                    firstDate = formatDateForForm(sortedDuties[0].date);
-                    firstTask = sortedDuties[0].duty === "" ? "空" : sortedDuties[0].duty;
+                    secondDate = formatDateForForm(sortedDuties[0].date);
+                    secondTask = sortedDuties[0].duty === "" ? "空" : sortedDuties[0].duty;
                 } else {
                     const dateGroups = [];
                     let currentGroup = [sortedDuties[0]];
@@ -202,28 +217,67 @@ function DutyChangeContent() {
                         }
                     });
                     
-                    firstDate = formattedGroups.join('、');
-                    const uniqueDuties = [...new Set(sortedDuties.map(d => d.duty === "" ? "空" : d.duty))];
-                    firstTask = uniqueDuties.join('、');
+                    secondDate = formattedGroups.join('、');
+                    // Don't remove duplicates - show all duties for each date
+                    const allDuties = sortedDuties.map(d => d.duty === "" ? "空" : d.duty);
+                    secondTask = allDuties.join('、');
                 }
                 
-                if (parsedData.selectedMonth && userSchedule) {
-                    const secondDuties = sortedDuties.map(duty => {
-                        const userDuty = userSchedule.days[duty.date] || "";
-                        return userDuty === "" ? "空" : userDuty;
-                    });
-                    const uniqueSecondDuties = [...new Set(secondDuties)];
-                    secondTask = uniqueSecondDuties.join('、');
-                } else {
-                    secondTask = firstTask;
+                // Format Person A's dates (from selectedDates)
+                if (parsedData.selectedDates && parsedData.selectedDates.length > 0) {
+                    const sortedSelectedDates = [...parsedData.selectedDates].sort((a, b) => new Date(a) - new Date(b));
+                    
+                    if (sortedSelectedDates.length === 1) {
+                        firstDate = formatDateForForm(sortedSelectedDates[0]);
+                    } else {
+                        const dateGroups = [];
+                        let currentGroup = [sortedSelectedDates[0]];
+                        
+                        for (let i = 1; i < sortedSelectedDates.length; i++) {
+                            const currentDate = new Date(sortedSelectedDates[i]);
+                            const previousDate = new Date(sortedSelectedDates[i-1]);
+                            const daysDiff = (currentDate - previousDate) / (1000 * 60 * 60 * 24);
+                            
+                            if (daysDiff === 1) {
+                                currentGroup.push(sortedSelectedDates[i]);
+                            } else {
+                                dateGroups.push(currentGroup);
+                                currentGroup = [sortedSelectedDates[i]];
+                            }
+                        }
+                        dateGroups.push(currentGroup);
+                        
+                        const formattedGroups = dateGroups.map(group => {
+                            if (group.length === 1) {
+                                return formatDateForForm(group[0]);
+                            } else {
+                                const startDate = formatDateForForm(group[0]);
+                                const endDate = formatDateForForm(group[group.length - 1]);
+                                return `${startDate}-${endDate}`;
+                            }
+                        });
+                        
+                        firstDate = formattedGroups.join('、');
+                    }
+                    
+                    // Look up Person A's duties from their schedule
+                    const userSched = await getEmployeeSchedule(parsedData.firstID, parsedData.selectedMonth);
+                    console.log('useEffect - fetched userSched:', userSched);
+                    console.log('useEffect - sortedSelectedDates:', sortedSelectedDates);
+                    if (userSched) {
+                        const firstTasks = sortedSelectedDates.map(date => {
+                            const duty = userSched.days?.[date] || "";
+                            console.log(`useEffect - date ${date} -> duty: ${duty}`);
+                            return duty === "" ? "空" : duty;
+                        });
+                        // Don't remove duplicates - show all duties for each date
+                        firstTask = firstTasks.join('、');
+                        console.log('useEffect - firstTask:', firstTask);
+                    } else {
+                        firstTask = "空";
+                        console.log('useEffect - no userSched, firstTask set to 空');
+                    }
                 }
-                
-                // Swap tasks for display
-                const tempTask = firstTask;
-                firstTask = secondTask;
-                secondTask = tempTask;
-                
-                secondDate = firstDate;
             }
             
             setFormData(prevState => ({
@@ -239,8 +293,9 @@ function DutyChangeContent() {
                 secondTask
             }));
 
+            // Set userSchedule for PDF generation
             if (parsedData.firstID && parsedData.selectedMonth) {
-                const userSched = getEmployeeSchedule(parsedData.firstID, parsedData.selectedMonth);
+                const userSched = await getEmployeeSchedule(parsedData.firstID, parsedData.selectedMonth);
                 setUserSchedule(userSched);
             }
 
@@ -248,7 +303,10 @@ function DutyChangeContent() {
         } catch (error) {
             console.error('Error parsing stored duty change data:', error);
         }
-    }, [userSchedule]);
+    };
+    
+    loadData();
+    }, []);
 
     const renderTextOnCanvas = (ctx, text, x, y, fontSize = 14, align = 'left') => {
         if (!text || typeof text !== 'string') return;
@@ -391,9 +449,36 @@ function DutyChangeContent() {
 
             // Render duties
             if (formData.allDuties && formData.allDuties.length > 0) {
-                const selectedDates = formData.allDuties.map(duty => duty.date);
-                const userDutiesEntries = getUserDutiesForPDF(selectedDates);
+                console.log('PDF Generation - formData.selectedDates:', formData.selectedDates);
+                console.log('PDF Generation - formData.allDuties:', formData.allDuties);
+                console.log('PDF Generation - userSchedule:', userSchedule);
+                
+                // Ensure we have the user schedule for Person A
+                let currentUserSchedule = userSchedule;
+                if (!currentUserSchedule && formData.firstID && formData.selectedMonth) {
+                    console.log('Fetching user schedule for:', formData.firstID, formData.selectedMonth);
+                    currentUserSchedule = await getEmployeeSchedule(formData.firstID, formData.selectedMonth);
+                    console.log('Fetched schedule:', currentUserSchedule);
+                }
+                
+                // Person A's duties: look them up from their schedule
+                const userDutiesEntries = formData.selectedDates?.length > 0 && currentUserSchedule
+                    ? (() => {
+                        const userDuties = formData.selectedDates.map(date => ({ 
+                            date, 
+                            duty: currentUserSchedule.days?.[date] || "" 
+                        }));
+                        console.log('Person A userDuties:', userDuties);
+                        const dutyGroups = groupConsecutiveDates(userDuties);
+                        const formatted = formatDutyGroups(dutyGroups, true);
+                        console.log('Person A formatted duties:', formatted);
+                        return formatted;
+                    })()
+                    : [];
+                
+                // Person B's duties: use allDuties which already contains their duties
                 const secondDutiesEntries = prepareDutiesForPDF(formData.allDuties);
+                console.log('Person B duties:', secondDutiesEntries);
 
                 renderPersonDuties(ctx, userDutiesEntries, true);
                 renderPersonDuties(ctx, secondDutiesEntries, false);
