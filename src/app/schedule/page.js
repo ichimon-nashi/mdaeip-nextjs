@@ -731,7 +731,12 @@ export default function SchedulePage() {
 						}}
 					>
 						<div className={styles.dutyContent + ' ' + styles[fontSizeClass]}>
-							{formattedDuty}
+							{formattedDuty.split('\n').map((line, index) => (
+								<React.Fragment key={index}>
+									{line}
+									{index < formattedDuty.split('\n').length - 1 && <br />}
+								</React.Fragment>
+							))}
 						</div>
 					</td>
 				);
