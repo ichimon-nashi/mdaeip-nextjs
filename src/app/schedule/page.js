@@ -288,7 +288,7 @@ export default function SchedulePage() {
 		const keepSlashDuties = ['P/L', 'A/L', 'S/L'];
 		if (keepSlashDuties.includes(duty)) return duty;
 		if (isValidDate(duty)) return duty;
-		return duty.replace(/\//g, '\n');
+		return duty.replace(/\\/g, '\n');
 	}, [isValidDate]);
 
 	const getDutyFontSize = useCallback((duty) => {
