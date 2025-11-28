@@ -579,7 +579,7 @@ export default function SchedulePage() {
 			window.navigator.vibrate(50);
 		}
 
-		const displayDuty = duty === "" ? "空" : duty;
+		const displayDuty = duty === "" ? "空" : duty.replace(/\\/g, ' ');
 		const existingIndex = selectedDuties.findIndex(item =>
 			item.employeeId === employeeId && item.date === date
 		);
