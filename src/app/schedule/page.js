@@ -209,7 +209,15 @@ export default function SchedulePage() {
 
 			try {
 				// Load all schedules for the month (cached)
-				const allSchedules = await getAllSchedulesForMonth(currentMonth);
+				let allSchedules = await getAllSchedulesForMonth(currentMonth);
+				
+				// Sort by employee ID to maintain Excel extraction order
+				allSchedules = allSchedules.sort((a, b) => {
+					const idA = parseInt(a.employeeID) || 0;
+					const idB = parseInt(b.employeeID) || 0;
+					return idA - idB;
+				});
+				
 				const hasScheduleData = allSchedules.length > 0;
 				
 				// Get user schedule
@@ -239,7 +247,14 @@ export default function SchedulePage() {
 				// Get schedules by base
 				const otherSchedules = hasScheduleData ? 
 					await getSchedulesByBase(currentMonth, activeTab).then(schedules => {
-						return schedules.filter(schedule => schedule.employeeID !== user?.id);
+						return schedules
+							.filter(schedule => schedule.employeeID !== user?.id)
+							.sort((a, b) => {
+								// Sort by employee ID to maintain extraction order
+								const idA = parseInt(a.employeeID) || 0;
+								const idB = parseInt(b.employeeID) || 0;
+								return idA - idB;
+							});
 					}) : [];
 
 				setScheduleData({
