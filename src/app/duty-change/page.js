@@ -27,6 +27,7 @@ function DutyChangeContent() {
         secondTask: "",
         applicationDate: new Date().toISOString().slice(0, 10),
         selectedMonth: "",
+        selectedDates: [],
         allDuties: []
     });
     
@@ -177,245 +178,109 @@ function DutyChangeContent() {
             let secondName = "";
             let secondRank = "";
             
+            // Get Person B info from allDuties
             if (parsedData.allDuties && parsedData.allDuties.length > 0) {
                 const sortedDuties = [...parsedData.allDuties].sort((a, b) => new Date(a.date) - new Date(b.date));
                 
                 const firstDuty = sortedDuties[0];
-                secondID = firstDuty.employeeId;
-                secondName = firstDuty.name;
-                secondRank = findCrewMemberRank(secondID);
+                console.log('firstDuty structure:', firstDuty);
                 
-                // Format Person B's dates and duties (they're already in allDuties)
-                if (sortedDuties.length === 1) {
-                    secondDate = formatDateForForm(sortedDuties[0].date);
-                    secondTask = sortedDuties[0].duty === "" ? "空" : sortedDuties[0].duty;
-                } else {
-                    const dateGroups = [];
-                    let currentGroup = [sortedDuties[0]];
-                    
-                    for (let i = 1; i < sortedDuties.length; i++) {
-                        const currentDate = new Date(sortedDuties[i].date);
-                        const previousDate = new Date(sortedDuties[i-1].date);
-                        const daysDiff = (currentDate - previousDate) / (1000 * 60 * 60 * 24);
-                        
-                        if (daysDiff === 1) {
-                            currentGroup.push(sortedDuties[i]);
-                        } else {
-                            dateGroups.push(currentGroup);
-                            currentGroup = [sortedDuties[i]];
-                        }
-                    }
-                    dateGroups.push(currentGroup);
-                    
-                    const formattedGroups = dateGroups.map(group => {
-                        if (group.length === 1) {
-                            return formatDateForForm(group[0].date);
-                        } else {
-                            const startDate = formatDateForForm(group[0].date);
-                            const endDate = formatDateForForm(group[group.length - 1].date);
-                            return `${startDate}-${endDate}`;
-                        }
-                    });
-                    
-                    secondDate = formattedGroups.join('、');
-                    // Don't remove duplicates - show all duties for each date
-                    const allDuties = sortedDuties.map(d => d.duty === "" ? "空" : d.duty);
-                    secondTask = allDuties.join('、');
+                secondID = firstDuty.employeeId || firstDuty.employeeID;
+                
+                // Try to get name from multiple possible sources
+                secondName = firstDuty.employeeName || firstDuty.name;
+                
+                // If still no name, look it up using getEmployeeById
+                if (!secondName && secondID) {
+                    const employeeData = getEmployeeById(secondID);
+                    secondName = employeeData?.name || "";
+                    console.log('Looked up employee:', employeeData);
                 }
                 
-                // Format Person A's dates (from selectedDates)
-                if (parsedData.selectedDates && parsedData.selectedDates.length > 0) {
-                    const sortedSelectedDates = [...parsedData.selectedDates].sort((a, b) => new Date(a) - new Date(b));
+                secondRank = findCrewMemberRank(secondID);
+                
+                console.log('Person B data:', { secondID, secondName, secondRank });
+                
+                const formattedDuties = prepareDutiesForPDF(parsedData.allDuties);
+                if (formattedDuties.length > 0) {
+                    secondDate = formattedDuties.map(d => d.date).filter(d => d).join(', ');
+                    secondTask = formattedDuties.map(d => d.task).join(', ');
+                }
+            }
+            
+            // Get Person A duties - need to fetch schedule first
+            if (parsedData.selectedDates && parsedData.selectedDates.length > 0) {
+                const schedule = await getEmployeeSchedule(parsedData.firstID, parsedData.selectedMonth);
+                console.log('Fetched schedule for Person A:', schedule);
+                setUserSchedule(schedule);
+                
+                // Now format Person A's duties with the schedule data
+                if (schedule) {
+                    const userDuties = parsedData.selectedDates.map(date => ({ 
+                        date, 
+                        duty: schedule.days?.[date] || "" 
+                    }));
+                    console.log('Person A userDuties:', userDuties);
                     
-                    if (sortedSelectedDates.length === 1) {
-                        firstDate = formatDateForForm(sortedSelectedDates[0]);
-                    } else {
-                        const dateGroups = [];
-                        let currentGroup = [sortedSelectedDates[0]];
-                        
-                        for (let i = 1; i < sortedSelectedDates.length; i++) {
-                            const currentDate = new Date(sortedSelectedDates[i]);
-                            const previousDate = new Date(sortedSelectedDates[i-1]);
-                            const daysDiff = (currentDate - previousDate) / (1000 * 60 * 60 * 24);
-                            
-                            if (daysDiff === 1) {
-                                currentGroup.push(sortedSelectedDates[i]);
-                            } else {
-                                dateGroups.push(currentGroup);
-                                currentGroup = [sortedSelectedDates[i]];
-                            }
-                        }
-                        dateGroups.push(currentGroup);
-                        
-                        const formattedGroups = dateGroups.map(group => {
-                            if (group.length === 1) {
-                                return formatDateForForm(group[0]);
-                            } else {
-                                const startDate = formatDateForForm(group[0]);
-                                const endDate = formatDateForForm(group[group.length - 1]);
-                                return `${startDate}-${endDate}`;
-                            }
-                        });
-                        
-                        firstDate = formattedGroups.join('、');
-                    }
+                    const dutyGroups = groupConsecutiveDates(userDuties);
+                    const formattedUserDuties = formatDutyGroups(dutyGroups, true);
+                    console.log('Person A formatted duties:', formattedUserDuties);
                     
-                    // Look up Person A's duties from their schedule
-                    const userSched = await getEmployeeSchedule(parsedData.firstID, parsedData.selectedMonth);
-                    console.log('useEffect - fetched userSched:', userSched);
-                    console.log('useEffect - sortedSelectedDates:', sortedSelectedDates);
-                    if (userSched) {
-                        const firstTasks = sortedSelectedDates.map(date => {
-                            const duty = userSched.days?.[date] || "";
-                            console.log(`useEffect - date ${date} -> duty: ${duty}`);
-                            return duty === "" ? "空" : duty;
-                        });
-                        // Don't remove duplicates - show all duties for each date
-                        firstTask = firstTasks.join('、');
-                        console.log('useEffect - firstTask:', firstTask);
-                    } else {
-                        firstTask = "空";
-                        console.log('useEffect - no userSched, firstTask set to 空');
+                    if (formattedUserDuties.length > 0) {
+                        firstDate = formattedUserDuties.map(d => d.date).filter(d => d).join(', ');
+                        firstTask = formattedUserDuties.map(d => d.task).join(', ');
                     }
                 }
             }
             
-            setFormData(prevState => ({
-                ...prevState,
-                ...parsedData,
+            console.log('Final form data:', {
+                firstID: parsedData.firstID,
+                firstName: parsedData.firstName,
                 firstRank,
-                secondRank,
                 firstDate,
                 firstTask,
                 secondID,
                 secondName,
+                secondRank,
                 secondDate,
                 secondTask
-            }));
-
-            // Set userSchedule for PDF generation
-            if (parsedData.firstID && parsedData.selectedMonth) {
-                const userSched = await getEmployeeSchedule(parsedData.firstID, parsedData.selectedMonth);
-                setUserSchedule(userSched);
+            });
+            
+            setFormData({
+                firstID: parsedData.firstID || "",
+                firstName: parsedData.firstName || "",
+                firstRank: firstRank,
+                firstDate: firstDate,
+                firstTask: firstTask,
+                secondID: secondID,
+                secondName: secondName,
+                secondRank: secondRank,
+                secondDate: secondDate,
+                secondTask: secondTask,
+                applicationDate: new Date().toISOString().slice(0, 10),
+                selectedMonth: parsedData.selectedMonth || "",
+                selectedDates: parsedData.selectedDates || [],
+                allDuties: parsedData.allDuties || []
+            });
+            } catch (err) {
+                console.error('Error loading data:', err);
+                setError('資料載入失敗');
             }
+        };
 
-            localStorage.removeItem('dutyChangeData');
-        } catch (error) {
-            console.error('Error parsing stored duty change data:', error);
-        }
-    };
-    
-    loadData();
+        loadData();
     }, []);
 
-    const renderTextOnCanvas = (ctx, text, x, y, fontSize = 14, align = 'left') => {
-        if (!text || typeof text !== 'string') return;
-        
-        const cleanText = String(text).trim();
-        if (!cleanText) return;
-        
-        ctx.font = `${fontSize}px "Noto Sans TC", "Noto Sans Traditional Chinese", "Microsoft JhengHei", "PingFang TC", "Hiragino Sans TC", "Microsoft YaHei", "SimHei", "Arial Unicode MS", sans-serif`;
-        ctx.fillStyle = 'black';
-        ctx.textAlign = align;
-        ctx.textBaseline = 'middle';
-        ctx.fillText(cleanText, x, y);
-    };
-
-    const renderCenteredTextInBox = (ctx, text, leftX, rightX, y, fontSize = 14) => {
-        if (!text || typeof text !== 'string') return;
-        
-        const cleanText = String(text).trim();
-        if (!cleanText) return;
-        
-        ctx.font = `${fontSize}px "Noto Sans TC", "Noto Sans Traditional Chinese", "Microsoft JhengHei", "PingFang TC", "Hiragino Sans TC", "Microsoft YaHei", "SimHei", "Arial Unicode MS", sans-serif`;
-        const textWidth = ctx.measureText(cleanText).width;
-        const boxWidth = rightX - leftX;
-        const centerX = leftX + (boxWidth - textWidth) / 2;
-        
-        ctx.fillStyle = 'black';
-        ctx.textAlign = 'left';
-        ctx.textBaseline = 'middle';
-        ctx.fillText(cleanText, centerX, y);
-    };
-
-    const convertToCanvasCoords = (x, y) => {
-        const pixelX = (x / 72) * 300;
-        const pixelY = 3508 - ((y / 72) * 300);
-        return { x: pixelX, y: pixelY };
-    };
-
-    const renderPersonData = (ctx, personData, isFirst) => {
-        const xOffset = isFirst ? 0 : 258;
-        
-        let coords = convertToCanvasCoords(72 + xOffset, 710);
-        renderTextOnCanvas(ctx, personData.id, coords.x, coords.y, 56);
-
-        coords = convertToCanvasCoords(195 + xOffset, 710);
-        renderTextOnCanvas(ctx, personData.name, coords.x, coords.y, 52);
-
-        if (personData.rank) {
-            ctx.font = '64px Arial';
-            const rankOffset = isFirst ? 149 : 406;
-            
-            if (personData.rank === 'PR' || personData.rank === 'FI') {
-                coords = convertToCanvasCoords(rankOffset, 682);
-                ctx.fillText('X', coords.x, coords.y);
-            } else if (personData.rank === 'LF') {
-                coords = convertToCanvasCoords(rankOffset, 661);
-                ctx.fillText('X', coords.x, coords.y);
-            } else if (personData.rank === 'FS' || personData.rank === 'FA') {
-                coords = convertToCanvasCoords(rankOffset, 640);
-                ctx.fillText('X', coords.x, coords.y);
-            }
-        }
-    };
-
-    // COORDINATE CONFIGURATION - Modify these values to adjust text positioning
-    const COORDS = {
-        firstPerson: {
-            date: { left: 43, right: 140 },
-            duty: { left: 142, right: 285 }
-        },
-        secondPerson: {
-            date: { left: 298, right: 398 },
-            duty: { left: 398, right: 540 }
-        },
-        dutyYPositions: [572, 554, 535]
-    };
-
-    // Debug: Log coordinates to console
-    console.log('PDF Coordinates:', COORDS);
-
-    const renderPersonDuties = (ctx, duties, isFirst) => {
-        const person = isFirst ? COORDS.firstPerson : COORDS.secondPerson;
-
-        for (let i = 0; i < Math.min(duties.length, 3); i++) {
-            const entry = duties[i];
-            const yPos = COORDS.dutyYPositions[i];
-
-            if (entry.isContinuation) {
-                const leftCoords = convertToCanvasCoords(person.duty.left, yPos);
-                const rightCoords = convertToCanvasCoords(person.duty.right, yPos);
-                renderCenteredTextInBox(ctx, entry.task, leftCoords.x, rightCoords.x, leftCoords.y, 48);
-            } else {
-                // Center the date in its box
-                const dateLeftCoords = convertToCanvasCoords(person.date.left, yPos);
-                const dateRightCoords = convertToCanvasCoords(person.date.right, yPos);
-                renderCenteredTextInBox(ctx, entry.date, dateLeftCoords.x, dateRightCoords.x, dateLeftCoords.y, 48);
-
-                // Center the task in its box
-                const dutyLeftCoords = convertToCanvasCoords(person.duty.left, yPos);
-                const dutyRightCoords = convertToCanvasCoords(person.duty.right, yPos);
-                renderCenteredTextInBox(ctx, entry.task, dutyLeftCoords.x, dutyRightCoords.x, dutyLeftCoords.y, 48);
-            }
-        }
-    };
-
-    async function generateImageFromTemplate() {
-        setIsLoading(true);
-        setError(null);
-
+    const generatePDFFromTemplate = async () => {
         try {
+            setIsLoading(true);
+            setError(null);
+
+            console.log('=== PDF Generation Start ===');
+            console.log('formData:', formData);
+            console.log('userSchedule:', userSchedule);
+
+            // First, create a canvas to render the form (same as original PNG approach)
             const canvas = document.createElement('canvas');
             const ctx = canvas.getContext('2d');
             
@@ -432,16 +297,114 @@ function DutyChangeContent() {
             });
             
             ctx.drawImage(templateImg, 0, 0, 2480, 3508);
-            
+
+            // Helper functions for rendering text (from original)
+            const renderTextOnCanvas = (text, x, y, fontSize = 14, align = 'left') => {
+                if (!text || typeof text !== 'string') return;
+                
+                const cleanText = String(text).trim();
+                if (!cleanText) return;
+                
+                ctx.font = `${fontSize}px "Noto Sans TC", "Microsoft JhengHei", "PingFang TC", sans-serif`;
+                ctx.fillStyle = 'black';
+                ctx.textAlign = align;
+                ctx.textBaseline = 'middle';
+                ctx.fillText(cleanText, x, y);
+            };
+
+            const renderCenteredTextInBox = (text, leftX, rightX, y, fontSize = 14) => {
+                if (!text || typeof text !== 'string') return;
+                
+                const cleanText = String(text).trim();
+                if (!cleanText) return;
+                
+                ctx.font = `${fontSize}px "Noto Sans TC", "Microsoft JhengHei", "PingFang TC", sans-serif`;
+                const textWidth = ctx.measureText(cleanText).width;
+                const boxWidth = rightX - leftX;
+                const centerX = leftX + (boxWidth - textWidth) / 2;
+                
+                ctx.fillStyle = 'black';
+                ctx.textAlign = 'left';
+                ctx.textBaseline = 'middle';
+                ctx.fillText(cleanText, centerX, y);
+            };
+
+            const convertToCanvasCoords = (x, y) => {
+                const pixelX = (x / 72) * 300;
+                const pixelY = 3508 - ((y / 72) * 300);
+                return { x: pixelX, y: pixelY };
+            };
+
+            const renderPersonData = (personData, isFirst) => {
+                const xOffset = isFirst ? 0 : 258;
+                
+                let coords = convertToCanvasCoords(72 + xOffset, 710);
+                renderTextOnCanvas(personData.id, coords.x, coords.y, 56);
+
+                coords = convertToCanvasCoords(195 + xOffset, 710);
+                renderTextOnCanvas(personData.name, coords.x, coords.y, 52);
+
+                if (personData.rank) {
+                    ctx.font = '64px Arial';
+                    const rankOffset = isFirst ? 149 : 406;
+                    
+                    if (personData.rank === 'PR' || personData.rank === 'FI') {
+                        coords = convertToCanvasCoords(rankOffset, 682);
+                        ctx.fillText('X', coords.x, coords.y);
+                    } else if (personData.rank === 'LF') {
+                        coords = convertToCanvasCoords(rankOffset, 661);
+                        ctx.fillText('X', coords.x, coords.y);
+                    } else if (personData.rank === 'FS' || personData.rank === 'FA') {
+                        coords = convertToCanvasCoords(rankOffset, 640);
+                        ctx.fillText('X', coords.x, coords.y);
+                    }
+                }
+            };
+
+            const COORDS = {
+                firstPerson: {
+                    date: { left: 43, right: 140 },
+                    duty: { left: 142, right: 285 }
+                },
+                secondPerson: {
+                    date: { left: 298, right: 398 },
+                    duty: { left: 398, right: 540 }
+                },
+                dutyYPositions: [572, 554, 535]
+            };
+
+            const renderPersonDuties = (duties, isFirst) => {
+                const person = isFirst ? COORDS.firstPerson : COORDS.secondPerson;
+
+                for (let i = 0; i < Math.min(duties.length, 3); i++) {
+                    const entry = duties[i];
+                    const yPos = COORDS.dutyYPositions[i];
+
+                    if (entry.isContinuation) {
+                        const leftCoords = convertToCanvasCoords(person.duty.left, yPos);
+                        const rightCoords = convertToCanvasCoords(person.duty.right, yPos);
+                        renderCenteredTextInBox(entry.task, leftCoords.x, rightCoords.x, leftCoords.y, 48);
+                    } else {
+                        const dateLeftCoords = convertToCanvasCoords(person.date.left, yPos);
+                        const dateRightCoords = convertToCanvasCoords(person.date.right, yPos);
+                        renderCenteredTextInBox(entry.date, dateLeftCoords.x, dateRightCoords.x, dateLeftCoords.y, 48);
+
+                        const dutyLeftCoords = convertToCanvasCoords(person.duty.left, yPos);
+                        const dutyRightCoords = convertToCanvasCoords(person.duty.right, yPos);
+                        renderCenteredTextInBox(entry.task, dutyLeftCoords.x, dutyRightCoords.x, dutyLeftCoords.y, 48);
+                    }
+                }
+            };
+
             // Render first person
-            renderPersonData(ctx, {
+            renderPersonData({
                 id: formData.firstID,
                 name: formData.firstName,
                 rank: formData.firstRank
             }, true);
 
             // Render second person
-            renderPersonData(ctx, {
+            renderPersonData({
                 id: formData.secondID,
                 name: formData.secondName,
                 rank: formData.secondRank
@@ -449,61 +412,44 @@ function DutyChangeContent() {
 
             // Render duties
             if (formData.allDuties && formData.allDuties.length > 0) {
-                console.log('PDF Generation - formData.selectedDates:', formData.selectedDates);
-                console.log('PDF Generation - formData.allDuties:', formData.allDuties);
-                console.log('PDF Generation - userSchedule:', userSchedule);
-                
-                // Ensure we have the user schedule for Person A
                 let currentUserSchedule = userSchedule;
                 if (!currentUserSchedule && formData.firstID && formData.selectedMonth) {
-                    console.log('Fetching user schedule for:', formData.firstID, formData.selectedMonth);
                     currentUserSchedule = await getEmployeeSchedule(formData.firstID, formData.selectedMonth);
-                    console.log('Fetched schedule:', currentUserSchedule);
                 }
                 
-                // Person A's duties: look them up from their schedule
                 const userDutiesEntries = formData.selectedDates?.length > 0 && currentUserSchedule
                     ? (() => {
                         const userDuties = formData.selectedDates.map(date => ({ 
                             date, 
                             duty: currentUserSchedule.days?.[date] || "" 
                         }));
-                        console.log('Person A userDuties:', userDuties);
                         const dutyGroups = groupConsecutiveDates(userDuties);
-                        const formatted = formatDutyGroups(dutyGroups, true);
-                        console.log('Person A formatted duties:', formatted);
-                        return formatted;
+                        return formatDutyGroups(dutyGroups, true);
                     })()
                     : [];
                 
-                // Person B's duties: use allDuties which already contains their duties
                 const secondDutiesEntries = prepareDutiesForPDF(formData.allDuties);
-                console.log('Person B duties:', secondDutiesEntries);
 
-                renderPersonDuties(ctx, userDutiesEntries, true);
-                renderPersonDuties(ctx, secondDutiesEntries, false);
+                renderPersonDuties(userDutiesEntries, true);
+                renderPersonDuties(secondDutiesEntries, false);
             } else {
-                // Fallback for simple duty display
-                
-                // First person date and duty
                 let dateLeftCoords = convertToCanvasCoords(COORDS.firstPerson.date.left, 566);
                 let dateRightCoords = convertToCanvasCoords(COORDS.firstPerson.date.right, 566);
-                renderCenteredTextInBox(ctx, formData.firstDate, dateLeftCoords.x, dateRightCoords.x, dateLeftCoords.y, 48);
+                renderCenteredTextInBox(formData.firstDate, dateLeftCoords.x, dateRightCoords.x, dateLeftCoords.y, 48);
 
                 const firstTask = formData.firstTask === "" ? "空" : formData.firstTask;
                 let dutyLeftCoords = convertToCanvasCoords(COORDS.firstPerson.duty.left, 566);
                 let dutyRightCoords = convertToCanvasCoords(COORDS.firstPerson.duty.right, 566);
-                renderCenteredTextInBox(ctx, firstTask, dutyLeftCoords.x, dutyRightCoords.x, dutyLeftCoords.y, 48);
+                renderCenteredTextInBox(firstTask, dutyLeftCoords.x, dutyRightCoords.x, dutyLeftCoords.y, 48);
 
-                // Second person date and duty
                 dateLeftCoords = convertToCanvasCoords(COORDS.secondPerson.date.left, 566);
                 dateRightCoords = convertToCanvasCoords(COORDS.secondPerson.date.right, 566);
-                renderCenteredTextInBox(ctx, formData.secondDate, dateLeftCoords.x, dateRightCoords.x, dateLeftCoords.y, 48);
+                renderCenteredTextInBox(formData.secondDate, dateLeftCoords.x, dateRightCoords.x, dateLeftCoords.y, 48);
 
                 const secondTask = formData.secondTask === "" ? "空" : formData.secondTask;
                 dutyLeftCoords = convertToCanvasCoords(COORDS.secondPerson.duty.left, 566);
                 dutyRightCoords = convertToCanvasCoords(COORDS.secondPerson.duty.right, 566);
-                renderCenteredTextInBox(ctx, secondTask, dutyLeftCoords.x, dutyRightCoords.x, dutyLeftCoords.y, 48);
+                renderCenteredTextInBox(secondTask, dutyLeftCoords.x, dutyRightCoords.x, dutyLeftCoords.y, 48);
             }
 
             // Application date
@@ -514,24 +460,43 @@ function DutyChangeContent() {
                     day: '2-digit',
                     year: 'numeric'
                 });
-                renderTextOnCanvas(ctx, formattedDate, coords.x, coords.y, 56);
+                renderTextOnCanvas(formattedDate, coords.x, coords.y, 56);
             }
 
-            const filename = `FMEF-06-04客艙組員任務互換申請單-${formData.firstName}&${formData.secondName}.png`;
+            // Now convert canvas to PDF with compression
+            const { jsPDF } = await import('jspdf');
             
-            const link = document.createElement('a');
-            link.download = filename;
-            link.href = canvas.toDataURL('image/png');
-            link.click();
+            const pdf = new jsPDF({
+                orientation: 'portrait',
+                unit: 'mm',
+                format: 'a4',
+                compress: true
+            });
+
+            // Convert canvas to compressed JPEG (much smaller than PNG)
+            const imgData = canvas.toDataURL('image/jpeg', 0.85); // 85% quality for good balance
             
+            // A4 dimensions
+            const pageWidth = 210;
+            const pageHeight = 297;
+            
+            pdf.addImage(imgData, 'JPEG', 0, 0, pageWidth, pageHeight, undefined, 'FAST');
+
+            // Generate filename - use proper names
+            const firstName = formData.firstName || '甲方';
+            const secondName = formData.secondName || '乙方';
+            const filename = `FMEF-06-04客艙組員任務互換申請單-${firstName}&${secondName}.pdf`;
+
+            pdf.save(filename);
+
             setTimeout(() => {
-                toast('✅ 換班單(png圖片)已產生並下載！');
+                toast('✅ 換班單(PDF檔案)已產生並下載！');
             }, 200);
 
         } catch (error) {
-            console.error('Error generating image:', error);
-            setError(`Failed to generate image: ${error.message}`);
-            toast('圖片產生失敗，請重試');
+            console.error('Error generating PDF:', error);
+            setError(`Failed to generate PDF: ${error.message}`);
+            toast('PDF產生失敗，請重試');
         } finally {
             setIsLoading(false);
         }
@@ -558,7 +523,7 @@ function DutyChangeContent() {
                                     <label className={styles.formLabel}>員工編號</label>
                                     <input
                                         type="text"
-                                        value={formData.firstID}
+                                        value={formData.firstID || ""}
                                         className={`${styles.formInput} ${styles.disabled}`}
                                         disabled
                                     />
@@ -567,7 +532,7 @@ function DutyChangeContent() {
                                     <label className={styles.formLabel}>姓名</label>
                                     <input
                                         type="text"
-                                        value={formData.firstName}
+                                        value={formData.firstName || ""}
                                         className={`${styles.formInput} ${styles.disabled}`}
                                         disabled
                                     />
@@ -576,7 +541,7 @@ function DutyChangeContent() {
                                     <label className={styles.formLabel}>職位</label>
                                     <input
                                         type="text"
-                                        value={formData.firstRank}
+                                        value={formData.firstRank || ""}
                                         className={`${styles.formInput} ${styles.disabled}`}
                                         disabled
                                     />
@@ -587,7 +552,7 @@ function DutyChangeContent() {
                                 <label className={styles.formLabel}>日期</label>
                                 <input
                                     type="text"
-                                    value={formData.firstDate}
+                                    value={formData.firstDate || ""}
                                     className={`${styles.formInput} ${styles.disabled}`}
                                     disabled
                                 />
@@ -597,7 +562,7 @@ function DutyChangeContent() {
                                 <label className={styles.formLabel}>任務</label>
                                 <input
                                     type="text"
-                                    value={formData.firstTask}
+                                    value={formData.firstTask || ""}
                                     className={`${styles.formInput} ${styles.disabled}`}
                                     disabled
                                 />
@@ -612,7 +577,7 @@ function DutyChangeContent() {
                                     <label className={styles.formLabel}>員工編號</label>
                                     <input
                                         type="text"
-                                        value={formData.secondID}
+                                        value={formData.secondID || ""}
                                         className={`${styles.formInput} ${styles.disabled}`}
                                         disabled
                                     />
@@ -621,7 +586,7 @@ function DutyChangeContent() {
                                     <label className={styles.formLabel}>姓名</label>
                                     <input
                                         type="text"
-                                        value={formData.secondName}
+                                        value={formData.secondName || ""}
                                         className={`${styles.formInput} ${styles.disabled}`}
                                         disabled
                                     />
@@ -630,7 +595,7 @@ function DutyChangeContent() {
                                     <label className={styles.formLabel}>職位</label>
                                     <input
                                         type="text"
-                                        value={formData.secondRank}
+                                        value={formData.secondRank || ""}
                                         className={`${styles.formInput} ${styles.disabled}`}
                                         disabled
                                     />
@@ -641,7 +606,7 @@ function DutyChangeContent() {
                                 <label className={styles.formLabel}>日期</label>
                                 <input
                                     type="text"
-                                    value={formData.secondDate}
+                                    value={formData.secondDate || ""}
                                     className={`${styles.formInput} ${styles.disabled}`}
                                     disabled
                                 />
@@ -651,7 +616,7 @@ function DutyChangeContent() {
                                 <label className={styles.formLabel}>任務</label>
                                 <input
                                     type="text"
-                                    value={formData.secondTask}
+                                    value={formData.secondTask || ""}
                                     className={`${styles.formInput} ${styles.disabled}`}
                                     disabled
                                 />
@@ -663,7 +628,7 @@ function DutyChangeContent() {
                         <label className={styles.formLabel}>申請日期</label>
                         <input
                             type="date"
-                            value={formData.applicationDate}
+                            value={formData.applicationDate || ""}
                             disabled
                             className={`${styles.formInput} ${styles.disabled} ${styles.dateInput}`}
                         />
@@ -671,7 +636,7 @@ function DutyChangeContent() {
 
                     <div className={styles.confirmButtonContainer}>
                         <button
-                            onClick={generateImageFromTemplate}
+                            onClick={generatePDFFromTemplate}
                             disabled={isLoading}
                             className={styles.generateButton}
                         >
