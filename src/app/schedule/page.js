@@ -211,13 +211,6 @@ export default function SchedulePage() {
 				// Load all schedules for the month (cached)
 				let allSchedules = await getAllSchedulesForMonth(currentMonth);
 				
-				// Sort by employee ID to maintain Excel extraction order
-				allSchedules = allSchedules.sort((a, b) => {
-					const idA = parseInt(a.employeeID) || 0;
-					const idB = parseInt(b.employeeID) || 0;
-					return idA - idB;
-				});
-				
 				const hasScheduleData = allSchedules.length > 0;
 				
 				// Get user schedule
@@ -249,12 +242,6 @@ export default function SchedulePage() {
 					await getSchedulesByBase(currentMonth, activeTab).then(schedules => {
 						return schedules
 							.filter(schedule => schedule.employeeID !== user?.id)
-							.sort((a, b) => {
-								// Sort by employee ID to maintain extraction order
-								const idA = parseInt(a.employeeID) || 0;
-								const idB = parseInt(b.employeeID) || 0;
-								return idA - idB;
-							});
 					}) : [];
 
 				setScheduleData({
@@ -633,32 +620,35 @@ export default function SchedulePage() {
 	}, [activeTab, scheduleLoading]);
 
 	const handleDutyChangeClick = useCallback(() => {
-		if (!scheduleData.hasScheduleData) {
-			toast("此月份沒有班表資料！無法申請換班！", { icon: '⌚', duration: 3000 });
-			return;
-		}
+	if (!scheduleData.hasScheduleData) {
+		toast("此月份沒有班表資料！無法申請換班！", { icon: '⌚', duration: 3000 });
+		return;
+	}
 
-		if (selectedDuties.length === 0) {
-			toast("想換班還不選人喔!搞屁啊!", { icon: '🙄', duration: 3000 });
-			return;
-		}
+	if (selectedDuties.length === 0) {
+		toast("想換班還不選人喔!搞屁啊!", { icon: '🙄', duration: 3000 });
+		return;
+	}
 
-		const uniqueEmployeeIds = [...new Set(selectedDuties.map(duty => duty.employeeId))];
-		if (uniqueEmployeeIds.length > 1) {
-			toast("這位太太！一張換班單只能跟一位換班!", { icon: '🤨', duration: 3000 });
-			return;
-		}
+	const uniqueEmployeeIds = [...new Set(selectedDuties.map(duty => duty.employeeId))];
+	if (uniqueEmployeeIds.length > 1) {
+		toast("這位太太！一張換班單只能跟一位換班!", { icon: '🤨', duration: 3000 });
+		return;
+	}
 
-		const dutyChangeData = {
-			firstID: user?.id || "",
-			firstName: user?.name || "",
-			selectedMonth: currentMonth,
-			allDuties: selectedDuties
-		};
+	const dutyChangeData = {
+		firstID: user?.id || "",
+		firstName: user?.name || "",
+		selectedMonth: currentMonth,
+		allDuties: selectedDuties,
+		userSchedule: scheduleData.userSchedule  // ← FIX: Include Person A's schedule
+	};
 
-		localStorage.setItem('dutyChangeData', JSON.stringify(dutyChangeData));
-		router.push('/duty-change');
-	}, [selectedDuties, router, user, currentMonth, scheduleData.hasScheduleData]);
+	console.log('Duty change data being saved:', dutyChangeData); // For debugging
+
+	localStorage.setItem('dutyChangeData', JSON.stringify(dutyChangeData));
+	router.push('/duty-change');
+}, [selectedDuties, router, user, currentMonth, scheduleData.hasScheduleData, scheduleData.userSchedule]);
 
 	const handleMonthChange = useCallback(async (event) => {
 		const newMonth = event.target.value;

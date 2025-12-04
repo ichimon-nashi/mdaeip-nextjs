@@ -168,6 +168,27 @@ export const getAvailableMonths = async () => {
 	}
 };
 
+// Helper function to sort schedules by employeeList order
+const sortSchedulesByEmployeeListOrder = (schedules) => {
+	// Create a map of employee ID to their index in employeeList
+	const employeeOrderMap = new Map();
+	employeeList.forEach((employee, index) => {
+		employeeOrderMap.set(employee.id, index);
+	});
+
+	// Sort schedules based on employeeList order
+	return schedules.sort((a, b) => {
+		const orderA = employeeOrderMap.get(a.employeeID);
+		const orderB = employeeOrderMap.get(b.employeeID);
+		
+		// If employee not in list, put at end
+		if (orderA === undefined) return 1;
+		if (orderB === undefined) return -1;
+		
+		return orderA - orderB;
+	});
+};
+
 // Get all schedules for a specific month from database
 export const getAllSchedulesForMonth = async (month) => {
 	const cacheKey = month;
@@ -253,8 +274,10 @@ export const getAllSchedulesForMonth = async (month) => {
 		console.log(`Total transformed schedules: ${transformedSchedules.length}`);
 		console.log("Bases in transformed schedules:", [...new Set(transformedSchedules.map((s) => s.base))]);
 
-		scheduleCache.set(cacheKey, transformedSchedules);
-		return transformedSchedules;
+		// Sort by employeeList order before caching
+   const sortedSchedules = sortSchedulesByEmployeeListOrder(transformedSchedules);
+   scheduleCache.set(cacheKey, sortedSchedules);
+   return sortedSchedules;
 	} catch (error) {
 		console.error("Error in getAllSchedulesForMonth:", error);
 		return [];
