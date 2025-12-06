@@ -286,7 +286,7 @@ const NavigationDrawer = ({ isOpen, onClose, userDetails }) => {
                 {/* Footer */}
                 <div className={styles.drawerFooter}>
                     <div className={styles.appVersion}>
-                        豪神APP v3.2.5
+                        豪神APP v3.3.1
                     </div>
                 </div>
             </div>
