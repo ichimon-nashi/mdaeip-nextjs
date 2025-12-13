@@ -52,7 +52,9 @@ const GDayPlanner = () => {
         { id: 'welfare', label: '福補', description: '福利補休' },
         { id: 'medical', label: '體檢', description: '體檢' },
         { id: 'gday', label: 'G Day', description: 'G Day' },
-        { id: 'personal', label: 'P/L', description: '事假' }
+        { id: 'personal', label: 'P/L', description: '事假' },
+        { id: 'marriage', label: '婚假', description: '婚假' },
+        { id: 'bereavement', label: '喪假', description: '喪假' },
     ]
 
     const monthNames = ['1月', '2月', '3月', '4月', '5月', '6月', '7月', '8月', '9月', '10月', '11月', '12月']

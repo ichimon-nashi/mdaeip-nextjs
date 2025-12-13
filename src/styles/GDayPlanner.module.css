@@ -285,38 +285,40 @@
 
 /* Softer Vacation type colors */
 .leaveExample {
-	background: linear-gradient(135deg, #d69e2e 0%, #b7791f 100%);
-	box-shadow: 0 4px 15px rgba(214, 158, 46, 0.2);
+	background: linear-gradient(135deg, #e7ba5f 20%, #b7791f 100%);
+	/* box-shadow: 0 4px 15px rgba(214, 158, 46, 0.2); */
 }
 
 .leaveRest {
-	background: linear-gradient(135deg, #4299e1 0%, #3182ce 100%);
-	box-shadow: 0 4px 15px rgba(66, 153, 225, 0.2);
+	background: linear-gradient(135deg, #69b6f5 20%, #3182ce 100%);
 }
 
 .leaveAnnual {
-	background: linear-gradient(135deg, #48bb78 0%, #38a169 100%);
-	box-shadow: 0 4px 15px rgba(72, 187, 120, 0.2);
+	background: linear-gradient(135deg, #7fd8a4 20%, #38a169 100%);
 }
 
 .leaveWelfare {
-	background: linear-gradient(135deg, #805ad5 0%, #6b46c1 100%);
-	box-shadow: 0 4px 15px rgba(128, 90, 213, 0.2);
+	background: linear-gradient(135deg, #ad8ef0 20%, #6b46c1 100%);
 }
 
 .leaveMedical {
-	background: linear-gradient(135deg, #ed64a6 0%, #d53f8c 100%);
-	box-shadow: 0 4px 15px rgba(237, 100, 166, 0.2);
+	background: linear-gradient(135deg, #f08bbc 20%, #d53f8c 100%);
 }
 
 .leaveGday {
-	background: linear-gradient(135deg, #ed8936 0%, #dd6b20 100%);
-	box-shadow: 0 4px 15px rgba(237, 137, 54, 0.2);
+	background: linear-gradient(135deg, #faa660 20%, #dd6b20 100%);
 }
 
 .leavePersonal {
-	background: linear-gradient(135deg, #4fd1c7 0%, #38b2ac 100%);
-	box-shadow: 0 4px 15px rgba(79, 209, 199, 0.2);
+	background: linear-gradient(135deg, #81e9e0 20%, #38b2ac 100%);
+}
+
+.leaveMarriage {
+	background: linear-gradient(135deg, #eb7893 20%, #eb5175 100%);
+}
+
+.leaveBereavement {
+	background: linear-gradient(135deg, #b3b0ab 20%, #8a8882 100%);
 }
 
 /* Calendar Styles */
@@ -595,7 +597,7 @@
 	}
 
 	.leaveTypesGrid {
-		grid-template-columns: repeat(7, 1fr);
+		grid-template-columns: repeat(9, 1fr);
 		gap: 4px;
 	}
 
@@ -739,7 +741,7 @@
 	}
 
 	.leaveTypesGrid {
-		grid-template-columns: repeat(7, 1fr);
+		grid-template-columns: repeat(9, 1fr);
 		gap: 15px;
 		max-width: 900px;
 	}
