@@ -1345,3 +1345,82 @@
 	0% { transform: rotate(0deg); }
 	100% { transform: rotate(360deg); }
 }
+/* ========================================
+   STICKY TABLE HEADER & FIXED BUTTON
+   ======================================== */
+
+/* Sticky table header - stays visible when scrolling down */
+.stickyTableHeader {
+	position: sticky;
+	top: 0;
+	z-index: 5; /* Lower than navbar (typically 10+) */
+	background-color: #f3f4f6;
+}
+
+/* Ensure header cells maintain background */
+.stickyTableHeader th {
+	background-color: #f3f4f6;
+}
+
+/* Sticky columns within the sticky header need higher z-index */
+.stickyTableHeader .stickyCol {
+	z-index: 6;
+	background-color: #f3f4f6;
+}
+
+/* Fixed submit button - always visible at bottom */
+.submitButtonFixed {
+	position: fixed;
+	bottom: 0;
+	left: 0;
+	right: 0;
+	padding: 1rem;
+	background: linear-gradient(to top, rgba(0, 0, 0, 0.8) 0%, rgba(0, 0, 0, 0.6) 70%, transparent 100%);
+	backdrop-filter: blur(10px);
+	z-index: 30; /* Below navbar, above content */
+	display: flex;
+	justify-content: center;
+	align-items: center;
+}
+
+.submitButtonFixed button {
+	width: 100%;
+	max-width: 600px;
+	padding: 1rem 2rem;
+	background: linear-gradient(135deg, #3b82f6, #1d4ed8);
+	color: white;
+	border: none;
+	border-radius: 12px;
+	font-size: 1.125rem;
+	font-weight: 600;
+	cursor: pointer;
+	transition: all 0.3s ease;
+	box-shadow: 0 4px 12px rgba(59, 130, 246, 0.4);
+}
+
+.submitButtonFixed button:hover:not(:disabled) {
+	transform: translateY(-2px);
+	box-shadow: 0 6px 20px rgba(59, 130, 246, 0.6);
+	background: linear-gradient(135deg, #2563eb, #1e40af);
+}
+
+.submitButtonFixed button:active:not(:disabled) {
+	transform: translateY(0);
+}
+
+.submitButtonFixed button:disabled {
+	opacity: 0.5;
+	cursor: not-allowed;
+	background: linear-gradient(135deg, #6b7280, #4b5563);
+}
+
+@media (max-width: 768px) {
+	.submitButtonFixed {
+		padding: 0.75rem;
+	}
+	
+	.submitButtonFixed button {
+		font-size: 1rem;
+		padding: 0.875rem 1.5rem;
+	}
+}

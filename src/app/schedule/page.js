@@ -79,7 +79,6 @@ export default function SchedulePage() {
 	const [availableMonths, setAvailableMonths] = useState([]);
 	const [currentMonth, setCurrentMonth] = useState('');
 	const [activeTab, setActiveTab] = useState('TSA');
-	const [isAtBottom, setIsAtBottom] = useState(false);
 	const [selectedDuties, setSelectedDuties] = useState([]);
 	const [highlightedDates, setHighlightedDates] = useState({});
 	const [scheduleLoading, setScheduleLoading] = useState(false);
@@ -675,7 +674,7 @@ export default function SchedulePage() {
 	}, []);
 
 	const renderTableHeader = useCallback(() => (
-		<thead>
+		<thead className={styles.stickyTableHeader}>
 			<tr className={styles.tableHeader}>
 				{!isMobile && (
 					<th className={styles.stickyCol + ' ' + styles.employeeId}>員編</th>
@@ -758,53 +757,6 @@ export default function SchedulePage() {
 			})}
 		</tr>
 	), [scheduleData.allDates, selectedDuties, formatDutyText, getDutyBackgroundColor, getDutyFontSize, getEmployeesWithSameDuty, generateTooltipContent, handleDutySelect, isMobile]);
-
-	// Scroll effects
-	useEffect(() => {
-		let ticking = false;
-		
-		const handleScroll = () => {
-			if (!ticking) {
-				requestAnimationFrame(() => {
-					const scrollTop = window.pageYOffset || document.documentElement.scrollTop;
-					const windowHeight = window.innerHeight;
-					const documentHeight = Math.max(
-						document.body.scrollHeight,
-						document.body.offsetHeight,
-						document.documentElement.clientHeight,
-						document.documentElement.scrollHeight,
-						document.documentElement.offsetHeight
-					);
-					
-					const distanceFromBottom = documentHeight - (scrollTop + windowHeight);
-					const threshold = isMobile ? 80 : 200;
-					const newIsAtBottom = distanceFromBottom <= threshold;
-					
-					if (newIsAtBottom !== isAtBottom) {
-						setIsAtBottom(newIsAtBottom);
-					}
-					ticking = false;
-				});
-				ticking = true;
-			}
-		};
-
-		let scrollTimeout;
-		const throttledHandleScroll = () => {
-			if (scrollTimeout) clearTimeout(scrollTimeout);
-			scrollTimeout = setTimeout(handleScroll, 50);
-		};
-
-		window.addEventListener('scroll', throttledHandleScroll, { passive: true });
-		window.addEventListener('resize', handleScroll, { passive: true });
-		handleScroll();
-
-		return () => {
-			window.removeEventListener('scroll', throttledHandleScroll);
-			window.removeEventListener('resize', handleScroll);
-			if (scrollTimeout) clearTimeout(scrollTimeout);
-		};
-	}, [isMobile, isAtBottom]);
 
 	// Table sync effects
 	useEffect(() => {
@@ -1010,29 +962,16 @@ export default function SchedulePage() {
 							/>
 						)}
 
-						{!isAtBottom && (
-							<div className={styles.submitButtonFullWidth}>
-								<button 
-									className={styles.dutyChangeButtonFull}
-									onClick={handleDutyChangeClick}
-									disabled={scheduleLoading}
-								>
-									提交換班申請 ({selectedDuties.length} 項選擇)
-								</button>
-							</div>
-						)}
-						
-						{isAtBottom && (
-							<div className={styles.submitButtonInline}>
-								<button 
-									className={styles.dutyChangeButtonFull}
-									onClick={handleDutyChangeClick}
-									disabled={scheduleLoading}
-								>
-									提交換班申請 ({selectedDuties.length} 項選擇)
-								</button>
-							</div>
-						)}
+						{/* Fixed submit button - always visible at bottom */}
+						<div className={styles.submitButtonFixed}>
+							<button 
+								className={styles.dutyChangeButtonFull}
+								onClick={handleDutyChangeClick}
+								disabled={scheduleLoading || selectedDuties.length === 0}
+							>
+								提交換班申請 ({selectedDuties.length} 項選擇)
+							</button>
+						</div>
 					</>
 				) : (
 					<div className={styles.noDataContainer}>
