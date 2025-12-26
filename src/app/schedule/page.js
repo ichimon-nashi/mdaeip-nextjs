@@ -109,8 +109,16 @@ export default function SchedulePage() {
 				console.log('Loaded months:', months);
 				
 				const sortedMonths = months.sort((a, b) => {
-					const monthA = parseInt(a.match(/(\d+)月/)?.[1] || '0');
-					const monthB = parseInt(b.match(/(\d+)月/)?.[1] || '0');
+					// Extract year and month from format "2026年01月"
+					const yearA = parseInt(a.match(/(\d{4})年/)?.[1] || '0');
+					const monthA = parseInt(a.match(/(\d{2})月/)?.[1] || '0');
+					const yearB = parseInt(b.match(/(\d{4})年/)?.[1] || '0');
+					const monthB = parseInt(b.match(/(\d{2})月/)?.[1] || '0');
+					
+					// Sort by year first, then by month
+					if (yearA !== yearB) {
+						return yearA - yearB;
+					}
 					return monthA - monthB;
 				});
 				
@@ -222,7 +230,9 @@ export default function SchedulePage() {
 						const firstSchedule = allSchedules[0];
 						if (firstSchedule && firstSchedule.days) {
 							const dates = Object.keys(firstSchedule.days).sort();
-							const currentYear = currentMonth.includes('2025') ? 2025 : new Date().getFullYear();
+							// Extract year from month string (e.g., "2026年01月")
+							const yearMatch = currentMonth.match(/(\d{4})年/);
+							const currentYear = yearMatch ? parseInt(yearMatch[1]) : new Date().getFullYear();
 							const monthNumber = currentMonth.match(/(\d{2})月/)?.[1];
 							
 							if (monthNumber) {
