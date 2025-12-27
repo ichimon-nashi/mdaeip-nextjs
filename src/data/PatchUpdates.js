@@ -124,4 +124,9 @@ export const patchUpdates = [
 		appName: "任務互換系統",
 		updateInfo: ["把png輸出檔改成pdf","換班除了會儲存pdf檔，也會自動寄送到管派"],
 	},
+		{
+		date: "2025-12-27",
+		appName: "EIP系統",
+		updateInfo: ["排除iOS smtp寄送信件信件問題", "購買hankengo.com網域"],
+	},
 ];
