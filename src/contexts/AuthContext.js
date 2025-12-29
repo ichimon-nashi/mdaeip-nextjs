@@ -60,7 +60,8 @@ export const AuthProvider = ({ children }) => {
 		});
 
 		const isLoginPage = pathname === '/';
-		const isSchedulePage = pathname === '/schedule';
+		// const isSchedulePage = pathname === '/schedule';
+		const isSchedulePage = pathname === '/dashboard';
 
 		if (isLoginPage && user) {
 			console.log("👤 User logged in, redirecting to schedule");

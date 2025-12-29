@@ -114,7 +114,7 @@ export const patchUpdates = [
 		appName: "任務互換系統",
 		updateInfo: ["增加管理者用資料庫管理，可遠端增加班表&派遣表"],
 	},
-		{
+	{
 		date: "2025-09-29",
 		appName: "休時檢視器",
 		updateInfo: ["自動帶入使用者班表", "休時不足出現比較明顯錯誤訊息"],
@@ -122,11 +122,19 @@ export const patchUpdates = [
 	{
 		date: "2025-12-05",
 		appName: "任務互換系統",
-		updateInfo: ["把png輸出檔改成pdf","換班除了會儲存pdf檔，也會自動寄送到管派"],
+		updateInfo: [
+			"把png輸出檔改成pdf",
+			"換班除了會儲存pdf檔，也會自動寄送到管派",
+		],
 	},
-		{
+	{
 		date: "2025-12-27",
 		appName: "EIP系統",
 		updateInfo: ["排除iOS smtp寄送信件信件問題", "購買hankengo.com網域"],
+	},
+		{
+		date: "2025-12-29",
+		appName: "EIP系統",
+		updateInfo: ["增加儀表顯示個人班表", "調整文字跟圖形"],
 	},
 ];

@@ -776,14 +776,14 @@ function DutyChangeContent() {
 						"Email sent successfully:",
 						emailResult.messageId
 					);
-					toast("✅ 換班單已產生並寄送到管派組！");
+					toast("✅ 換班單已成功寄送!請15分後確認信箱！");
 				} else {
 					console.error("Email sending failed:", emailResult.error);
-					toast("⚠️ 換班單已產生，但郵件發送失敗");
+					toast("⚠️ 郵件傳送失敗");
 				}
 			} catch (emailError) {
 				console.error("Error sending email:", emailError);
-				toast("⚠️ 換班單已產生，但郵件發送失敗");
+				toast("⚠️ 郵件重送失敗");
 			}
 
 			setTimeout(() => {

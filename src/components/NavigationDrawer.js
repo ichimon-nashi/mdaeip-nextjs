@@ -4,7 +4,7 @@ import { useRouter } from 'next/navigation';
 import { usePathname } from 'next/navigation';
 import { useEffect } from 'react';
 import Image from 'next/image';
-import { X, Calendar, Clock, Users, Settings, MapPin, FileText, Utensils, NotebookPen, Crown, Shield, User, Star, Database } from 'lucide-react';
+import { X, Calendar, Clock, Users, Settings, MapPin, FileText, Utensils, NotebookPen, Crown, Shield, User, Star, Database, TreePalm  } from 'lucide-react';
 import styles from '../styles/NavigationDrawer.module.css';
 
 const NavigationDrawer = ({ isOpen, onClose, userDetails }) => {
@@ -95,9 +95,18 @@ const NavigationDrawer = ({ isOpen, onClose, userDetails }) => {
     };
 
     const menuItems = [
+                {
+        id: 'dashboard',
+        title: '我的班表',
+        description: '個人班表總覽',
+        icon: <User size={24} />,  
+        path: '/dashboard',
+        color: '#6d3b47',
+        requiredLevel: 1
+        },
         {
             id: 'duty-roster',
-            title: '任務交換系統',
+            title: '換班系統',
             description: '班表查詢&換班申請',
             icon: <Calendar size={24} />,
             path: '/schedule',
@@ -117,7 +126,7 @@ const NavigationDrawer = ({ isOpen, onClose, userDetails }) => {
             id: 'vacation-planner',
             title: 'GDay劃假系統',
             description: '指定休假申請',
-            icon: <MapPin size={24} />,
+            icon: <TreePalm size={24} />,
             path: '/gday',
             color: '#7c3aed',
             requiredLevel: 1
@@ -146,7 +155,7 @@ const NavigationDrawer = ({ isOpen, onClose, userDetails }) => {
             description: 'APP更新項目',
             icon: <FileText size={24} />,
             path: '/patch-notes',
-            color: '#9bafd9',
+            color: '#99582a',
             requiredLevel: 1
         }
     ];
@@ -286,7 +295,7 @@ const NavigationDrawer = ({ isOpen, onClose, userDetails }) => {
                 {/* Footer */}
                 <div className={styles.drawerFooter}>
                     <div className={styles.appVersion}>
-                        豪神APP v3.3.1
+                        豪神APP v3.4.2
                     </div>
                 </div>
             </div>
