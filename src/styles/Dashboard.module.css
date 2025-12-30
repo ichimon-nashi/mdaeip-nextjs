@@ -2,7 +2,7 @@
 
 .dashboardContainer {
 	min-height: 100vh;
-	padding-bottom: 2rem;
+	padding-bottom: 0;
 }
 
 /* Month and Time Header */
@@ -50,6 +50,12 @@
 	box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
 	scrollbar-width: none;
 	-ms-overflow-style: none;
+	cursor: grab;
+	user-select: none;
+}
+
+.dateScrollContainer:active {
+	cursor: grabbing;
 }
 
 .dateScrollContainer::-webkit-scrollbar {
@@ -185,8 +191,9 @@
 /* Vertical Schedule List */
 .scheduleList {
 	padding: 0.5rem;
+	padding-bottom: 2rem;
 	margin-top: 6rem;
-	overflow-x: auto;
+	overflow-x: hidden;
 	overflow-y: auto;
 	-webkit-overflow-scrolling: touch;
 	height: calc(100vh - 6rem);
@@ -208,8 +215,8 @@
 @media (min-width: 768px) {
 	.scheduleList {
 		padding: 1rem 2rem;
+		padding-bottom: 2rem;
 		width: 85%;
-		/* Removed max-width to allow full 85% width */
 	}
 }
 
@@ -498,7 +505,7 @@
 
 	.scheduleList {
 		padding: 1rem 2rem;
-		max-height: calc(100vh - 14rem);
+		padding-bottom: 2rem;
 	}
 
 	.scheduleItem {

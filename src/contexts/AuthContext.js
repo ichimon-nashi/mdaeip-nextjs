@@ -60,13 +60,12 @@ export const AuthProvider = ({ children }) => {
 		});
 
 		const isLoginPage = pathname === '/';
-		// const isSchedulePage = pathname === '/schedule';
-		const isSchedulePage = pathname === '/dashboard';
+		const isDashboardPage = pathname === '/dashboard';
 
 		if (isLoginPage && user) {
-			console.log("👤 User logged in, redirecting to schedule");
-			router.replace('/schedule');
-		} else if (isSchedulePage && !user) {
+			console.log("👤 User logged in, redirecting to dashboard");
+			router.replace('/dashboard');
+		} else if (isDashboardPage && !user) {
 			console.log("🔒 No user, redirecting to login");
 			router.replace('/');
 		}

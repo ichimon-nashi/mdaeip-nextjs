@@ -8,11 +8,9 @@ import toast from 'react-hot-toast';
 import styles from '../../styles/Dashboard.module.css';
 import { 
 	getEmployeeSchedule, 
-	getAvailableMonths, 
-	getAllSchedulesForMonth,
-	getEmployeeById
+	getAllSchedulesForMonth
 } from '../../lib/DataRoster';
-import { flightDutyHelpers } from '../../lib/supabase';
+import { supabase, flightDutyHelpers } from '../../lib/supabase';
 
 export default function DashboardPage() {
 	const { user, loading } = useAuth();
@@ -27,6 +25,7 @@ export default function DashboardPage() {
 	const [currentTime, setCurrentTime] = useState('');
 	const [showReturnToToday, setShowReturnToToday] = useState(false);
 	const [activeDate, setActiveDate] = useState(null);
+	const [isManualScrolling, setIsManualScrolling] = useState(false);
 
 	// Update current time every minute
 	useEffect(() => {
@@ -42,50 +41,68 @@ export default function DashboardPage() {
 		return () => clearInterval(interval);
 	}, []);
 
-	// Get duty background color (same logic as schedule page)
+	// Get month color for visual distinction
+	const getMonthColor = useCallback((dateString) => {
+		const date = new Date(dateString);
+		const month = date.getMonth(); // 0-11
+		
+		// Subtle alternating colors by month
+		const colors = [
+			'#f0f9ff', // January - light blue
+			'#fef3c7', // February - light yellow
+			'#f0fdf4', // March - light green
+			'#fef2f2', // April - light red
+			'#f5f3ff', // May - light purple
+			'#fff7ed', // June - light orange
+			'#ecfeff', // July - light cyan
+			'#fdf4ff', // August - light pink
+			'#f0fdfa', // September - light teal
+			'#fefce8', // October - light lime
+			'#eff6ff', // November - light indigo
+			'#fdf2f8', // December - light rose
+		];
+		
+		return colors[month];
+	}, []);
+
+	// Get duty background color
 	const getDutyBackgroundColor = useCallback((dutyString) => {
-		if (!dutyString || dutyString === 'OFF') return '#dcfce7'; // Light green for OFF
-		if (dutyString.includes('RESV')) return '#fef3c7'; // Light yellow for RESV
-		if (dutyString.includes('ANNUAL') || dutyString.includes('年假')) return '#dbeafe'; // Light blue for leave
-		if (dutyString.includes('福利') || dutyString.includes('WELFARE')) return '#fecaca'; // Light red for welfare
-		return '#e0e7ff'; // Light indigo for flight duties
+		if (!dutyString || dutyString === 'OFF') return '#dcfce7';
+		if (dutyString.includes('RESV')) return '#fef3c7';
+		if (dutyString.includes('ANNUAL') || dutyString.includes('年假')) return '#dbeafe';
+		if (dutyString.includes('福利') || dutyString.includes('WELFARE')) return '#fecaca';
+		return '#e0e7ff';
 	}, []);
 
 	// Get base color for crewmate badges
 	const getBaseColor = (base) => {
 		switch(base) {
 			case 'TSA':
-				return { bg: '#fee2e2', text: '#991b1b' }; // Red
+				return { bg: '#fee2e2', text: '#991b1b' };
 			case 'RMQ':
-				return { bg: '#d1fae5', text: '#065f46' }; // Green
+				return { bg: '#d1fae5', text: '#065f46' };
 			case 'KHH':
-				return { bg: '#dbeafe', text: '#1e40af' }; // Blue
+				return { bg: '#dbeafe', text: '#1e40af' };
 			default:
-				return { bg: '#f3f4f6', text: '#374151' }; // Gray
+				return { bg: '#f3f4f6', text: '#374151' };
 		}
 	};
 
-	// Parse flight duty details (same logic as schedule page)
+	// Parse flight duty details
 	const parseFlightDutyDetails = useCallback((flightDutyString) => {
-		console.log('>>> parseFlightDutyDetails input:', JSON.stringify(flightDutyString));
-		
 		if (!flightDutyString || flightDutyString.trim() === '') {
 			return null;
 		}
 
-		// Parse newline-separated format: "A2\n06:35:00-12:55:00\nAM"
 		const lines = flightDutyString.split('\n').map(line => line.trim()).filter(line => line);
-		console.log('>>> Parsed lines:', lines);
 		
 		if (lines.length >= 3) {
 			const dutyCode = lines[0];
 			const timeRange = lines[1];
 			const dutyType = lines[2];
 			
-			// Parse time range "06:35:00-12:55:00" or "06:35-12:55"
 			let timeMatch = timeRange.match(/^(\d{2}:\d{2}:\d{2})-(\d{2}:\d{2}:\d{2})$/);
 			if (!timeMatch) {
-				// Try without seconds
 				timeMatch = timeRange.match(/^(\d{2}:\d{2})-(\d{2}:\d{2})$/);
 			}
 			
@@ -93,27 +110,23 @@ export default function DashboardPage() {
 			let endTime = null;
 			
 			if (timeMatch) {
-				reportingTime = timeMatch[1].substring(0, 5); // Convert "06:35:00" to "06:35"
-				endTime = timeMatch[2].substring(0, 5); // Convert "12:55:00" to "12:55"
+				reportingTime = timeMatch[1].substring(0, 5);
+				endTime = timeMatch[2].substring(0, 5);
 			}
 			
-			// Calculate total sectors (simplified estimation based on duty code)
 			let totalSectors = 1;
 			if (dutyCode.includes('2')) totalSectors = 2;
 			else if (dutyCode.includes('3')) totalSectors = 3;
 			else if (dutyCode.includes('4')) totalSectors = 4;
 			
-			const result = {
+			return {
 				dutyCode: dutyCode,
 				reportingTime: reportingTime,
 				endTime: endTime,
 				dutyType: dutyType,
 				totalSectors: totalSectors
 			};
-			console.log('>>> 3-line format result:', result);
-			return result;
 		} else if (lines.length === 2) {
-			// Format might be: "H2\n06:35:00-12:55:00" (missing dutyType)
 			const dutyCode = lines[0];
 			const timeRange = lines[1];
 			
@@ -135,41 +148,23 @@ export default function DashboardPage() {
 			else if (dutyCode.includes('3')) totalSectors = 3;
 			else if (dutyCode.includes('4')) totalSectors = 4;
 			
-			const result = {
+			return {
 				dutyCode: dutyCode,
 				reportingTime: reportingTime,
 				endTime: endTime,
 				dutyType: null,
 				totalSectors: totalSectors
 			};
-			console.log('>>> 2-line format result:', result);
-			return result;
 		}
 		
-		// If no specific pattern matches (single line like "H2", "OD", "休"), return the original string as duty code
-		const result = {
+		return {
 			dutyCode: flightDutyString,
 			reportingTime: null,
 			endTime: null,
 			dutyType: null,
 			totalSectors: null
 		};
-		console.log('>>> Single-line format result:', result);
-		return result;
 	}, []);
-
-	// Get employees with same duty (same logic as schedule page)
-	const getEmployeesWithSameDuty = useCallback((date, duty, allSchedules) => {
-		if (!duty || duty === 'OFF' || !allSchedules) return [];
-		
-		return allSchedules
-			.filter(schedule => {
-				if (schedule.employeeID === user?.id) return false;
-				const scheduleDuty = schedule.days?.[date];
-				return scheduleDuty && scheduleDuty.toString() === duty.toString();
-			})
-			.map(schedule => schedule.name);
-	}, [user?.id]);
 
 	// Redirect handling
 	useEffect(() => {
@@ -189,78 +184,90 @@ export default function DashboardPage() {
 		try {
 			setIsLoading(true);
 
-			// Get available months
-			const availableMonths = await getAvailableMonths();
-			const sortedMonths = availableMonths.sort((a, b) => {
-				const yearA = parseInt(a.match(/(\d{4})年/)?.[1] || '0');
-				const monthA = parseInt(a.match(/(\d{2})月/)?.[1] || '0');
-				const yearB = parseInt(b.match(/(\d{4})年/)?.[1] || '0');
-				const monthB = parseInt(b.match(/(\d{2})月/)?.[1] || '0');
-				
-				if (yearA !== yearB) return yearA - yearB;
-				return monthA - monthB;
+			// Determine which months to load (1 previous + current + 2 future)
+			const today = new Date();
+			const todayYear = today.getFullYear();
+			const todayMonth = today.getMonth(); // 0-11
+			
+			const monthsToLoad = [];
+			for (let i = -1; i <= 2; i++) {
+				const targetDate = new Date(todayYear, todayMonth + i, 1);
+				const year = targetDate.getFullYear();
+				const month = targetDate.getMonth() + 1;
+				const monthString = `${year}年${String(month).padStart(2, '0')}月`;
+				monthsToLoad.push(monthString);
+			}
+			
+			console.log('Loading months:', monthsToLoad);
+
+			// Load all 4 months in parallel using DataRoster
+			const schedulePromises = monthsToLoad.map(month => 
+				getAllSchedulesForMonth(month)
+			);
+			
+			const allMonthsSchedules = await Promise.all(schedulePromises);
+			
+			// Track which months have data in database
+			const monthsWithData = new Set();
+			allMonthsSchedules.forEach((monthSchedules, idx) => {
+				if (monthSchedules && monthSchedules.length > 0) {
+					monthsWithData.add(monthsToLoad[idx]);
+				}
+			});
+			
+			console.log('Months with database records:', Array.from(monthsWithData));
+			
+			// Merge user schedules from all months
+			const allUserSchedules = {};
+			allMonthsSchedules.forEach((monthSchedules, idx) => {
+				const month = monthsToLoad[idx];
+				const userSchedule = monthSchedules.find(s => s.employeeID === user.id);
+				if (userSchedule && userSchedule.days) {
+					Object.assign(allUserSchedules, userSchedule.days);
+				}
 			});
 
-			const latestMonth = sortedMonths.length > 0 ? sortedMonths[sortedMonths.length - 1] : '';
-			setCurrentMonth(latestMonth);
-
-			if (!latestMonth) {
-				setScheduleData([]);
-				setIsLoading(false);
-				return;
-			}
-
-			// Get user's schedule for ALL available months
-			const allUserSchedules = {};
-			for (const month of sortedMonths) {
-				const monthSchedule = await getEmployeeSchedule(user.id, month);
-				if (monthSchedule && monthSchedule.days) {
-					Object.assign(allUserSchedules, monthSchedule.days);
-				}
-			}
-
-			// Get all schedules for finding crewmates - need to load for ALL months
+			// Organize all schedules by month
 			const allSchedulesByMonth = {};
-			for (const month of sortedMonths) {
-				const monthSchedules = await getAllSchedulesForMonth(month);
-				if (monthSchedules && monthSchedules.length > 0) {
-					allSchedulesByMonth[month] = monthSchedules;
-				}
-			}
+			allMonthsSchedules.forEach((schedules, idx) => {
+				const month = monthsToLoad[idx];
+				allSchedulesByMonth[month] = schedules;
+			});
 
-			// Generate date range: all existing dates PLUS 6 months forward from today
-			const existingDates = Object.keys(allUserSchedules);
-			const today = new Date();
-			const sixMonthsLater = new Date(today);
-			sixMonthsLater.setMonth(sixMonthsLater.getMonth() + 6);
+			console.log('All user schedules merged:', Object.keys(allUserSchedules).length, 'dates');
+
+			// Generate optimized date range
+			const startDate = new Date(todayYear, todayMonth - 1, 1);
+			const endDate = new Date(todayYear, todayMonth + 3, 0);
 			
-			// Create set of all dates to show (existing + future)
-			const allDatesToShow = new Set(existingDates);
+			console.log('Date range:', startDate.toISOString().split('T')[0], 'to', endDate.toISOString().split('T')[0]);
 			
-			// Add future dates up to 6 months
-			for (let d = new Date(today); d <= sixMonthsLater; d.setDate(d.getDate() + 1)) {
+			const allDatesToShow = new Set();
+			for (let d = new Date(startDate); d <= endDate; d.setDate(d.getDate() + 1)) {
 				const dateStr = d.toISOString().split('T')[0];
 				allDatesToShow.add(dateStr);
 			}
 			
-			// Convert to sorted array
 			const sortedDates = Array.from(allDatesToShow).sort();
+			console.log('Total dates:', sortedDates.length);
 
-			// Transform schedule data - need to fetch flight details async
-			const schedulePromises = sortedDates.map(async (date) => {
+			const latestMonth = monthsToLoad[monthsToLoad.length - 1];
+			setCurrentMonth(latestMonth);
+
+			// Transform schedule data - with async flight details
+			const dataPromises = sortedDates.map(async (date) => {
 				const duty = allUserSchedules[date];
 				const dutyStr = duty?.toString() || '';
 				
-				// Enhanced logging to debug duty structure
-				if (date === '2026-01-01' || date === '2026-01-02') {
-					console.log(`=== Debug for ${date} ===`);
-					console.log('duty:', duty);
-					console.log('typeof duty:', typeof duty);
-					console.log('dutyStr:', dutyStr);
-					console.log('duty keys:', duty ? Object.keys(duty) : 'no duty');
-				}
+				// Determine which month this date belongs to
+				const dateObj = new Date(date);
+				const dateYear = dateObj.getFullYear();
+				const dateMonth = dateObj.getMonth() + 1;
+				const dateMonthString = `${dateYear}年${String(dateMonth).padStart(2, '0')}月`;
 				
-				// Parse duty details
+				// Check if this month has database records
+				const monthHasData = monthsWithData.has(dateMonthString);
+				
 				let dutyCode = '';
 				let reportingTime = '';
 				let endTime = '';
@@ -271,30 +278,16 @@ export default function DashboardPage() {
 				let hasData = !!duty;
 
 				if (!duty) {
-					// Check if this is a future date beyond latest month or a date in existing months
-					// For dates in existing months with no data: show 空
-					// For dates beyond existing data: show N/A
-					const dateObj = new Date(date);
-					const latestMonthMatch = latestMonth.match(/(\d{4})年(\d{2})月/);
-					if (latestMonthMatch) {
-						const latestYear = parseInt(latestMonthMatch[1]);
-						const latestMonthNum = parseInt(latestMonthMatch[2]);
-						const latestMonthDate = new Date(latestYear, latestMonthNum, 0); // Last day of latest month
-						
-						if (dateObj > latestMonthDate) {
-							// Future date beyond existing data
-							dutyCode = 'N/A';
-							hasData = false;
-						} else {
-							// Date within existing months but no duty assigned - 空
-							dutyCode = '空';
-							hasData = true; // Mark as hasData so we can check for crewmates
-							reportingTime = '無';
-							endTime = '無';
-						}
-					} else {
+					// If month has no database records at all, show N/A
+					if (!monthHasData) {
 						dutyCode = 'N/A';
 						hasData = false;
+					} else {
+						// Month has data but this date has no duty - 空
+						dutyCode = '空';
+						hasData = true;
+						reportingTime = '無';
+						endTime = '無';
 					}
 				} else if (!dutyStr || dutyStr === 'OFF') {
 					isDutyOff = true;
@@ -305,7 +298,6 @@ export default function DashboardPage() {
 					reportingTime = '00:00';
 					endTime = '23:59';
 				} else {
-					// Parse flight duty
 					const parsedDuty = parseFlightDutyDetails(dutyStr);
 					if (parsedDuty) {
 						dutyCode = parsedDuty.dutyCode || dutyStr;
@@ -317,34 +309,31 @@ export default function DashboardPage() {
 						dutyCode = dutyStr;
 					}
 					
-					// Check for special duty types
 					const leaveTypes = ['A/L', '例', '休', 'G', '福補', '年假', 'ANNUAL'];
 					const isLeave = leaveTypes.some(type => dutyCode.includes(type));
 					
 					const officeTypes = ['OD', '會', '課'];
 					const isOffice = officeTypes.some(type => dutyCode.startsWith(type));
 					
-					// Set times based on duty type
 					if (isLeave) {
-						// Leave types show N/A
 						reportingTime = 'N/A';
 						endTime = 'N/A';
 					} else if (isOffice) {
-						// Office duties: 08:30 - 17:30
 						reportingTime = reportingTime || '08:30';
 						endTime = endTime || '17:30';
 					}
 					
-					// If we don't have times yet and it's a flight duty, try to fetch from helper
-					if (!reportingTime && !endTime && !isLeave && dutyCode && dutyCode !== 'OFF' && dutyCode !== 'RESV' && dutyCode !== '空' && dutyCode !== 'N/A') {
+					// Fetch flight details if times are still missing
+					if ((!reportingTime || !endTime) && !isLeave && !isOffice && dutyCode && dutyCode !== 'OFF' && dutyCode !== 'RESV' && dutyCode !== '空' && dutyCode !== 'N/A') {
 						try {
-							// Extract month from date for the API call
 							const dateObj = new Date(date);
 							const year = dateObj.getFullYear();
 							const month = dateObj.getMonth() + 1;
 							const monthString = `${year}年${String(month).padStart(2, '0')}月`;
 							
+							// Use the existing helper function which handles the complex query logic
 							const flightDetails = await flightDutyHelpers.getFlightDutyDetails(dutyCode, date, monthString);
+							
 							if (flightDetails && flightDetails.data) {
 								const details = flightDetails.data;
 								if (details.reporting_time) {
@@ -356,7 +345,6 @@ export default function DashboardPage() {
 								if (details.duty_type) {
 									dutyType = details.duty_type;
 								}
-								console.log(`Fetched flight details for ${dutyCode} on ${date} (${monthString}):`, details);
 							}
 						} catch (error) {
 							console.error(`Error fetching flight details for ${dutyCode} on ${date}:`, error);
@@ -364,16 +352,8 @@ export default function DashboardPage() {
 					}
 				}
 
-				// Find crewmates with same duty (with base info)
-				// Determine which month this date belongs to
-				const dateObj = new Date(date);
-				const year = dateObj.getFullYear();
-				const month = dateObj.getMonth() + 1;
-				const monthString = `${year}年${String(month).padStart(2, '0')}月`;
-				
-				const monthSchedules = allSchedulesByMonth[monthString] || [];
-				
-				// For 空 duties (empty), check for others who also have empty duty on same date
+				// Find crewmates
+				const monthSchedules = allSchedulesByMonth[dateMonthString] || [];
 				const isEmptyDuty = dutyCode === '空';
 				
 				const crewmates = (isDutyOff || (dutyCode === 'N/A')) ? [] : monthSchedules
@@ -384,16 +364,14 @@ export default function DashboardPage() {
 						const crewDutyStr = crewDuty?.toString() || '';
 						
 						if (isEmptyDuty) {
-							// For 空, match others who also have no duty (empty or null)
 							return !crewDuty || crewDutyStr === '';
 						} else {
-							// For regular duties, match exact duty string
 							return crewDuty && crewDutyStr === dutyStr;
 						}
 					})
 					.map(schedule => ({
 						name: schedule.name,
-						base: schedule.base || 'TSA'
+						base: schedule.base
 					}));
 
 				return {
@@ -410,12 +388,8 @@ export default function DashboardPage() {
 					rawDuty: dutyStr,
 				};
 			});
-			
-			const scheduleArray = await Promise.all(schedulePromises);
-			
-			console.log('Total schedule items:', scheduleArray.length);
-			console.log('Date range:', scheduleArray[0]?.date, 'to', scheduleArray[scheduleArray.length - 1]?.date);
-			console.log('Sample dates:', scheduleArray.slice(0, 10).map(s => s.date));
+
+			const scheduleArray = await Promise.all(dataPromises);
 
 			setScheduleData(scheduleArray);
 		} catch (error) {
@@ -431,34 +405,26 @@ export default function DashboardPage() {
 		if (scheduleData.length === 0 || !scheduleScrollRef.current || !dateScrollRef.current) return;
 
 		const today = new Date().toISOString().split('T')[0];
+		setIsManualScrolling(true);
 		setActiveDate(today);
 		
-		console.log('Scrolling to today:', today);
-		
-		// Small delay to ensure DOM is ready
 		setTimeout(() => {
-			// Scroll vertical list to show today at visible position
 			const scheduleItems = scheduleScrollRef.current.querySelectorAll('[data-date]');
 			const todayItem = Array.from(scheduleItems).find(
 				el => el.getAttribute('data-date') === today
 			);
 			
 			if (todayItem) {
-				// Account for fixed horizontal scroll header + extra space on desktop
-				const isDesktop = window.innerWidth >= 768;
-				const fixedHeaderHeight = 130; // horizontal scroll + top nav
-				const extraSpace = isDesktop ? 24 : 30; // More space on mobile to prevent cutoff
-				const scrollPosition = todayItem.offsetTop - fixedHeaderHeight - extraSpace;
-				
-				console.log('Today item offsetTop:', todayItem.offsetTop, 'Scroll to:', scrollPosition, 'isDesktop:', isDesktop);
+				const itemHeight = todayItem.offsetHeight;
+				const viewportCenter = window.innerHeight / 2;
+				const targetScrollTop = todayItem.offsetTop + (itemHeight / 2) - viewportCenter;
 				
 				scheduleScrollRef.current.scrollTo({
-					top: Math.max(0, scrollPosition),
+					top: Math.max(0, targetScrollTop),
 					behavior: 'smooth'
 				});
 			}
 			
-			// Scroll horizontal dates to center today - give extra delay for DOM
 			setTimeout(() => {
 				const dateItems = dateScrollRef.current.querySelectorAll('[data-date]');
 				const todayDateItem = Array.from(dateItems).find(
@@ -471,18 +437,65 @@ export default function DashboardPage() {
 					const containerWidth = dateScrollRef.current.clientWidth;
 					const scrollTarget = dateItemLeft - (containerWidth / 2) + (dateItemWidth / 2);
 					
-					console.log('Initial horizontal scroll to today:', today, 'scrollTarget:', scrollTarget);
-					
 					dateScrollRef.current.scrollTo({
 						left: Math.max(0, scrollTarget),
 						behavior: 'smooth'
 					});
 				}
+				
+				setTimeout(() => {
+					setIsManualScrolling(false);
+				}, 800);
 			}, 100);
 		}, 300);
 	}, [scheduleData]);
 
-	// Synchronized horizontal scrolling with proper vertical-to-horizontal sync
+	// Mouse drag for horizontal scroll
+	useEffect(() => {
+		const dateScroll = dateScrollRef.current;
+		if (!dateScroll) return;
+
+		let isDown = false;
+		let startX;
+		let scrollLeft;
+
+		const handleMouseDown = (e) => {
+			if (e.target.closest('[data-date]')) return;
+			isDown = true;
+			startX = e.pageX - dateScroll.offsetLeft;
+			scrollLeft = dateScroll.scrollLeft;
+		};
+
+		const handleMouseLeave = () => {
+			isDown = false;
+		};
+
+		const handleMouseUp = () => {
+			isDown = false;
+		};
+
+		const handleMouseMove = (e) => {
+			if (!isDown) return;
+			e.preventDefault();
+			const x = e.pageX - dateScroll.offsetLeft;
+			const walk = (x - startX) * 2;
+			dateScroll.scrollLeft = scrollLeft - walk;
+		};
+
+		dateScroll.addEventListener('mousedown', handleMouseDown);
+		dateScroll.addEventListener('mouseleave', handleMouseLeave);
+		dateScroll.addEventListener('mouseup', handleMouseUp);
+		dateScroll.addEventListener('mousemove', handleMouseMove);
+
+		return () => {
+			dateScroll.removeEventListener('mousedown', handleMouseDown);
+			dateScroll.removeEventListener('mouseleave', handleMouseLeave);
+			dateScroll.removeEventListener('mouseup', handleMouseUp);
+			dateScroll.removeEventListener('mousemove', handleMouseMove);
+		};
+	}, []);
+
+	// Scroll sync
 	useEffect(() => {
 		const dateScroll = dateScrollRef.current;
 		const scheduleScroll = scheduleScrollRef.current;
@@ -490,61 +503,43 @@ export default function DashboardPage() {
 		if (!dateScroll || !scheduleScroll) return;
 
 		let syncTimeout = null;
-		let isUpdating = false;
 
-		// Vertical schedule scroll -> Horizontal date scroll
 		const syncScheduleToDate = () => {
-			if (isUpdating) return;
-			isUpdating = true;
+			if (isManualScrolling) return;
 
 			clearTimeout(syncTimeout);
 			syncTimeout = setTimeout(() => {
-				// Handle vertical scroll to update horizontal date position
 				const scheduleItems = scheduleScroll.querySelectorAll('[data-date]');
-				if (scheduleItems.length === 0) {
-					isUpdating = false;
-					return;
-				}
+				if (scheduleItems.length === 0) return;
 
-				const containerTop = scheduleScroll.getBoundingClientRect().top;
-				const headerHeight = 130; // Use same as scroll calculations
-				const viewportTop = containerTop + headerHeight;
-				const today = new Date().toISOString().split('T')[0];
+				const headerHeight = 130;
+				const viewportCenter = window.innerHeight / 2;
 
-				// Find which schedule item is most visible in the viewport
 				let currentDate = null;
-				let maxVisibleArea = 0;
+				let bestDistance = Infinity;
 				
 				scheduleItems.forEach((item) => {
 					const itemRect = item.getBoundingClientRect();
-					const itemTop = itemRect.top;
-					const itemBottom = itemRect.bottom;
+					const itemCenter = (itemRect.top + itemRect.bottom) / 2;
+					const distance = Math.abs(itemCenter - viewportCenter);
 					
-					// Calculate visible area of this item
-					const visibleTop = Math.max(itemTop, viewportTop);
-					const visibleBottom = Math.min(itemBottom, window.innerHeight);
-					const visibleArea = Math.max(0, visibleBottom - visibleTop);
-					
-					// This item is more visible than previous best
-					if (visibleArea > maxVisibleArea) {
-						maxVisibleArea = visibleArea;
+					if (itemRect.top < window.innerHeight && itemRect.bottom > headerHeight && distance < bestDistance) {
+						bestDistance = distance;
 						currentDate = item.getAttribute('data-date');
 					}
 				});
 
-				// Update active date based on visible item
 				if (currentDate) {
 					setActiveDate(currentDate);
+					
+					const today = new Date().toISOString().split('T')[0];
+					if (currentDate !== today) {
+						setShowReturnToToday(true);
+					} else {
+						setShowReturnToToday(false);
+					}
 				}
 
-				// Show return to today button if not viewing today
-				if (currentDate && currentDate !== today) {
-					setShowReturnToToday(true);
-				} else if (currentDate === today) {
-					setShowReturnToToday(false);
-				}
-
-				// Sync horizontal scroll to current visible date
 				if (currentDate) {
 					const allDateItems = dateScroll.querySelectorAll('[data-date]');
 					allDateItems.forEach((dateItem) => {
@@ -555,9 +550,7 @@ export default function DashboardPage() {
 						}
 					});
 				}
-
-				isUpdating = false;
-			}, 50);
+			}, 100);
 		};
 
 		scheduleScroll.addEventListener('scroll', syncScheduleToDate, { passive: true });
@@ -566,7 +559,7 @@ export default function DashboardPage() {
 			scheduleScroll.removeEventListener('scroll', syncScheduleToDate);
 			if (syncTimeout) clearTimeout(syncTimeout);
 		};
-	}, [scheduleData]);
+	}, [scheduleData, isManualScrolling]);
 
 	// Toggle duty expansion
 	const toggleDutyExpansion = (dutyId) => {
@@ -581,28 +574,28 @@ export default function DashboardPage() {
 		if (scheduleData.length === 0 || !scheduleScrollRef.current || !dateScrollRef.current) return;
 
 		const today = new Date().toISOString().split('T')[0];
-		// Don't set active date - just scroll to position
+		setIsManualScrolling(true);
+		setActiveDate(today);
 		
-		// Scroll vertical list to today
 		const scheduleItems = scheduleScrollRef.current.querySelectorAll('[data-date]');
 		const todayItem = Array.from(scheduleItems).find(
 			el => el.getAttribute('data-date') === today
 		);
 		
 		if (todayItem) {
-			// Account for fixed horizontal scroll header + extra space
-			const isDesktop = window.innerWidth >= 768;
-			const fixedHeaderHeight = 130;
-			const extraSpace = isDesktop ? 24 : 30; // More space on mobile
-			const scrollPosition = todayItem.offsetTop - fixedHeaderHeight - extraSpace;
+			const itemHeight = todayItem.offsetHeight;
+			const viewportCenter = window.innerHeight / 2;
+			const itemOffsetTop = todayItem.offsetTop;
+			
+			// Calculate scroll position to center the item
+			const targetScrollTop = itemOffsetTop + (itemHeight / 2) - viewportCenter;
 			
 			scheduleScrollRef.current.scrollTo({
-				top: Math.max(0, scrollPosition),
+				top: Math.max(0, targetScrollTop),
 				behavior: 'smooth'
 			});
 		}
 		
-		// Scroll horizontal dates to center today
 		const dateItems = dateScrollRef.current.querySelectorAll('[data-date]');
 		const todayDateItem = Array.from(dateItems).find(
 			el => el.getAttribute('data-date') === today
@@ -618,16 +611,18 @@ export default function DashboardPage() {
 		}
 		
 		setShowReturnToToday(false);
+		
+		setTimeout(() => {
+			setIsManualScrolling(false);
+		}, 800);
 	};
 
-	// Get duty type styling - use schedule page colors
+	// Get duty type styling
 	const getDutyType = (item) => {
 		if (!item.hasData) {
-			// Check if this is N/A (no database entry) vs 空 (empty duty in existing month)
 			if (item.dutyCode === 'N/A') {
 				return { type: 'NA', color: '#f3f4f6', icon: <CircleHelp size={16} /> };
 			} else {
-				// 空 - empty duty
 				return { type: 'EMPTY', color: '#fef3c7', icon: <TreePalm size={16} /> };
 			}
 		}
@@ -640,7 +635,6 @@ export default function DashboardPage() {
 			return { type: 'RESV', color: getDutyBackgroundColor('RESV'), icon: <Clock size={16} /> };
 		}
 		
-		// Check for leave/vacation types (A/L, 例, 休, G, 福補)
 		const leaveTypes = ['A/L', '例', '休', 'G', '福補', '年假', 'ANNUAL'];
 		if (leaveTypes.some(type => item.dutyCode.includes(type) || item.rawDuty.includes(type))) {
 			return { type: 'LEAVE', color: getDutyBackgroundColor(item.rawDuty), icon: <TreePalm size={16} /> };
@@ -681,15 +675,6 @@ export default function DashboardPage() {
 
 	return (
 		<div className={styles.dashboardContainer}>
-			{/* Month and Time Header - Commented out for now
-			<div className={styles.monthHeader}>
-				<div className={styles.monthInfo}>
-					<span className={styles.monthText}>{currentMonth || '載入中...'}</span>
-					<span className={styles.timeText}>{currentTime} UTC</span>
-				</div>
-			</div>
-			*/}
-
 			{/* Horizontal Date Scroll */}
 			<div className={styles.dateScrollContainer} ref={dateScrollRef}>
 				<div className={styles.dateScrollContent}>
@@ -697,6 +682,7 @@ export default function DashboardPage() {
 						const { day, monthAbbr, weekday } = formatDate(item.date);
 						const isToday = new Date(item.date).toDateString() === new Date().toDateString();
 						const dutyType = getDutyType(item);
+						const monthColor = getMonthColor(item.date);
 
 						return (
 							<div 
@@ -704,40 +690,41 @@ export default function DashboardPage() {
 								data-date={item.date}
 								className={`${styles.dateItem} ${isToday ? styles.today : ''} ${activeDate === item.date ? styles.active : ''}`}
 								onClick={() => {
-									// Set this as active date
+									setIsManualScrolling(true);
 									setActiveDate(item.date);
 									
-									// When clicking a date, scroll to show this date properly below fixed header
-									const scheduleItems = scheduleScrollRef.current?.querySelectorAll('[data-date]');
-									if (scheduleItems) {
-										const targetItem = Array.from(scheduleItems).find(
-											el => el.getAttribute('data-date') === item.date
-										);
-										if (targetItem && scheduleScrollRef.current) {
-											const isDesktop = window.innerWidth >= 768;
-											const fixedHeaderHeight = 130;
-											const extraSpace = isDesktop ? 24 : 30;
-											
-											// Get current scroll position
-											const currentScrollTop = scheduleScrollRef.current.scrollTop;
-											const targetScrollPosition = targetItem.offsetTop - fixedHeaderHeight - extraSpace;
-											
-											// Determine if scrolling up or down
-											const scrollingUp = targetScrollPosition < currentScrollTop;
-											
-											// If scrolling up, add extra space to prevent cutoff
-											const finalScrollPosition = scrollingUp 
-												? targetScrollPosition - 20 // Extra space when scrolling up
-												: targetScrollPosition;
-											
-											scheduleScrollRef.current.scrollTo({
-												top: Math.max(0, finalScrollPosition),
-												behavior: 'smooth'
-											});
+									setTimeout(() => {
+										const scheduleItems = scheduleScrollRef.current?.querySelectorAll('[data-date]');
+										if (scheduleItems) {
+											const targetItem = Array.from(scheduleItems).find(
+												el => el.getAttribute('data-date') === item.date
+											);
+											if (targetItem && scheduleScrollRef.current) {
+												const itemHeight = targetItem.offsetHeight;
+												const viewportCenter = window.innerHeight / 2;
+												const itemOffsetTop = targetItem.offsetTop;
+												const targetScrollTop = itemOffsetTop + (itemHeight / 2) - viewportCenter;
+												
+												scheduleScrollRef.current.scrollTo({
+													top: Math.max(0, targetScrollTop),
+													behavior: 'smooth'
+												});
+												
+												setTimeout(() => {
+													setIsManualScrolling(false);
+												}, 800);
+											} else {
+												setIsManualScrolling(false);
+											}
+										} else {
+											setIsManualScrolling(false);
 										}
-									}
+									}, 50);
 								}}
-								style={{ cursor: 'pointer' }}
+								style={{ 
+									cursor: 'pointer',
+									backgroundColor: monthColor
+								}}
 							>
 								<div className={styles.dateMonth}>{monthAbbr}</div>
 								<div className={styles.dateDay}>{day}</div>
@@ -787,7 +774,7 @@ export default function DashboardPage() {
 							const dutyType = getDutyType(item);
 							const dateKey = item.date;
 							const isExpanded = expandedDuties[dateKey];
-							const hasDetails = !item.isDutyOff;
+							const hasDetails = !item.isDutyOff && item.hasData;
 							const isActive = activeDate === item.date;
 
 							return (
@@ -796,14 +783,12 @@ export default function DashboardPage() {
 									data-date={item.date} 
 									className={`${styles.scheduleItem} ${isActive ? styles.activeScheduleItem : ''}`}
 								>
-									{/* Date Label */}
 									<div className={styles.dateLabel}>
 										<span className={styles.dateLabelDay}>
 											{weekday}. {month}月{day}日
 										</span>
 									</div>
 
-									{/* Duty Summary */}
 									<div 
 										className={styles.dutySummary}
 										style={{ backgroundColor: dutyType.color }}
@@ -843,7 +828,6 @@ export default function DashboardPage() {
 										)}
 									</div>
 
-									{/* Expanded Details */}
 									{isExpanded && hasDetails && (
 										<div className={styles.dutyDetails}>
 											<div className={styles.detailRow}>
