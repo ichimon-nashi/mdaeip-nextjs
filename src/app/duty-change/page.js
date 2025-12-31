@@ -729,70 +729,89 @@ function DutyChangeContent() {
 			);
 
 			// Generate filename - use proper names
-			const firstName = formData.firstName || "甲方";
-			const secondName = formData.secondName || "乙方";
-			const filename = `FMEF-06-04客艙組員任務互換申請單-${firstName}&${secondName}.pdf`;
+				// Generate filename - use proper names
+				const firstName = formData.firstName || "甲方";
+				const secondName = formData.secondName || "乙方";
+				const filename = `FMEF-06-04客艙組員任務互換申請單-${firstName}&${secondName}.pdf`;
 
-			// Save the PDF locally first
-			pdf.save(filename);
+				// Get PDF as base64 for email attachment
+				const pdfBase64 = pdf.output("dataurlstring");
 
-			// Get PDF as base64 for email attachment
-			const pdfBase64 = pdf.output("dataurlstring");
+				// Detect mobile device (iOS or Android) - mobile-first approach
+				const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+				console.log('Device is mobile:', isMobile);
 
-			// Send email with PDF attachment
-			try {
-				console.log("Sending email...");
-				const emailResponse = await fetch(
-					"/api/send-duty-change-email",
-					{
-						method: "POST",
-						headers: {
-							"Content-Type": "application/json",
-						},
-						body: JSON.stringify({
-							pdfData: pdfBase64,
-							formData: {
-								firstID: formData.firstID,
-								firstName: formData.firstName,
-								firstRank: formData.firstRank,
-								firstDate: formData.firstDate,
-								firstTask: formData.firstTask,
-								secondID: formData.secondID,
-								secondName: formData.secondName,
-								secondRank: formData.secondRank,
-								secondDate: formData.secondDate,
-								secondTask: formData.secondTask,
-								selectedMonth: formData.selectedMonth,
-								applicationDate: formData.applicationDate,
+				// Try to send email first (before any download to avoid mobile popup blocking)
+				try {
+					console.log("Sending email...");
+					const emailResponse = await fetch(
+						"/api/send-duty-change-email",
+						{
+							method: "POST",
+							headers: {
+								"Content-Type": "application/json",
 							},
-						}),
-					}
-				);
-
-				const emailResult = await emailResponse.json();
-
-				if (emailResult.success) {
-					console.log(
-						"Email sent successfully:",
-						emailResult.messageId
+							body: JSON.stringify({
+								pdfData: pdfBase64,
+								formData: {
+									firstID: formData.firstID,
+									firstName: formData.firstName,
+									firstRank: formData.firstRank,
+									firstDate: formData.firstDate,
+									firstTask: formData.firstTask,
+									secondID: formData.secondID,
+									secondName: formData.secondName,
+									secondRank: formData.secondRank,
+									secondDate: formData.secondDate,
+									secondTask: formData.secondTask,
+									selectedMonth: formData.selectedMonth,
+									applicationDate: formData.applicationDate,
+								},
+							}),
+						}
 					);
-					toast("✅ 換班單已成功寄送!請15分後確認信箱！");
-				} else {
-					console.error("Email sending failed:", emailResult.error);
-					toast("⚠️ 郵件傳送失敗");
-				}
-			} catch (emailError) {
-				console.error("Error sending email:", emailError);
-				toast("⚠️ 郵件重送失敗");
-			}
 
-			setTimeout(() => {
-				toast("✅ 換班單(PDF檔案)已產生並下載！");
-			}, 200);
+					const emailResult = await emailResponse.json();
+
+					if (emailResult.success) {
+						console.log("Email sent successfully:", emailResult.messageId);
+						
+						// Email sent successfully - handle based on device type
+						if (isMobile) {
+							// Mobile (iOS/Android): Email only, no download
+							// Users will receive PDF via email - cleaner mobile experience
+							toast.success("✅ 換班單已成功寄送！請15分後確認信箱！");
+						} else {
+							// Desktop: Download PDF for user convenience
+							pdf.save(filename);
+							setTimeout(() => {
+								toast.success("✅ 換班單已成功寄送並下載！");
+							}, 200);
+						}
+					} else {
+						console.error("Email sending failed:", emailResult.error);
+						throw new Error(emailResult.error || "Email failed");
+					}
+				} catch (emailError) {
+					console.error("Error sending email:", emailError);
+					
+					// Email FAILED - Save PDF locally as fallback (ALL devices)
+					// User needs the PDF to manually send it
+					console.log("Email failed, saving PDF locally as fallback...");
+					pdf.save(filename);
+					
+					// Show error message with manual send instructions
+					setTimeout(() => {
+						toast.error(
+							"⚠️ 郵件發送失敗，但PDF已下載。\n請手動發送至管派組信箱",
+							{ duration: 8000 }
+						);
+					}, 200);
+				}
 		} catch (error) {
 			console.error("Error generating PDF:", error);
 			setError(`Failed to generate PDF: ${error.message}`);
-			toast("PDF產生失敗，請重試");
+			toast("PDF也產生失敗，請聯絡豪神");
 		} finally {
 			setIsLoading(false);
 		}

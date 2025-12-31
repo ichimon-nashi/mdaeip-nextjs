@@ -34,7 +34,6 @@ export async function POST(request) {
       {
         email: '54610@mandarin-airlines.com', //卓湘琳
       },
-      
       // User gets a copy
       {
         email: userEmail,
