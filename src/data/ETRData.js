@@ -1,3 +1,13 @@
+export const specialCcomData = [
+	{
+		"startDate": "2026-02-08",
+		"endDate": "2026-02-15",
+		"f2Text": "依公告G2602-006，抽問 F2 CCOM REV042 TR-01暫定版內容，抽問結果正常。",
+		"mission738Text": "依公告G2602-006抽問 1R/3L/3R CCOM REV0 42 TR 01 暫定版內容，抽問結果正常。"
+	},
+
+];
+
 export const ccomData = [{
     "startDate": "01-01",
     "endDate": "01-15",

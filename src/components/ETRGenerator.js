@@ -6,7 +6,7 @@ import moment from "moment";
 import "react-datepicker/dist/react-datepicker.css";
 import toast from "react-hot-toast";
 import { Plus } from "lucide-react";
-import { ccomData } from "../data/ETRData";
+import { ccomData, specialCcomData } from "../data/ETRData";
 import { bulletinHelpers, remarksHelpers } from "../lib/supabase";
 import { useAuth } from "../contexts/AuthContext";
 
@@ -166,6 +166,29 @@ const ETRGenerator = () => {
 
 	const getCCOMQuestion = () => {
 		const randomCCOMQuestion = [];
+		const currentDate = moment(startDate).format("YYYY-MM-DD");
+		
+		// First check for special date-range CCOM questions
+		for (let i = 0; i < specialCcomData.length; i++) {
+			if (
+				currentDate >= specialCcomData[i]["startDate"] &&
+				currentDate <= specialCcomData[i]["endDate"]
+			) {
+				// Add the special CCOM question
+				if (is738Mission) {
+					randomCCOMQuestion.push(
+						`1. ${specialCcomData[i]["mission738Text"]}`
+					);
+				} else {
+					randomCCOMQuestion.push(
+						`1. ${specialCcomData[i]["f2Text"]}`
+					);
+				}
+				break; // Stop after finding the first matching special range
+			}
+		}
+		
+		// Then check for regular monthly CCOM questions
 		for (let i = 0; i < ccomData.length; i++) {
 			if (
 				formattedMonth >= ccomData[i]["startDate"] &&
@@ -186,13 +209,16 @@ const ETRGenerator = () => {
 					const dayIndex = dayMapping[dayOfWeek];
 					const questionRange = ccomData[i]["questionList"][dayIndex];
 					
+					// Determine the question number based on whether special question exists
+					const questionNumber = randomCCOMQuestion.length > 0 ? 2 : 1;
+					
 					if (is738Mission) {
 						randomCCOMQuestion.push(
-							`1. 依公告抽問飛安暨主題加強宣導月題庫。抽問 1R(0-0、${dayIndex + 1}-1)、3L(${dayIndex + 1}-2~${dayIndex + 1}-3)、3R(${dayIndex + 1}-4)，抽問結果正常。`
+							`${questionNumber}. 依公告抽問飛安暨主題加強宣導月題庫。抽問 1R(0-0、${dayIndex + 1}-1)、3L(${dayIndex + 1}-2~${dayIndex + 1}-3)、3R(${dayIndex + 1}-4)，抽問結果正常。`
 						);
 					} else {
 						randomCCOMQuestion.push(
-							`1. 依公告抽問飛安暨主題加強宣導月題庫。抽問 F2${questionRange}，抽問結果正常。`
+							`${questionNumber}. 依公告抽問飛安暨主題加強宣導月題庫。抽問 F2${questionRange}，抽問結果正常。`
 						);
 					}
 				} else {
@@ -211,17 +237,24 @@ const ETRGenerator = () => {
 							availableIndices.splice(randomIndex, 1);
 						}
 						
+						// Determine starting question number
+						const startNumber = randomCCOMQuestion.length > 0 ? 2 : 1;
+						
 						randomCCOMQuestion.push(
-							`1. 抽問 1R CCOM Ch.${selectedQuestions[0]}，抽問結果正常。`,
-							`2. 抽問 3L CCOM Ch.${selectedQuestions[1]}，抽問結果正常。`,
-							`3. 抽問 3R CCOM Ch.${selectedQuestions[2]}，抽問結果正常。`
+							`${startNumber}. 抽問 1R CCOM Ch.${selectedQuestions[0]}，抽問結果正常。`,
+							`${startNumber + 1}. 抽問 3L CCOM Ch.${selectedQuestions[1]}，抽問結果正常。`,
+							`${startNumber + 2}. 抽問 3R CCOM Ch.${selectedQuestions[2]}，抽問結果正常。`
 						);
 					} else {
 						const randomNumber = Math.floor(
 							Math.random() * questionList.length
 						);
+						
+						// Determine the question number based on whether special question exists
+						const questionNumber = randomCCOMQuestion.length > 0 ? 2 : 1;
+						
 						randomCCOMQuestion.push(
-							`1. 抽問 F2 CCOM Ch.${questionList[randomNumber]}，抽問結果正常。`
+							`${questionNumber}. 抽問 F2 CCOM Ch.${questionList[randomNumber]}，抽問結果正常。`
 						);
 					}
 				}
