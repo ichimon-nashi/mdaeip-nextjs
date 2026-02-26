@@ -323,9 +323,10 @@ export default function SchedulePage() {
 
 	const getEmployeesWithSameDuty = useCallback((date, duty, excludeEmployeeId = null) => {
 		if (!duty || !scheduleData.hasScheduleData) return [];
+		const baseDuty = duty.split('\n')[0];
 		return scheduleData.allSchedules
 			.filter(schedule => 
-				schedule.days[date] === duty && 
+				(schedule.days[date] || '').split('\n')[0] === baseDuty && 
 				schedule.employeeID !== user?.id &&
 				schedule.employeeID !== excludeEmployeeId
 			)

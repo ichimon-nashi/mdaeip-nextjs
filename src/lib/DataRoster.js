@@ -53,12 +53,14 @@ export const employeeList = [
 	{ id: "53540", name: "楊云馨", rank: "LF", base: "TSA" },
 	{ id: "55065", name: "王穎涵", rank: "FS", base: "TSA" },
 	{ id: "55079", name: "李佩儒", rank: "FS", base: "TSA" },
+	{ id: "55098", name: "王暄惠", rank: "LF", base: "TSA" },
 	{ id: "55084", name: "鄭杰如", rank: "FS", base: "TSA" },
 	{ id: "55134", name: "文詩艷", rank: "LF", base: "TSA" },
 	{ id: "56342", name: "孫薔", rank: "FS", base: "TSA" },
 	{ id: "56388", name: "楊媁珺", rank: "FS", base: "TSA" },
 	{ id: "56406", name: "許景柔", rank: "FS", base: "TSA" },
 	{ id: "58698", name: "黃喻萱", rank: "FS", base: "TSA" },
+	{ id: "58702", name: "鄭佩旻", rank: "FS", base: "TSA" },
 	{ id: "59139", name: "黃姵華", rank: "FS", base: "TSA" },
 	{ id: "59143", name: "黃庭薇", rank: "FS", base: "TSA" },
 	{ id: "59244", name: "陳韋陵", rank: "FS", base: "TSA" },
@@ -69,6 +71,13 @@ export const employeeList = [
 	{ id: "60424", name: "張家傑", rank: "FA", base: "TSA" },
 	{ id: "60425", name: "林宣妤", rank: "FS", base: "TSA" },
 	{ id: "60427", name: "許寧芮", rank: "FS", base: "TSA" },
+	{ id: "60537", name: "楊品凡", rank: "FA", base: "TSA" },
+	{ id: "60538", name: "黃丹喬", rank: "FA", base: "TSA" },
+	{ id: "60539", name: "何芳瑜", rank: "FS", base: "TSA" },
+	{ id: "60540", name: "葉芮君", rank: "FS", base: "TSA" },
+	{ id: "60541", name: "萬麗馨", rank: "FS", base: "TSA" },
+	{ id: "60542", name: "高宛柔", rank: "FS", base: "TSA" },
+	{ id: "51061", name: "楊景淳", rank: "LF", base: "TSA" },
 	{ id: "51892", name: "韓建豪", rank: "FI", base: "KHH" },
 	{ id: "22119", name: "徐永成", rank: "PR", base: "KHH" },
 	{ id: "34011", name: "陳中榆", rank: "LF", base: "KHH" },
@@ -88,6 +97,12 @@ export const employeeList = [
 	{ id: "60431", name: "馬家祺", rank: "FS", base: "KHH" },
 	{ id: "60432", name: "謝佳容", rank: "FS", base: "KHH" },
 	{ id: "60433", name: "張庭瑜", rank: "FS", base: "KHH" },
+	{ id: "60543", name: "城珮瑜", rank: "FS", base: "KHH" },
+	{ id: "60544", name: "鍾念濡", rank: "FS", base: "KHH" },
+	{ id: "60545", name: "黃馨平", rank: "FS", base: "KHH" },
+	{ id: "60546", name: "余宛亭", rank: "FS", base: "KHH" },
+	{ id: "60547", name: "賴勁辰", rank: "FA", base: "KHH" },
+	{ id: "60548", name: "胡顥薰", rank: "FS", base: "KHH" },
 	{ id: "10781", name: "高佩莉", rank: "PR", base: "RMQ" },
 	{ id: "21577", name: "陳冠筑", rank: "PR", base: "RMQ" },
 	{ id: "21628", name: "陳虹蓁", rank: "PR", base: "RMQ" },
@@ -115,6 +130,7 @@ export const employeeList = [
 	{ id: "51736", name: "陳凱玫", rank: "LF", base: "RMQ" },
 	{ id: "51740", name: "郭幸甄", rank: "LF", base: "RMQ" },
 	{ id: "51769", name: "萬芊筠", rank: "LF", base: "RMQ" },
+	{ id: "51787", name: "呂茜雯", rank: "LF", base: "RMQ" },
 	{ id: "51791", name: "何思薇", rank: "LF", base: "RMQ" },
 	{ id: "51805", name: "童思嘉", rank: "LF", base: "RMQ" },
 	{ id: "51856", name: "黃郁涵", rank: "LF", base: "RMQ" },
@@ -134,9 +150,11 @@ export const employeeList = [
 	{ id: "55166", name: "陳柔蓁", rank: "LF", base: "RMQ" },
 	{ id: "55171", name: "莊泓楷", rank: "FA", base: "RMQ" },
 	{ id: "56319", name: "周雅琦", rank: "FS", base: "RMQ" },
+	{ id: "56410", name: "巫怡璇", rank: "FS", base: "RMQ" },
 	{ id: "59157", name: "陳嫆玟", rank: "FS", base: "RMQ" },
 	{ id: "59193", name: "鍾靜竺", rank: "FS", base: "RMQ" },
 	{ id: "59207", name: "陳怡庭", rank: "FS", base: "RMQ" },
+	{ id: "59211", name: "謝采妤", rank: "FS", base: "RMQ" },
 	{ id: "59226", name: "李侑蓁", rank: "FS", base: "RMQ" },
 	{ id: "59258", name: "郭雅婷", rank: "FS", base: "RMQ" },
 	{ id: "59276", name: "趙芷綾", rank: "FS", base: "RMQ" },
@@ -180,11 +198,11 @@ const sortSchedulesByEmployeeListOrder = (schedules) => {
 	return schedules.sort((a, b) => {
 		const orderA = employeeOrderMap.get(a.employeeID);
 		const orderB = employeeOrderMap.get(b.employeeID);
-		
+
 		// If employee not in list, put at end
 		if (orderA === undefined) return 1;
 		if (orderB === undefined) return -1;
-		
+
 		return orderA - orderB;
 	});
 };
@@ -200,7 +218,8 @@ export const getAllSchedulesForMonth = async (month) => {
 	try {
 		console.log(`Querying database for month: ${month}`);
 
-		const { data, error } = await scheduleHelpers.getSchedulesForMonth(month);
+		const { data, error } =
+			await scheduleHelpers.getSchedulesForMonth(month);
 
 		if (error) {
 			console.error("Error fetching schedules:", error);
@@ -242,7 +261,10 @@ export const getAllSchedulesForMonth = async (month) => {
 				const monthNum = monthMatch[1].padStart(2, "0");
 
 				if (!schedule.duties || !Array.isArray(schedule.duties)) {
-					console.error(`Invalid duties data for employee ${employeeId}:`, schedule.duties);
+					console.error(
+						`Invalid duties data for employee ${employeeId}:`,
+						schedule.duties,
+					);
 					return null;
 				}
 
@@ -260,24 +282,35 @@ export const getAllSchedulesForMonth = async (month) => {
 					days: days,
 				};
 
-				console.log(`Transformed schedule for ${employee.name} (${employee.base}):`, {
-					id: transformed.employeeID,
-					name: transformed.name,
-					base: transformed.base,
-					sampleDays: Object.entries(transformed.days).slice(0, 3),
-				});
+				console.log(
+					`Transformed schedule for ${employee.name} (${employee.base}):`,
+					{
+						id: transformed.employeeID,
+						name: transformed.name,
+						base: transformed.base,
+						sampleDays: Object.entries(transformed.days).slice(
+							0,
+							3,
+						),
+					},
+				);
 
 				return transformed;
 			})
 			.filter(Boolean);
 
-		console.log(`Total transformed schedules: ${transformedSchedules.length}`);
-		console.log("Bases in transformed schedules:", [...new Set(transformedSchedules.map((s) => s.base))]);
+		console.log(
+			`Total transformed schedules: ${transformedSchedules.length}`,
+		);
+		console.log("Bases in transformed schedules:", [
+			...new Set(transformedSchedules.map((s) => s.base)),
+		]);
 
 		// Sort by employeeList order before caching
-   const sortedSchedules = sortSchedulesByEmployeeListOrder(transformedSchedules);
-   scheduleCache.set(cacheKey, sortedSchedules);
-   return sortedSchedules;
+		const sortedSchedules =
+			sortSchedulesByEmployeeListOrder(transformedSchedules);
+		scheduleCache.set(cacheKey, sortedSchedules);
+		return sortedSchedules;
 	} catch (error) {
 		console.error("Error in getAllSchedulesForMonth:", error);
 		return [];
@@ -307,23 +340,36 @@ export const getSchedulesByBase = async (month, base) => {
 		return scheduleCache.get(cacheKey);
 	}
 
-	console.log(`getSchedulesByBase called with month: ${month}, base: ${base}`);
+	console.log(
+		`getSchedulesByBase called with month: ${month}, base: ${base}`,
+	);
 
 	const allSchedules = await getAllSchedulesForMonth(month);
-	console.log(`Got ${allSchedules.length} schedules from getAllSchedulesForMonth`);
-	console.log(`Available bases in schedules:`, [...new Set(allSchedules.map((s) => s.base))]);
+	console.log(
+		`Got ${allSchedules.length} schedules from getAllSchedulesForMonth`,
+	);
+	console.log(`Available bases in schedules:`, [
+		...new Set(allSchedules.map((s) => s.base)),
+	]);
 
 	const filteredSchedules =
 		base === "ALL"
 			? allSchedules
 			: allSchedules.filter((schedule) => {
 					const matches = schedule.base === base;
-					console.log(`Employee ${schedule.name} (${schedule.employeeID}) base: ${schedule.base}, matches ${base}: ${matches}`);
+					console.log(
+						`Employee ${schedule.name} (${schedule.employeeID}) base: ${schedule.base}, matches ${base}: ${matches}`,
+					);
 					return matches;
-			  });
+				});
 
-	console.log(`Filtered schedules for base ${base}: ${filteredSchedules.length}`);
-	console.log(`Filtered employees:`, filteredSchedules.map((s) => `${s.name} (${s.base})`));
+	console.log(
+		`Filtered schedules for base ${base}: ${filteredSchedules.length}`,
+	);
+	console.log(
+		`Filtered employees:`,
+		filteredSchedules.map((s) => `${s.name} (${s.base})`),
+	);
 
 	scheduleCache.set(cacheKey, filteredSchedules);
 	return filteredSchedules;
@@ -331,7 +377,11 @@ export const getSchedulesByBase = async (month, base) => {
 
 // Admin function to upload schedule data
 export const uploadScheduleData = async (scheduleData, userAccessLevel) => {
-	return await scheduleHelpers.upsertMonthSchedule(scheduleData.month, scheduleData, userAccessLevel);
+	return await scheduleHelpers.upsertMonthSchedule(
+		scheduleData.month,
+		scheduleData,
+		userAccessLevel,
+	);
 };
 
 // Clear cache when needed (useful for development)
@@ -352,24 +402,29 @@ export const getFlightDutyForEmployee = async (employeeId, month) => {
 	}
 
 	try {
-		console.log(`Fetching flight duty for employee ${employeeId}, month ${month}`);
+		console.log(
+			`Fetching flight duty for employee ${employeeId}, month ${month}`,
+		);
 
-		const { data, error } = await flightDutyHelpers.getFlightDutyForEmployee(employeeId, month);
+		const { data, error } =
+			await flightDutyHelpers.getFlightDutyForEmployee(employeeId, month);
 
 		if (error) {
 			console.error("Error fetching flight duty:", error);
 			return null;
 		}
 
-		const flightDuty = data && data.length > 0 ? {
-			employeeId: employeeId,
-			month: month,
-			duties: generateDailyDutiesFromSchedule(data, month)
-		} : null;
+		const flightDuty =
+			data && data.length > 0
+				? {
+						employeeId: employeeId,
+						month: month,
+						duties: generateDailyDutiesFromSchedule(data, month),
+					}
+				: null;
 
 		flightDutyCache.set(cacheKey, flightDuty);
 		return flightDuty;
-		
 	} catch (error) {
 		console.error("Error in getFlightDutyForEmployee:", error);
 		return null;
@@ -387,7 +442,8 @@ export const getAllFlightDutiesForMonth = async (month) => {
 	try {
 		console.log(`Fetching all flight duties for month ${month}`);
 
-		const { data, error } = await flightDutyHelpers.getFlightDutiesForMonth(month);
+		const { data, error } =
+			await flightDutyHelpers.getFlightDutiesForMonth(month);
 
 		if (error) {
 			console.error("Error fetching all flight duties:", error);
@@ -396,7 +452,6 @@ export const getAllFlightDutiesForMonth = async (month) => {
 
 		flightDutyCache.set(cacheKey, data || []);
 		return data || [];
-		
 	} catch (error) {
 		console.error("Error in getAllFlightDutiesForMonth:", error);
 		return [];
@@ -411,49 +466,49 @@ const generateDailyDutiesFromSchedule = (scheduleRecords, month) => {
 
 	const yearMatch = month.match(/(\d{4})年/);
 	const monthMatch = month.match(/(\d{1,2})月/);
-	
+
 	if (!yearMatch || !monthMatch) {
 		console.error(`Invalid month format: ${month}`);
 		return [];
 	}
-	
+
 	const year = parseInt(yearMatch[1]);
 	const monthNum = parseInt(monthMatch[1]);
 	const daysInMonth = new Date(year, monthNum, 0).getDate();
-	
-	const duties = new Array(daysInMonth).fill('');
-	
-	scheduleRecords.forEach(record => {
-		const { 
-			duty_code, 
-			day_of_week, 
-			schedule_type, 
-			special_date, 
-			reporting_time, 
-			end_time, 
-			duty_type 
+
+	const duties = new Array(daysInMonth).fill("");
+
+	scheduleRecords.forEach((record) => {
+		const {
+			duty_code,
+			day_of_week,
+			schedule_type,
+			special_date,
+			reporting_time,
+			end_time,
+			duty_type,
 		} = record;
-		
-		let dutyText = duty_code || '';
+
+		let dutyText = duty_code || "";
 		if (reporting_time && end_time) {
 			dutyText += `\n${reporting_time}-${end_time}`;
 		}
 		if (duty_type) {
 			dutyText += `\n${duty_type}`;
 		}
-		
-		if (schedule_type === 'special' && special_date) {
+
+		if (schedule_type === "special" && special_date) {
 			const dayIndex = special_date - 1;
 			if (dayIndex >= 0 && dayIndex < daysInMonth) {
 				duties[dayIndex] = dutyText;
 			}
-		} else if (schedule_type === 'regular') {
+		} else if (schedule_type === "regular") {
 			for (let day = 1; day <= daysInMonth; day++) {
 				const date = new Date(year, monthNum - 1, day);
 				let dayOfWeek = date.getDay();
-				
+
 				if (dayOfWeek === 0) dayOfWeek = 7;
-				
+
 				if (dayOfWeek === day_of_week) {
 					const dayIndex = day - 1;
 					if (!duties[dayIndex]) {
@@ -463,7 +518,7 @@ const generateDailyDutiesFromSchedule = (scheduleRecords, month) => {
 			}
 		}
 	});
-	
+
 	return duties;
 };
 
@@ -492,27 +547,30 @@ export const getFlightDutyForDate = async (employeeId, month, date) => {
 // MRT-specific flight duty integration - doesn't affect other pages
 export const getFlightDutyForMRT = async (employeeId, month) => {
 	try {
-		console.log(`Fetching MRT flight duty for employee ${employeeId}, month ${month}`);
+		console.log(
+			`Fetching MRT flight duty for employee ${employeeId}, month ${month}`,
+		);
 
 		// First get the employee's schedule to see what duty codes they have
 		const employeeSchedule = await getEmployeeSchedule(employeeId, month);
-		
+
 		if (!employeeSchedule?.days) {
-			console.log('No schedule found for employee');
+			console.log("No schedule found for employee");
 			return null;
 		}
 
 		// Get flight duty data for the month
-		const { data: flightDuties, error } = await flightDutyHelpers.getFlightDutiesForMonth(month);
+		const { data: flightDuties, error } =
+			await flightDutyHelpers.getFlightDutiesForMonth(month);
 
 		if (error || !flightDuties) {
-			console.log('No flight duty data available for month:', month);
+			console.log("No flight duty data available for month:", month);
 			return null;
 		}
 
 		// Create a map of duty codes to flight duty info
 		const flightDutyMap = {};
-		flightDuties.forEach(duty => {
+		flightDuties.forEach((duty) => {
 			if (!flightDutyMap[duty.duty_code]) {
 				flightDutyMap[duty.duty_code] = [];
 			}
@@ -522,12 +580,12 @@ export const getFlightDutyForMRT = async (employeeId, month) => {
 		// Process each day in the employee's schedule
 		const yearMatch = month.match(/(\d{4})年/);
 		const monthMatch = month.match(/(\d{1,2})月/);
-		
+
 		if (!yearMatch || !monthMatch) {
 			console.error(`Invalid month format: ${month}`);
 			return null;
 		}
-		
+
 		const year = parseInt(yearMatch[1]);
 		const monthNum = parseInt(monthMatch[1]);
 		const daysInMonth = new Date(year, monthNum, 0).getDate();
@@ -535,36 +593,45 @@ export const getFlightDutyForMRT = async (employeeId, month) => {
 		const dailyFlightInfo = {};
 
 		for (let day = 1; day <= daysInMonth; day++) {
-			const dayStr = day.toString().padStart(2, '0');
-			const monthStr = monthNum.toString().padStart(2, '0');
+			const dayStr = day.toString().padStart(2, "0");
+			const monthStr = monthNum.toString().padStart(2, "0");
 			const dateKey = `${year}-${monthStr}-${dayStr}`;
-			
+
 			const dutyCode = employeeSchedule.days[dateKey];
-			
-			if (dutyCode && dutyCode.trim() && dutyCode !== '-' && flightDutyMap[dutyCode]) {
+
+			if (
+				dutyCode &&
+				dutyCode.trim() &&
+				dutyCode !== "-" &&
+				flightDutyMap[dutyCode]
+			) {
 				// Find the most relevant flight duty for this day
 				const dayOfWeek = new Date(year, monthNum - 1, day).getDay();
 				const adjustedDayOfWeek = dayOfWeek === 0 ? 7 : dayOfWeek;
-				
+
 				let bestMatch = null;
-				
+
 				// Look for special date first
-				bestMatch = flightDutyMap[dutyCode].find(duty => 
-					duty.schedule_type === 'special' && duty.special_date === day
+				bestMatch = flightDutyMap[dutyCode].find(
+					(duty) =>
+						duty.schedule_type === "special" &&
+						duty.special_date === day,
 				);
-				
+
 				// If no special date, look for regular schedule
 				if (!bestMatch) {
-					bestMatch = flightDutyMap[dutyCode].find(duty => 
-						duty.schedule_type === 'regular' && duty.day_of_week === adjustedDayOfWeek
+					bestMatch = flightDutyMap[dutyCode].find(
+						(duty) =>
+							duty.schedule_type === "regular" &&
+							duty.day_of_week === adjustedDayOfWeek,
 					);
 				}
-				
+
 				// If still no match, take the first one
 				if (!bestMatch && flightDutyMap[dutyCode].length > 0) {
 					bestMatch = flightDutyMap[dutyCode][0];
 				}
-				
+
 				if (bestMatch) {
 					let flightInfo = dutyCode;
 					if (bestMatch.reporting_time && bestMatch.end_time) {
@@ -576,9 +643,10 @@ export const getFlightDutyForMRT = async (employeeId, month) => {
 					if (bestMatch.duty_type) {
 						flightInfo += `\n${bestMatch.duty_type}`;
 					}
-					
+
 					// Use calendar date key format (month index, not month number)
-					dailyFlightInfo[`${year}-${monthNum - 1}-${day}`] = flightInfo;
+					dailyFlightInfo[`${year}-${monthNum - 1}-${day}`] =
+						flightInfo;
 				}
 			}
 		}
@@ -586,9 +654,8 @@ export const getFlightDutyForMRT = async (employeeId, month) => {
 		return {
 			employeeId,
 			month,
-			flightInfo: dailyFlightInfo
+			flightInfo: dailyFlightInfo,
 		};
-		
 	} catch (error) {
 		console.error("Error in getFlightDutyForMRT:", error);
 		return null;
@@ -602,36 +669,44 @@ export const getFlightDutyDetailsForMRT = async (dutyCode, date, month) => {
 		const dayOfWeek = dateObj.getDay() === 0 ? 7 : dateObj.getDay();
 		const day = dateObj.getDate();
 
-		console.log(`Querying MRT flight duty for duty_code: ${dutyCode}, day: ${day}, dayOfWeek: ${dayOfWeek}, month: ${month}`);
+		console.log(
+			`Querying MRT flight duty for duty_code: ${dutyCode}, day: ${day}, dayOfWeek: ${dayOfWeek}, month: ${month}`,
+		);
 
-		const { data: flightDuties, error } = await flightDutyHelpers.getFlightDutiesForMonth(month);
+		const { data: flightDuties, error } =
+			await flightDutyHelpers.getFlightDutiesForMonth(month);
 
 		if (error || !flightDuties) {
-			console.log('No flight duty data available');
+			console.log("No flight duty data available");
 			return null;
 		}
 
 		// Find matching flight duty record
 		let bestMatch = null;
-		
-		const matchingDuties = flightDuties.filter(duty => duty.duty_code === dutyCode);
-		
+
+		const matchingDuties = flightDuties.filter(
+			(duty) => duty.duty_code === dutyCode,
+		);
+
 		if (matchingDuties.length === 0) {
 			return null;
 		}
 
 		// Look for special date first
-		bestMatch = matchingDuties.find(duty => 
-			duty.schedule_type === 'special' && duty.special_date === day
+		bestMatch = matchingDuties.find(
+			(duty) =>
+				duty.schedule_type === "special" && duty.special_date === day,
 		);
-		
+
 		// If no special date, look for regular schedule
 		if (!bestMatch) {
-			bestMatch = matchingDuties.find(duty => 
-				duty.schedule_type === 'regular' && duty.day_of_week === dayOfWeek
+			bestMatch = matchingDuties.find(
+				(duty) =>
+					duty.schedule_type === "regular" &&
+					duty.day_of_week === dayOfWeek,
 			);
 		}
-		
+
 		// If still no match, take the first one
 		if (!bestMatch) {
 			bestMatch = matchingDuties[0];
@@ -639,7 +714,6 @@ export const getFlightDutyDetailsForMRT = async (dutyCode, date, month) => {
 
 		console.log(`Found MRT flight duty details:`, bestMatch);
 		return bestMatch;
-		
 	} catch (error) {
 		console.error("Error in getFlightDutyDetailsForMRT:", error);
 		return null;
