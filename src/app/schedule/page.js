@@ -734,10 +734,10 @@ export default function SchedulePage() {
 						onMouseEnter={(e) => handleDutyMouseEnter(e, schedule.employeeID, date, duty, sameEmployees)}
 						onMouseLeave={handleDutyMouseLeave}
 						onClick={() => {
-							if (!isUserSchedule) {
-								if (isMobile && mobileInfoMode) {
-									handleDutyInfo(schedule.employeeID, schedule.name, date, duty, sameEmployees);
-								} else if (!isMobile) {
+							if (isMobile && mobileInfoMode) {
+								handleDutyInfo(schedule.employeeID, schedule.name, date, duty, sameEmployees);
+							} else if (!isUserSchedule) {
+								if (!isMobile) {
 									handleDutySelect(schedule.employeeID, schedule.name, date, duty);
 								} else {
 									handleDutySelect(schedule.employeeID, schedule.name, date, duty);
