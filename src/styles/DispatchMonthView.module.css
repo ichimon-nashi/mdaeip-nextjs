@@ -541,21 +541,23 @@
 	flex-direction: column;
 }
 
+.sectorRow.highlight .srFn {
+	color: #dc2626;
+	font-weight: 600;
+}
+.sectorRow.highlight .srDep,
+.sectorRow.highlight .srFrom,
+.sectorRow.highlight .srTo,
+.sectorRow.highlight .srArr {
+	color: #dc2626;
+}
+
 .sectorRow {
 	display: grid;
 	grid-template-columns: 44px 36px 14px 36px 1fr 44px;
 	align-items: center;
 	gap: 4px;
 	padding: 5px 0;
-}
-.sectorRow.highlight .srFn {
-	color: #f59e0b;
-	font-weight: 500;
-}
-.sectorRow.highlight .srDep,
-.sectorRow.highlight .srFrom,
-.sectorRow.highlight .srArr {
-	color: #d97706;
 }
 
 .srDep {

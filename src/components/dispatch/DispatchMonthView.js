@@ -454,11 +454,21 @@ export default function DispatchMonthView({
 	// ─── Drag and drop reorder ─────────────────────────────────
 	async function handleDuplicate(duty) {
 		const { id: _id, created_at: _ca, updated_at: _ua, ...dutyData } = duty;
+		const insertAt = duty.sort_order + 1;
+
+		// Shift all duties after the original down by 1 to make room
+		const toShift = duties.filter((d) => d.sort_order >= insertAt);
+		await Promise.all(
+			toShift.map((d) =>
+				pdxDutyHelpers.update(d.id, { sort_order: d.sort_order + 1 }),
+			),
+		);
+
 		const newDuty = {
 			...dutyData,
 			duty_code: duty.duty_code,
 			label: duty.label ? `${duty.label} (複製)` : "(複製)",
-			sort_order: duties.length,
+			sort_order: insertAt,
 		};
 		const { data, error } = await pdxDutyHelpers.create(newDuty);
 		if (error) {
@@ -620,12 +630,12 @@ export default function DispatchMonthView({
 
 					html += `<div style="padding:10px 14px;">`;
 					dutySectors.forEach((sec, i) => {
-						html += `<div style="display:grid;grid-template-columns:44px 36px 14px 36px 1fr 44px;gap:4px;padding:4px 0;align-items:center;${sec.is_highlight ? "color:#d97706;" : ""}">
+						html += `<div style="display:grid;grid-template-columns:44px 36px 14px 36px 1fr 44px;gap:4px;padding:4px 0;align-items:center;${sec.is_highlight ? "color:#dc2626;font-weight:700;" : ""}">
               <span style="font-size:12px;font-weight:700;">${sec.dep_time?.slice(0, 5) || ""}</span>
               <span style="font-size:12px;font-weight:700;">${sec.dep_airport}</span>
               <span style="font-size:11px;color:#ccc;text-align:center;">→</span>
               <span style="font-size:12px;font-weight:700;">${sec.arr_airport}</span>
-              <span style="font-size:11px;color:#999;padding-left:4px;">${sec.flight_number}${sec.is_highlight ? " ★" : ""}</span>
+              <span style="font-size:11px;padding-left:4px;">${sec.flight_number}${sec.is_highlight ? " ★" : ""}</span>
               <span style="font-size:12px;color:#888;text-align:right;">${sec.arr_time?.slice(0, 5) || ""}</span>
             </div>`;
 						if (i < dutySectors.length - 1) {
@@ -750,12 +760,12 @@ export default function DispatchMonthView({
 								}
 								card += `<div style="padding:10px 14px;background:${isSpecialDuty ? "#fffef7" : "#fff"};">`;
 								dutySectors.forEach((sec, si) => {
-									card += `<div style="display:grid;grid-template-columns:44px 36px 14px 36px 1fr 44px;gap:3px;padding:3px 0;background:${isSpecialDuty ? "#fffef7" : "#fff"};${sec.is_highlight ? "color:#d97706;" : ""}">
+									card += `<div style="display:grid;grid-template-columns:44px 36px 14px 36px 1fr 44px;gap:3px;padding:3px 0;background:${isSpecialDuty ? "#fffef7" : "#fff"};${sec.is_highlight ? "color:#dc2626;font-weight:700;" : ""}">
                 <span style="font-size:12px;font-weight:700;">${sec.dep_time?.slice(0, 5) || ""}</span>
                 <span style="font-size:12px;font-weight:700;">${sec.dep_airport}</span>
                 <span style="font-size:11px;color:#888;text-align:center;">→</span>
                 <span style="font-size:12px;font-weight:700;">${sec.arr_airport}</span>
-                <span style="font-size:11px;color:#555;padding-left:4px;">${sec.flight_number}${sec.is_highlight ? " ★" : ""}</span>
+                <span style="font-size:11px;padding-left:4px;">${sec.flight_number}${sec.is_highlight ? " ★" : ""}</span>
                 <span style="font-size:12px;color:#444;text-align:right;">${sec.arr_time?.slice(0, 5) || ""}</span>
               </div>`;
 									if (si < dutySectors.length - 1) {
