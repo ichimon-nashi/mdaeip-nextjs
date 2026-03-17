@@ -18,9 +18,19 @@ import {
 import styles from "../../styles/MRTChecker.module.css";
 import { getEmployeeSchedule, getFlightDutyForMRT } from "../../lib/DataRoster";
 import { useAuth } from "../../contexts/AuthContext";
+import { useRouter } from "next/navigation";
+import { hasAppAccess } from "../../lib/permissionHelpers";
 
 const MRTChecker = () => {
 	const { user, loading: authLoading } = useAuth();
+	const router = useRouter();
+
+	// Auth guard — requires mrt_checker permission
+	useEffect(() => {
+		if (!authLoading && (!user || !hasAppAccess(user, "mrt_checker"))) {
+			router.replace("/dashboard");
+		}
+	}, [user, authLoading, router]);
 
 	const [draggedItem, setDraggedItem] = useState(null);
 	const [droppedItems, setDroppedItems] = useState({});
@@ -1420,6 +1430,8 @@ const MRTChecker = () => {
 
 		return categories;
 	}, [allDuties]);
+
+	if (!user || !hasAppAccess(user, "mrt_checker")) return null;
 
 	if (authLoading) {
 		return (

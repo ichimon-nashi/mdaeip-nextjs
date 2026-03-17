@@ -144,7 +144,8 @@ export const AuthProvider = ({ children }) => {
 		login,
 		logout,
 		changePassword,
-		isAdmin: user?.access_level === 2,
+		isAdmin: user?.id === "admin",
+		isSpecialAdmin: user?.id === "admin" || user?.id === "51892",
 	};
 
 	console.log("🎯 AuthContext rendering with:", { 

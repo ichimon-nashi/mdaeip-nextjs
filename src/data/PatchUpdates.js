@@ -132,9 +132,14 @@ export const patchUpdates = [
 		appName: "EIP系統",
 		updateInfo: ["排除iOS smtp寄送信件信件問題", "購買hankengo.com網域"],
 	},
-		{
+	{
 		date: "2025-12-29",
 		appName: "EIP系統",
 		updateInfo: ["增加儀表顯示個人班表", "調整文字跟圖形"],
+	},
+	{
+		date: "2026-03-17",
+		appName: "派遣表系統",
+		updateInfo: ["建立初版電子派遣表"],
 	},
 ];

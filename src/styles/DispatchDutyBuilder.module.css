@@ -1,0 +1,620 @@
+/* DispatchDutyBuilder.module.css */
+
+.container {
+	min-height: 100vh;
+	background: #f8f7f4;
+}
+
+/* ─── Top Bar ─────────────────────────────── */
+.topBar {
+	background: #fff;
+	border-bottom: 1px solid #e8e8e8;
+	padding: 14px 24px;
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 12px;
+	flex-wrap: wrap;
+	position: sticky;
+	top: 0;
+	z-index: 10;
+}
+
+.topBarLeft {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+}
+
+.backBtn {
+	display: flex;
+	align-items: center;
+	gap: 5px;
+	font-size: 13px;
+	color: #0f62fe;
+	background: none;
+	border: none;
+	cursor: pointer;
+	padding: 4px 0;
+	font-family: inherit;
+}
+.backBtn:hover {
+	text-decoration: underline;
+}
+
+.topBarTitle {
+	font-size: 16px;
+	font-weight: 600;
+	color: #1a1a1a;
+}
+
+.topBarRight {
+	display: flex;
+	gap: 8px;
+	align-items: center;
+}
+
+/* ─── Buttons ─────────────────────────────── */
+.btnPrimary {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	padding: 9px 18px;
+	background: #0f62fe;
+	color: #fff;
+	border: none;
+	border-radius: 8px;
+	font-size: 13px;
+	font-weight: 500;
+	cursor: pointer;
+	transition: background 0.15s;
+	font-family: inherit;
+}
+.btnPrimary:hover {
+	background: #0353e9;
+}
+.btnPrimary:disabled {
+	background: #a0b4d6;
+	cursor: not-allowed;
+}
+
+.btnSecondary {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	padding: 9px 16px;
+	background: #fff;
+	color: #333;
+	border: 1px solid #ddd;
+	border-radius: 8px;
+	font-size: 13px;
+	font-weight: 500;
+	cursor: pointer;
+	transition: background 0.15s;
+	font-family: inherit;
+}
+.btnSecondary:hover {
+	background: #f5f5f5;
+}
+
+.btnDanger {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 28px;
+	height: 28px;
+	background: none;
+	color: #dc2626;
+	border: 1px solid #fca5a5;
+	border-radius: 6px;
+	cursor: pointer;
+	transition: background 0.15s;
+	font-family: inherit;
+	flex-shrink: 0;
+}
+.btnDanger:hover {
+	background: #fef2f2;
+}
+
+.btnAddSector {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	padding: 8px 14px;
+	background: #f0f7ff;
+	color: #0f62fe;
+	border: 1px dashed #93c5fd;
+	border-radius: 8px;
+	font-size: 13px;
+	font-weight: 500;
+	cursor: pointer;
+	transition: background 0.15s;
+	font-family: inherit;
+	width: 100%;
+	justify-content: center;
+	margin-top: 8px;
+}
+.btnAddSector:hover {
+	background: #dbeafe;
+}
+
+/* ─── Layout ──────────────────────────────── */
+.builderLayout {
+	display: grid;
+	grid-template-columns: 1fr 300px;
+	gap: 16px;
+	padding: 20px 24px;
+	align-items: start;
+}
+
+/* ─── Section Card ────────────────────────── */
+.sectionCard {
+	background: #fff;
+	border: 1px solid #e8e8e8;
+	border-radius: 14px;
+	padding: 18px 20px;
+	margin-bottom: 14px;
+}
+
+.sectionTitle {
+	font-size: 14px;
+	font-weight: 600;
+	text-transform: uppercase;
+	letter-spacing: 0.04em;
+	color: #555;
+	margin-bottom: 14px;
+}
+
+/* ─── Form Fields ─────────────────────────── */
+.fieldRow {
+	display: flex;
+	gap: 12px;
+	margin-bottom: 12px;
+	align-items: flex-start;
+	flex-wrap: wrap;
+}
+
+.field {
+	display: flex;
+	flex-direction: column;
+	gap: 5px;
+}
+.field.grow {
+	flex: 1;
+	min-width: 80px;
+}
+.field.w80 {
+	width: 80px;
+}
+.field.w100 {
+	width: 100px;
+}
+.field.w120 {
+	width: 120px;
+}
+.field.w160 {
+	width: 160px;
+}
+/* Time inputs need extra width to show HH:MM AM/PM + clock icon */
+.field.wTime {
+	width: 160px;
+	min-width: 160px;
+}
+.field.wTime .fieldInput {
+	min-width: 150px;
+}
+
+.fieldLabel {
+	font-size: 14px;
+	font-weight: 500;
+	color: #333;
+}
+
+.fieldInput {
+	padding: 10px 13px;
+	border: 1px solid #ddd;
+	border-radius: 8px;
+	font-size: 15px;
+	color: #1a1a1a;
+	font-family: inherit;
+	background: #fff;
+	width: 100%;
+	transition:
+		border-color 0.15s,
+		box-shadow 0.15s;
+}
+.fieldInput:focus {
+	outline: none;
+	border-color: #0f62fe;
+	box-shadow: 0 0 0 3px rgba(15, 98, 254, 0.08);
+}
+.fieldInput.readonly {
+	background: #f8f8f8;
+	color: #555;
+}
+
+.fieldSelect {
+	padding: 10px 13px;
+	border: 1px solid #ddd;
+	border-radius: 8px;
+	font-size: 15px;
+	color: #1a1a1a;
+	font-family: inherit;
+	background: #fff;
+	width: 100%;
+	cursor: pointer;
+	appearance: none;
+	background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23666' d='M6 8L1 3h10z'/%3E%3C/svg%3E");
+	background-repeat: no-repeat;
+	background-position: right 10px center;
+	transition: border-color 0.15s;
+}
+.fieldSelect:focus {
+	outline: none;
+	border-color: #0f62fe;
+}
+
+.fieldHint {
+	font-size: 12px;
+	color: #666;
+	margin-top: 2px;
+}
+
+/* ─── Duty Type Pills ─────────────────────── */
+.typePillRow {
+	display: flex;
+	gap: 6px;
+	flex-wrap: wrap;
+}
+
+.typePill {
+	padding: 7px 14px;
+	border-radius: 20px;
+	font-size: 13px;
+	font-weight: 500;
+	border: 1px solid #e5e7eb;
+	cursor: pointer;
+	background: #fff;
+	color: #555;
+	transition: all 0.12s;
+	font-family: inherit;
+}
+.typePill:hover {
+	border-color: #0f62fe;
+	color: #0f62fe;
+}
+.typePill.selected {
+	background: #dbeafe;
+	color: #1d4ed8;
+	border-color: #93c5fd;
+}
+
+/* ─── Sector Rows ─────────────────────────── */
+.sectorItem {
+	display: grid;
+	grid-template-columns: 24px 90px 108px 56px 64px 90px 108px 32px 28px;
+	gap: 8px;
+	align-items: start;
+	padding: 10px 12px;
+	background: #f8f9fa;
+	border-radius: 9px;
+	margin-bottom: 8px;
+	border: 1px solid #f0f0f0;
+}
+.sectorItem.highlighted {
+	background: #fffbeb;
+	border-color: #fde68a;
+}
+.sectorDragOver {
+	border: 2px solid #0f62fe !important;
+	background: #eff6ff !important;
+}
+
+/* Airport cell: select + chinese name stacked */
+.airportCell {
+	display: flex;
+	flex-direction: column;
+	gap: 3px;
+	min-width: 0;
+}
+
+.airportChineseName {
+	font-size: 12px;
+	color: #555;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	text-align: center;
+	min-height: 15px;
+	font-weight: 500;
+}
+
+.sectorSeq {
+	font-size: 14px;
+	color: #666;
+	text-align: center;
+	font-weight: 600;
+	padding-top: 8px;
+}
+
+.sectorItemInput {
+	padding: 8px 8px;
+	border: 1px solid #e5e7eb;
+	border-radius: 6px;
+	font-size: 15px;
+	font-family: inherit;
+	background: #fff;
+	width: 100%;
+	min-width: 0;
+	text-align: center;
+}
+.sectorItemInput:focus {
+	outline: none;
+	border-color: #0f62fe;
+}
+
+/* Airline prefix dropdown */
+.sectorAirlineSelect {
+	padding: 8px 4px;
+	border: 1px solid #e5e7eb;
+	border-radius: 6px;
+	font-size: 15px;
+	font-weight: 600;
+	font-family: inherit;
+	background: #f0f7ff;
+	color: #1d4ed8;
+	width: 100%;
+	min-width: 0;
+	cursor: pointer;
+	appearance: none;
+	text-align: center;
+}
+.sectorAirlineSelect:focus {
+	outline: none;
+	border-color: #0f62fe;
+}
+
+.sectorAirportSelect {
+	padding: 8px 20px 8px 8px;
+	border: 1px solid #e5e7eb;
+	border-radius: 6px;
+	font-size: 14px;
+	font-weight: 500;
+	font-family: inherit;
+	background: #fff;
+	width: 100%;
+	min-width: 0;
+	cursor: pointer;
+	appearance: none;
+	background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='8' viewBox='0 0 8 8'%3E%3Cpath fill='%23999' d='M4 6L0 2h8z'/%3E%3C/svg%3E");
+	background-repeat: no-repeat;
+	background-position: right 5px center;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	text-align: center;
+}
+.sectorAirportSelect:focus {
+	outline: none;
+	border-color: #0f62fe;
+}
+
+/* Time inputs */
+.sectorTimeInput {
+	padding: 8px 4px;
+	border: 1px solid #e5e7eb;
+	border-radius: 6px;
+	font-size: 14px;
+	font-family: inherit;
+	background: #fff;
+	width: 100%;
+	min-width: 0;
+	text-align: center;
+}
+.sectorTimeInput:focus {
+	outline: none;
+	border-color: #0f62fe;
+}
+
+.sectorHighlightBtn {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 22px;
+	height: 22px;
+	border-radius: 5px;
+	background: none;
+	border: 1px solid #e5e7eb;
+	cursor: pointer;
+	font-size: 11px;
+	color: #bbb;
+	transition: all 0.12s;
+}
+.sectorHighlightBtn.active {
+	background: #fef3c7;
+	border-color: #fde68a;
+	color: #d97706;
+}
+
+/* ─── Weekday Selector ────────────────────── */
+.weekdayRow {
+	display: flex;
+	gap: 8px;
+	align-items: center;
+	flex-wrap: wrap;
+}
+
+.dayToggle {
+	width: 36px;
+	height: 36px;
+	border-radius: 50%;
+	font-size: 13px;
+	font-weight: 500;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	cursor: pointer;
+	border: 1px solid #e5e7eb;
+	background: #fff;
+	color: #555;
+	font-family: inherit;
+	transition: all 0.12s;
+}
+.dayToggle:hover {
+	border-color: #0f62fe;
+	color: #0f62fe;
+}
+.dayToggle.on {
+	background: #dbeafe;
+	color: #1d4ed8;
+	border-color: #93c5fd;
+}
+
+/* ─── Stats Panel ─────────────────────────── */
+.statsPanel {
+	background: #fff;
+	border: 1px solid #e8e8e8;
+	border-radius: 14px;
+	padding: 18px 20px;
+	position: sticky;
+	top: 70px;
+}
+
+.statsPanelTitle {
+	font-size: 16px;
+	font-weight: 600;
+	color: #1a1a1a;
+	margin-bottom: 4px;
+}
+
+.statsPanelSub {
+	font-size: 13px;
+	color: #666;
+	margin-bottom: 16px;
+}
+
+.statSection {
+	font-size: 12px;
+	font-weight: 600;
+	text-transform: uppercase;
+	letter-spacing: 0.04em;
+	color: #666;
+	padding: 10px 0 5px;
+}
+
+.statRow {
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	padding: 8px 0;
+	border-bottom: 1px solid #f0f0f0;
+}
+.statRow:last-child {
+	border-bottom: none;
+}
+
+.statRowLabel {
+	font-size: 14px;
+	color: #555;
+}
+.statRowValue {
+	font-size: 15px;
+	font-weight: 600;
+	color: #1a1a1a;
+}
+.statRowValue.ok {
+	color: #16a34a;
+}
+.statRowValue.warn {
+	color: #d97706;
+}
+
+.statsCompliant {
+	margin-top: 14px;
+	padding: 10px 12px;
+	background: #f0fdf4;
+	border-radius: 9px;
+	font-size: 13px;
+	color: #166534;
+	font-weight: 500;
+}
+
+.statsWarning {
+	margin-top: 14px;
+	padding: 10px 12px;
+	background: #fffbeb;
+	border-radius: 9px;
+	font-size: 13px;
+	color: #92400e;
+	font-weight: 500;
+}
+
+/* ─── Spinner ─────────────────────────────── */
+.spinner {
+	width: 16px;
+	height: 16px;
+	border: 2px solid rgba(255, 255, 255, 0.3);
+	border-top-color: #fff;
+	border-radius: 50%;
+	animation: spin 0.7s linear infinite;
+	display: inline-block;
+}
+@keyframes spin {
+	to {
+		transform: rotate(360deg);
+	}
+}
+
+@media (max-width: 900px) {
+	.builderLayout {
+		grid-template-columns: 1fr;
+		padding: 16px;
+	}
+	.statsPanel {
+		position: static;
+	}
+	.sectorItem {
+		grid-template-columns: 24px 90px 108px 56px 64px 90px 108px 32px 28px;
+	}
+}
+
+@media (max-width: 640px) {
+	.topBar {
+		padding: 12px 16px;
+	}
+	.sectorItem {
+		grid-template-columns: 1fr 1fr;
+		gap: 6px;
+	}
+	.sectorSeq {
+		display: none;
+	}
+}
+
+/* ─── Date Mode Tabs ──────────────────────── */
+.modeTabs {
+	display: flex;
+	background: #f1f5f9;
+	border-radius: 8px;
+	padding: 3px;
+	gap: 2px;
+}
+
+.modeTab {
+	padding: 5px 12px;
+	border-radius: 6px;
+	font-size: 12px;
+	font-weight: 500;
+	border: none;
+	background: none;
+	color: #888;
+	cursor: pointer;
+	font-family: inherit;
+	transition: all 0.15s;
+}
+
+.modeTabActive {
+	background: #fff;
+	color: #0f62fe;
+	box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}

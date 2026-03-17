@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from "react";
 import { useAuth } from "../../contexts/AuthContext";
 import { useRouter } from "next/navigation";
+import { hasAppAccess } from "../../lib/permissionHelpers";
 import toast from "react-hot-toast";
 import {
 	Upload,
@@ -48,6 +49,14 @@ const DatabaseManagement = () => {
 		base: "",
 		access_level: 1,
 		password: "",
+		app_permissions: {
+			roster: { access: false },
+			mrt_checker: { access: false },
+			gday: { access: false },
+			etr_generator: { access: false },
+			dispatch: { access: false },
+			database_management: { access: false },
+		},
 	});
 	const [isLookingUp, setIsLookingUp] = useState(false);
 	const [showPassword, setShowPassword] = useState(false);
@@ -65,7 +74,7 @@ const DatabaseManagement = () => {
 
 	// Check access level and redirect if not admin
 	useEffect(() => {
-		if (!loading && (!user || user.access_level !== 99)) {
+		if (!loading && (!user || !hasAppAccess(user, "database_management"))) {
 			router.replace("/schedule");
 		}
 	}, [user, loading, router]);
@@ -92,14 +101,14 @@ const DatabaseManagement = () => {
 			}
 		};
 
-		if (user?.access_level === 99) {
+		if (hasAppAccess(user, "database_management")) {
 			loadData();
 		}
 	}, [user]);
 
 	// Load users when users tab is active
 	useEffect(() => {
-		if (activeTab === "users" && user?.access_level === 99) {
+		if (activeTab === "users" && hasAppAccess(user, "database_management")) {
 			loadUsers();
 		}
 	}, [activeTab, user]);
@@ -306,6 +315,14 @@ const DatabaseManagement = () => {
 			base: "",
 			access_level: 1,
 			password: "",
+			app_permissions: {
+				roster: { access: false },
+				mrt_checker: { access: false },
+				gday: { access: false },
+				etr_generator: { access: false },
+				dispatch: { access: false },
+				database_management: { access: false },
+			},
 		});
 		setShowUserModal(true);
 	};
@@ -319,7 +336,15 @@ const DatabaseManagement = () => {
 			rank: user.rank,
 			base: user.base,
 			access_level: user.access_level,
-			password: "", // Don't populate password for editing
+			password: "",
+			app_permissions: user.app_permissions || {
+				roster: { access: false },
+				mrt_checker: { access: false },
+				gday: { access: false },
+				etr_generator: { access: false },
+				dispatch: { access: false },
+				database_management: { access: false },
+			},
 		});
 		setShowUserModal(true);
 	};
@@ -447,7 +472,7 @@ const DatabaseManagement = () => {
 		);
 	}
 
-	if (!user || user.access_level !== 99) {
+	if (!user || !hasAppAccess(user, "database_management")) {
 		return (
 			<div className={styles.accessDenied}>
 				<AlertTriangle size={48} />
@@ -937,6 +962,38 @@ const DatabaseManagement = () => {
 									<small className={styles.fieldHint}>
 										預設: 1 (一般使用者), 99 (管理員)
 									</small>
+								</div>
+
+								<div className={styles.formGroup}>
+									<label>應用程式權限</label>
+									<div className={styles.permissionsGrid}>
+										{[
+											{ key: "roster", label: "換班系統" },
+											{ key: "mrt_checker", label: "休時檢視" },
+											{ key: "gday", label: "GDay劃假" },
+											{ key: "etr_generator", label: "eTR產生器" },
+											{ key: "dispatch", label: "派遣表系統" },
+											{ key: "database_management", label: "資料庫管理" },
+										].map(({ key, label }) => (
+											<label key={key} className={styles.permissionToggle}>
+												<input
+													type="checkbox"
+													checked={userFormData.app_permissions?.[key]?.access === true}
+													onChange={(e) =>
+														setUserFormData((prev) => ({
+															...prev,
+															app_permissions: {
+																...prev.app_permissions,
+																[key]: { access: e.target.checked },
+															},
+														}))
+													}
+													className={styles.formCheckbox}
+												/>
+												<span className={styles.permissionLabel}>{label}</span>
+											</label>
+										))}
+									</div>
 								</div>
 
 								<div className={styles.formGroup}>

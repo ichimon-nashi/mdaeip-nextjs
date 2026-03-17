@@ -1,0 +1,1171 @@
+/* DispatchMonthView.module.css */
+
+.container {
+	min-height: 100vh;
+	background: #f8f7f4;
+}
+
+/* ─── Top Bar ─────────────────────────────── */
+.topBar {
+	background: #fff;
+	border-bottom: 1px solid #e8e8e8;
+	padding: 14px 24px;
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 12px;
+	flex-wrap: wrap;
+	position: sticky;
+	top: 0;
+	z-index: 10;
+}
+
+.topBarLeft {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+}
+
+.backBtn {
+	display: flex;
+	align-items: center;
+	gap: 5px;
+	font-size: 13px;
+	color: #0f62fe;
+	background: none;
+	border: none;
+	cursor: pointer;
+	padding: 4px 0;
+	font-family: inherit;
+}
+.backBtn:hover {
+	text-decoration: underline;
+}
+
+.topBarTitle {
+	font-size: 16px;
+	font-weight: 600;
+	color: #1a1a1a;
+}
+.topBarRight {
+	display: flex;
+	gap: 8px;
+	align-items: center;
+	flex-wrap: wrap;
+}
+
+/* ─── Base Color Coding ───────────────────── */
+/* KHH = blue, TSA = green, RMQ = orange */
+.baseKHH {
+	border-left: 5px solid #2563eb !important;
+	background-clip: padding-box;
+}
+.baseTSA {
+	border-left: 5px solid #16a34a !important;
+	background-clip: padding-box;
+}
+.baseRMQ {
+	border-left: 5px solid #ea580c !important;
+	background-clip: padding-box;
+}
+
+/* Override active::before when base color is showing */
+.baseKHH.active::before {
+	display: none;
+}
+.baseTSA.active::before {
+	display: none;
+}
+.baseRMQ.active::before {
+	display: none;
+}
+.baseKHH.active {
+	background: #eff6ff;
+}
+.baseTSA.active {
+	background: #f0fdf4;
+}
+.baseRMQ.active {
+	background: #fff7ed;
+}
+
+.baseTagKHH {
+	background: #dbeafe !important;
+	color: #1e40af !important;
+	font-weight: 600 !important;
+}
+.baseTagTSA {
+	background: #dcfce7 !important;
+	color: #166534 !important;
+	font-weight: 600 !important;
+}
+.baseTagRMQ {
+	background: #ffedd5 !important;
+	color: #9a3412 !important;
+	font-weight: 600 !important;
+}
+
+.baseDotKHH {
+	background: #2563eb;
+}
+.baseDotTSA {
+	background: #16a34a;
+}
+.baseDotRMQ {
+	background: #ea580c;
+}
+.statusBadge {
+	font-size: 11px;
+	padding: 3px 10px;
+	border-radius: 20px;
+	font-weight: 500;
+}
+.statusDraft {
+	background: #fef9c3;
+	color: #854d0e;
+}
+.statusPublished {
+	background: #dcfce7;
+	color: #166534;
+}
+
+/* ─── Buttons ─────────────────────────────── */
+.btnPrimary {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	padding: 8px 14px;
+	background: #0f62fe;
+	color: #fff;
+	border: none;
+	border-radius: 8px;
+	font-size: 13px;
+	font-weight: 500;
+	cursor: pointer;
+	transition: background 0.15s;
+	font-family: inherit;
+	white-space: nowrap;
+}
+.btnPrimary:hover {
+	background: #0353e9;
+}
+
+.btnSecondary {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	padding: 8px 14px;
+	background: #fff;
+	color: #333;
+	border: 1px solid #ddd;
+	border-radius: 8px;
+	font-size: 13px;
+	font-weight: 500;
+	cursor: pointer;
+	transition: background 0.15s;
+	font-family: inherit;
+	white-space: nowrap;
+}
+.btnSecondary:hover {
+	background: #f5f5f5;
+}
+
+.btnDanger {
+	display: flex;
+	align-items: center;
+	gap: 5px;
+	padding: 6px 11px;
+	background: #fff;
+	color: #dc2626;
+	border: 1px solid #fca5a5;
+	border-radius: 7px;
+	font-size: 12px;
+	cursor: pointer;
+	transition: background 0.15s;
+	font-family: inherit;
+}
+.btnDanger:hover {
+	background: #fef2f2;
+}
+
+.btnIcon {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 30px;
+	height: 30px;
+	border-radius: 7px;
+	background: none;
+	border: 1px solid #e5e7eb;
+	cursor: pointer;
+	color: #555;
+	transition: background 0.15s;
+}
+.btnIcon:hover {
+	background: #f5f5f5;
+}
+
+/* ─── Tab switcher ────────────────────────── */
+.tabRow {
+	display: flex;
+	background: #fff;
+	border-bottom: 1px solid #e8e8e8;
+	padding: 0 24px;
+}
+
+.tabBtn {
+	padding: 12px 18px;
+	font-size: 13px;
+	font-weight: 500;
+	color: #555;
+	background: none;
+	border: none;
+	border-bottom: 2px solid transparent;
+	cursor: pointer;
+	font-family: inherit;
+	transition:
+		color 0.15s,
+		border-color 0.15s;
+	white-space: nowrap;
+}
+.tabBtn:hover {
+	color: #333;
+}
+.tabActive {
+	color: #0f62fe !important;
+	border-bottom-color: #0f62fe !important;
+}
+
+/* ─── Split Layout (Tab A) ────────────────── */
+.splitLayout {
+	display: grid;
+	grid-template-columns: 25vw 1fr;
+	min-height: calc(100vh - 114px);
+}
+
+/* ─── Duty Sidebar ────────────────────────── */
+.dutySidebar {
+	background: #fff;
+	border-right: 1px solid #e8e8e8;
+	display: flex;
+	flex-direction: column;
+	overflow: hidden;
+}
+
+.sidebarHead {
+	padding: 12px 14px;
+	border-bottom: 1px solid #e8e8e8;
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+}
+
+.sidebarHeadLabel {
+	font-size: 11px;
+	font-weight: 600;
+	color: #555;
+	text-transform: uppercase;
+	letter-spacing: 0.05em;
+}
+
+.sidebarList {
+	overflow-y: auto;
+	flex: 1;
+}
+
+.dutyItem {
+	padding: 10px 14px;
+	border-bottom: 1px solid #f0f0f0;
+	cursor: pointer;
+	display: flex;
+	align-items: flex-start;
+	gap: 8px;
+	transition: background 0.12s;
+	position: relative;
+}
+.dutyItem:hover {
+	background: #f8f8f8;
+}
+.dutyItem.active {
+	background: #eff6ff;
+}
+.dutyItem.active::before {
+	content: "";
+	position: absolute;
+	left: 0;
+	top: 0;
+	bottom: 0;
+	width: 3px;
+	background: #0f62fe;
+	border-radius: 0 2px 2px 0;
+}
+.dutyItem.dragOver {
+	background: #dbeafe;
+	border-bottom-color: #0f62fe;
+}
+
+.dragHandle {
+	color: #d1d5db;
+	display: flex;
+	align-items: center;
+	flex-shrink: 0;
+	padding-right: 2px;
+	cursor: grab;
+}
+.dragHandle:active {
+	cursor: grabbing;
+}
+
+.dutyItemOverrideDot {
+	width: 8px;
+	height: 8px;
+	background: #f59e0b;
+	border-radius: 50%;
+	flex-shrink: 0;
+	margin-top: 5px;
+}
+.dutyItemPlaceholder {
+	width: 8px;
+	flex-shrink: 0;
+}
+.dutyItemBase {
+	font-size: 11px;
+	padding: 2px 7px;
+	border-radius: 6px;
+	background: #f1f5f9;
+	color: #475569;
+	font-weight: 600;
+	flex-shrink: 0;
+}
+.dutyItemMeta {
+	flex: 1;
+	min-width: 0;
+}
+.dutyItemRoute {
+	font-size: 13px;
+	color: #555;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	font-weight: 500;
+}
+.dutyItemRange {
+	font-size: 11px;
+	color: #666;
+	margin-top: 2px;
+}
+.dutyItemSectors {
+	font-size: 11px;
+	color: #666;
+	flex-shrink: 0;
+}
+
+/* ─── Detail Area ─────────────────────────── */
+.detailArea {
+	padding: 20px;
+	overflow-y: auto;
+	background: #f8f7f4;
+}
+
+.emptySelection {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+	min-height: 300px;
+	gap: 10px;
+	color: #555;
+	text-align: center;
+}
+.emptySelectionText {
+	font-size: 15px;
+	color: #777;
+}
+.emptySelectionSub {
+	font-size: 13px;
+	color: #555;
+}
+
+/* ─── Detail Card ─────────────────────────── */
+.detailCard {
+	background: #fff;
+	border: 1px solid #e8e8e8;
+	border-radius: 14px;
+	overflow: hidden;
+	margin-bottom: 14px;
+}
+
+.detailCardHead {
+	padding: 16px 18px;
+	border-bottom: 1px solid #f0f0f0;
+	display: flex;
+	align-items: flex-start;
+	justify-content: space-between;
+	gap: 12px;
+}
+
+.detailCode {
+	font-size: 24px;
+	font-weight: 700;
+	color: #1a1a1a;
+	line-height: 1;
+}
+.detailCodeLabel {
+	font-size: 14px;
+	font-weight: 400;
+	color: #f59e0b;
+	margin-left: 8px;
+}
+.detailTags {
+	display: flex;
+	gap: 6px;
+	flex-wrap: wrap;
+	margin-top: 6px;
+}
+
+.tag {
+	font-size: 12px;
+	padding: 3px 9px;
+	border-radius: 10px;
+	font-weight: 500;
+}
+.tagAtr {
+	background: #dcfce7;
+	color: #166534;
+}
+.tagB738 {
+	background: #dbeafe;
+	color: #1e40af;
+}
+.tagBase {
+	background: #f1f5f9;
+	color: #475569;
+}
+.tagIntl {
+	background: #fef3c7;
+	color: #92400e;
+}
+.tagOverride {
+	background: #fef9c3;
+	color: #854d0e;
+}
+
+.detailReportLabel {
+	font-size: 12px;
+	color: #666;
+	text-align: right;
+}
+.detailReportTime {
+	font-size: 16px;
+	font-weight: 600;
+	color: #1a1a1a;
+	text-align: right;
+}
+.detailEndTime {
+	font-size: 13px;
+	color: #555;
+	text-align: right;
+	margin-top: 2px;
+}
+
+/* ─── Stats Row ───────────────────────────── */
+.statsRow {
+	display: grid;
+	grid-template-columns: repeat(5, 1fr);
+	gap: 1px;
+	background: #f0f0f0;
+	border-bottom: 1px solid #f0f0f0;
+}
+
+.statCell {
+	background: #fff;
+	padding: 12px 14px;
+	text-align: center;
+}
+.statLabel {
+	font-size: 11px;
+	text-transform: uppercase;
+	letter-spacing: 0.04em;
+	color: #666;
+	font-weight: 500;
+}
+.statValue {
+	font-size: 16px;
+	font-weight: 600;
+	color: #1a1a1a;
+	margin-top: 3px;
+}
+.statValue.ok {
+	color: #16a34a;
+}
+.statValue.warn {
+	color: #d97706;
+}
+
+/* ─── Sector Timeline ─────────────────────── */
+.sectorSection {
+	padding: 16px 18px;
+}
+.sectionTitle {
+	font-size: 11px;
+	font-weight: 600;
+	text-transform: uppercase;
+	letter-spacing: 0.05em;
+	color: #666;
+	margin-bottom: 12px;
+}
+.sectorTimeline {
+	display: flex;
+	flex-direction: column;
+}
+
+.sectorRow {
+	display: grid;
+	grid-template-columns: 44px 36px 14px 36px 1fr 44px;
+	align-items: center;
+	gap: 4px;
+	padding: 5px 0;
+}
+.sectorRow.highlight .srFn {
+	color: #f59e0b;
+	font-weight: 500;
+}
+.sectorRow.highlight .srDep,
+.sectorRow.highlight .srFrom,
+.sectorRow.highlight .srArr {
+	color: #d97706;
+}
+
+.srDep {
+	font-size: 13px;
+	font-weight: 600;
+	color: #1a1a1a;
+}
+.srFrom {
+	font-size: 13px;
+	font-weight: 600;
+	color: #1a1a1a;
+}
+.srArrow {
+	font-size: 12px;
+	color: #777;
+	text-align: center;
+}
+.srTo {
+	font-size: 13px;
+	font-weight: 600;
+	color: #1a1a1a;
+}
+.srFn {
+	font-size: 12px;
+	color: #555;
+	padding-left: 4px;
+}
+.srArr {
+	font-size: 13px;
+	color: #555;
+	text-align: right;
+}
+
+.groundStop {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	padding: 2px 0 2px 44px;
+}
+.groundLine {
+	width: 1px;
+	height: 14px;
+	background: #e5e7eb;
+	flex-shrink: 0;
+}
+.groundText {
+	font-size: 11px;
+	color: #555;
+	font-style: italic;
+}
+
+/* ─── Weekday Strip ───────────────────────── */
+.weekdaySection {
+	padding: 12px 18px;
+	border-top: 1px solid #f0f0f0;
+	display: flex;
+	align-items: center;
+	gap: 4px;
+	flex-wrap: wrap;
+}
+
+.dayPill {
+	width: 26px;
+	height: 26px;
+	border-radius: 50%;
+	font-size: 11px;
+	font-weight: 500;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	flex-shrink: 0;
+}
+.dayPillOn {
+	background: #dbeafe;
+	color: #1d4ed8;
+}
+.dayPillOff {
+	background: #f1f5f9;
+	color: #cbd5e1;
+}
+.weekdayNote {
+	font-size: 12px;
+	color: #f59e0b;
+	font-style: italic;
+	margin-left: 6px;
+}
+
+/* ─── Empty States ────────────────────────── */
+.emptyMonth {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+	padding: 40px 20px;
+	gap: 8px;
+	color: #555;
+	text-align: center;
+}
+
+/* ─── Loading ─────────────────────────────── */
+.loadingWrap {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	padding: 60px;
+	gap: 10px;
+	color: #555;
+	font-size: 14px;
+}
+
+.spinner {
+	width: 18px;
+	height: 18px;
+	border: 2px solid #e5e7eb;
+	border-top-color: #0f62fe;
+	border-radius: 50%;
+	animation: spin 0.7s linear infinite;
+	flex-shrink: 0;
+}
+@keyframes spin {
+	to {
+		transform: rotate(360deg);
+	}
+}
+
+/* ════════════════════════════════════════════
+   WEEKLY GRID (Tab B)
+════════════════════════════════════════════ */
+.weekTabWrap {
+	padding: 20px 24px;
+	overflow-x: auto;
+}
+
+.weekNav {
+	display: flex;
+	align-items: center;
+	gap: 14px;
+	margin-bottom: 16px;
+}
+
+.weekNavBtn {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 32px;
+	height: 32px;
+	border-radius: 8px;
+	background: #fff;
+	border: 1px solid #e5e7eb;
+	cursor: pointer;
+	color: #555;
+	transition: background 0.15s;
+	flex-shrink: 0;
+}
+.weekNavBtn:hover:not(:disabled) {
+	background: #f0f7ff;
+	border-color: #93c5fd;
+	color: #0f62fe;
+}
+.weekNavBtn:disabled {
+	opacity: 0.35;
+	cursor: not-allowed;
+}
+
+.weekNavLabel {
+	font-size: 15px;
+	font-weight: 600;
+	color: #1a1a1a;
+}
+
+.weekGridWrap {
+	overflow-x: auto;
+	overflow-y: visible;
+}
+
+.weekGrid {
+	width: 100%;
+	border-collapse: collapse;
+	background: #fff;
+	border: 1px solid #e8e8e8;
+	border-radius: 12px;
+	overflow: visible;
+	font-size: 12px;
+	min-width: 700px;
+}
+
+.wgCodeHead {
+	background: #f8f9fa;
+	padding: 10px 12px;
+	text-align: left;
+	font-size: 11px;
+	font-weight: 600;
+	color: #555;
+	text-transform: uppercase;
+	letter-spacing: 0.04em;
+	border-bottom: 1px solid #e8e8e8;
+	white-space: nowrap;
+}
+
+.wgDayHead {
+	background: #f8f9fa;
+	padding: 8px 6px;
+	text-align: center;
+	border-bottom: 1px solid #e8e8e8;
+	border-left: 1px solid #f0f0f0;
+	min-width: 90px;
+}
+.wgDayOutOfMonth {
+	background: #fafafa;
+	opacity: 0.4;
+}
+.wgDayToday {
+	background: #eff6ff;
+}
+.wgDayName {
+	font-size: 11px;
+	font-weight: 600;
+	color: #555;
+}
+.wgDayNum {
+	font-size: 14px;
+	font-weight: 700;
+	color: #1a1a1a;
+	margin-top: 1px;
+}
+.wgDayToday .wgDayNum {
+	color: #0f62fe;
+}
+
+.wgRow:nth-child(even) td {
+	background: #fafafa;
+}
+.wgRow:hover td {
+	background: #f0f7ff !important;
+}
+.wgRowDragOver td {
+	background: #dbeafe !important;
+	border-top: 2px solid #0f62fe;
+}
+.wgRowHidden td {
+	background: #fafafa !important;
+}
+.wgHiddenRow {
+	text-align: center;
+	padding: 10px 8px;
+	border-left: 1px solid #f0f0f0;
+	border-bottom: 1px solid #f0f0f0;
+}
+
+.wgCodeCell {
+	padding: 10px 12px;
+	border-bottom: 1px solid #f0f0f0;
+	white-space: nowrap;
+}
+.wgDragDot {
+	color: #d1d5db;
+	margin-right: 6px;
+	font-size: 13px;
+	cursor: grab;
+}
+.wgCode {
+	font-size: 13px;
+	font-weight: 700;
+	color: #1a1a1a;
+}
+
+.wgBaseCell {
+	padding: 10px 10px;
+	border-bottom: 1px solid #f0f0f0;
+	font-size: 12px;
+	font-weight: 600;
+	white-space: nowrap;
+	text-align: center;
+}
+
+.wgCell {
+	padding: 7px 8px;
+	border-bottom: 1px solid #f0f0f0;
+	border-left: 1px solid #f0f0f0;
+	cursor: pointer;
+	vertical-align: top;
+	position: relative;
+	transition: background 0.1s;
+}
+.wgCellSpecial {
+	background: #fffbeb !important;
+}
+.wgCellOff {
+	padding: 7px 8px;
+	border-bottom: 1px solid #f0f0f0;
+	border-left: 1px solid #f0f0f0;
+	text-align: center;
+	vertical-align: middle;
+}
+.wgCellEmpty {
+	border-bottom: 1px solid #f0f0f0;
+	border-left: 1px solid #f0f0f0;
+	background: #fafafa;
+}
+.wgOffDash {
+	font-size: 12px;
+	color: #d1d5db;
+}
+
+.wgSpecialDot {
+	position: absolute;
+	top: 4px;
+	right: 4px;
+	width: 6px;
+	height: 6px;
+	background: #f59e0b;
+	border-radius: 50%;
+}
+
+.wgDepTime {
+	font-size: 11px;
+	font-weight: 600;
+	color: #1a1a1a;
+}
+.wgRoute {
+	font-size: 10px;
+	color: #555;
+	margin-top: 2px;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	max-width: 110px;
+}
+.wgFlightCodes {
+	font-size: 9px;
+	color: #666;
+	margin-top: 1px;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	max-width: 110px;
+}
+.wgEndTime {
+	font-size: 11px;
+	color: #666;
+	margin-top: 2px;
+}
+
+/* Cell tooltip — fixed positioned to avoid any clip */
+.cellTooltip {
+	background: #1e293b;
+	color: #f1f5f9;
+	border-radius: 10px;
+	padding: 14px 16px;
+	min-width: 260px;
+	max-width: 320px;
+	box-shadow: 0 12px 32px rgba(0, 0, 0, 0.4);
+	pointer-events: none;
+	white-space: nowrap;
+	font-family: var(--font-sans);
+}
+
+.ttTitle {
+	font-size: 15px;
+	font-weight: 700;
+	color: #fff;
+	margin-bottom: 8px;
+}
+.ttLabel {
+	font-size: 12px;
+	color: #fbbf24;
+	font-weight: 400;
+}
+.ttRow {
+	display: flex;
+	gap: 6px;
+	align-items: center;
+	font-size: 13px;
+	color: #cbd5e1;
+	margin-bottom: 8px;
+}
+.ttKey {
+	color: #94a3b8;
+	font-size: 11px;
+	text-transform: uppercase;
+	letter-spacing: 0.04em;
+}
+
+.ttSector {
+	display: grid;
+	grid-template-columns: 44px 36px 16px 36px 44px 1fr;
+	gap: 4px;
+	align-items: center;
+	padding: 5px 0;
+	border-top: 1px solid rgba(255, 255, 255, 0.1);
+	font-size: 13px;
+}
+.ttTime {
+	color: #cbd5e1;
+	font-size: 12px;
+}
+.ttAp {
+	color: #fff;
+	font-weight: 700;
+	font-size: 13px;
+}
+.ttArrow {
+	color: #64748b;
+	text-align: center;
+}
+.ttFn {
+	color: #94a3b8;
+	font-size: 12px;
+	padding-left: 4px;
+}
+
+.weekLegend {
+	display: flex;
+	gap: 20px;
+	align-items: center;
+	margin-top: 12px;
+	font-size: 12px;
+	color: #555;
+	flex-wrap: wrap;
+}
+.legendItem {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+}
+.legendDotSpecial {
+	width: 8px;
+	height: 8px;
+	background: #f59e0b;
+	border-radius: 50%;
+	flex-shrink: 0;
+}
+
+/* ════════════════════════════════════════════
+   FT / FDP STATS (Tab C)
+════════════════════════════════════════════ */
+.ftTabWrap {
+	padding: 20px 24px;
+}
+
+.ftTableNote {
+	font-size: 14px;
+	color: #444;
+	background: #f8f9fa;
+	border: 1px solid #e8e8e8;
+	border-radius: 8px;
+	padding: 12px 16px;
+	margin-bottom: 20px;
+}
+
+.ftSection {
+	margin-bottom: 28px;
+}
+
+.ftSectionTitle {
+	font-size: 15px;
+	font-weight: 700;
+	color: #1a1a1a;
+	margin-bottom: 10px;
+	padding-left: 2px;
+	display: flex;
+	align-items: center;
+	gap: 8px;
+}
+
+.ftBaseDot {
+	width: 12px;
+	height: 12px;
+	border-radius: 50%;
+	flex-shrink: 0;
+	display: inline-block;
+}
+
+.ftTableWrap {
+	overflow-x: auto;
+}
+
+.ftTable {
+	width: 100%;
+	border-collapse: collapse;
+	background: #fff;
+	border: 1px solid #e8e8e8;
+	border-radius: 10px;
+	overflow: hidden;
+	font-size: 14px;
+	table-layout: fixed;
+}
+
+.ftThCode {
+	background: #f8f9fa;
+	padding: 11px 14px;
+	text-align: left;
+	font-size: 13px;
+	font-weight: 700;
+	color: #333;
+	text-transform: uppercase;
+	letter-spacing: 0.04em;
+	border-bottom: 1px solid #e8e8e8;
+	white-space: nowrap;
+	width: 150px;
+}
+
+.ftThDay {
+	background: #f8f9fa;
+	padding: 11px 6px;
+	text-align: center;
+	font-size: 13px;
+	font-weight: 700;
+	color: #333;
+	border-bottom: 1px solid #e8e8e8;
+	border-left: 1px solid #f0f0f0;
+	width: 68px;
+}
+
+.ftThStat {
+	background: #f8f9fa;
+	padding: 11px 10px;
+	text-align: center;
+	font-size: 13px;
+	font-weight: 700;
+	color: #333;
+	border-bottom: 1px solid #e8e8e8;
+	border-left: 1px solid #e8e8e8;
+	white-space: nowrap;
+	width: 90px;
+}
+
+.ftRow {
+	border-bottom: 1px solid #f0f0f0;
+}
+.ftRow:last-child {
+	border-bottom: none;
+}
+.ftRow:hover td {
+	background: #f8f9fa;
+}
+
+.ftTdCode {
+	padding: 11px 14px;
+	white-space: nowrap;
+	vertical-align: middle;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+.ftCodeTag {
+	font-size: 14px;
+	font-weight: 700;
+	padding: 3px 10px;
+	border-radius: 8px;
+	background: #eff6ff;
+	color: #1d4ed8;
+	display: inline-block;
+}
+.ftMergedTag {
+	font-size: 12px;
+	padding: 2px 7px;
+	border-radius: 6px;
+	background: #e0e7ff;
+	color: #4338ca;
+	margin-left: 5px;
+	display: inline-block;
+}
+.ftLabel {
+	font-size: 12px;
+	color: #f59e0b;
+	margin-left: 5px;
+	display: inline-block;
+	font-weight: 500;
+}
+
+.ftTdDay {
+	padding: 11px 6px;
+	text-align: center;
+	color: #333;
+	border-left: 1px solid #f0f0f0;
+	overflow: hidden;
+	font-size: 14px;
+}
+.ftDash {
+	color: #aaa;
+}
+
+.ftTdStat {
+	padding: 11px 10px;
+	text-align: center;
+	color: #333;
+	border-left: 1px solid #e8e8e8;
+	overflow: hidden;
+	font-size: 14px;
+}
+
+.ftOk {
+	color: #16a34a;
+	font-weight: 600;
+}
+.ftWarn {
+	color: #d97706;
+	font-weight: 600;
+}
+
+.ftTotalRow {
+	background: #f8f9fa;
+	font-weight: 700;
+	border-top: 2px solid #e8e8e8;
+}
+.ftTotalRow td {
+	padding: 12px 8px;
+	font-size: 15px;
+}
+
+@media (max-width: 768px) {
+	.splitLayout {
+		grid-template-columns: 1fr;
+	}
+	.dutySidebar {
+		border-right: none;
+		border-bottom: 1px solid #e8e8e8;
+		max-height: 200px;
+	}
+	.statsRow {
+		grid-template-columns: repeat(2, 1fr);
+	}
+	.topBar,
+	.weekTabWrap,
+	.ftTabWrap {
+		padding: 12px 16px;
+	}
+	.detailArea {
+		padding: 14px;
+	}
+	.tabRow {
+		padding: 0 16px;
+		overflow-x: auto;
+	}
+}

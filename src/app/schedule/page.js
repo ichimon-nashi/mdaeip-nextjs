@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
+import { hasAppAccess } from '../../lib/permissionHelpers';
 import { useRouter } from 'next/navigation';
 import toast from 'react-hot-toast';
 import styles from '../../styles/Schedule.module.css';
@@ -150,10 +151,11 @@ export default function SchedulePage() {
 
 	// Redirect handling
 	useEffect(() => {
-		if (!loading && !user) {
-			console.log('User not authenticated, AuthContext will handle redirect...');
+		if (!loading && (!user || !hasAppAccess(user, 'roster'))) {
+			console.log('User not authenticated or no roster access, redirecting...');
+			router.replace('/dashboard');
 		}
-	}, [user, loading]);
+	}, [user, loading, router]);
 
 	// Parse flight duty details from the flight duty string
 	const parseFlightDutyDetails = useCallback((flightDutyString) => {
@@ -812,6 +814,17 @@ export default function SchedulePage() {
 				<div className={styles.loadingContent}>
 					<div className={styles.loadingSpinner}></div>
 					<p className={styles.loadingScreenText}>轉向登入頁面...</p>
+				</div>
+			</div>
+		);
+	}
+
+	if (!hasAppAccess(user, 'roster')) {
+		return (
+			<div className={styles.loadingScreen}>
+				<div className={styles.loadingContent}>
+					<div className={styles.loadingSpinner}></div>
+					<p className={styles.loadingScreenText}>轉向主頁面...</p>
 				</div>
 			</div>
 		);

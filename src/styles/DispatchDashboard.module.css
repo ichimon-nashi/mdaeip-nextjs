@@ -1,0 +1,439 @@
+/* DispatchDashboard.module.css */
+
+.container {
+	min-height: 100vh;
+	background: #f8f7f4;
+	padding: 24px;
+}
+
+/* ─── Page Header ─────────────────────────── */
+.pageHeader {
+	display: flex;
+	align-items: flex-start;
+	justify-content: space-between;
+	margin-bottom: 28px;
+	gap: 16px;
+	flex-wrap: wrap;
+}
+
+.pageTitle {
+	font-size: 22px;
+	font-weight: 600;
+	color: #1a1a1a;
+	letter-spacing: -0.3px;
+}
+
+.pageSubtitle {
+	font-size: 13px;
+	color: #888;
+	margin-top: 3px;
+}
+
+.headerActions {
+	display: flex;
+	gap: 10px;
+	align-items: center;
+	flex-wrap: wrap;
+}
+
+/* ─── Buttons ─────────────────────────────── */
+.btnPrimary {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	padding: 9px 16px;
+	background: #0f62fe;
+	color: #fff;
+	border: none;
+	border-radius: 8px;
+	font-size: 13px;
+	font-weight: 500;
+	cursor: pointer;
+	transition:
+		background 0.15s,
+		transform 0.1s;
+	font-family: inherit;
+}
+.btnPrimary:hover {
+	background: #0353e9;
+}
+.btnPrimary:active {
+	transform: scale(0.98);
+}
+.btnPrimary:disabled {
+	background: #a0b4d6;
+	cursor: not-allowed;
+}
+
+.btnSecondary {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	padding: 9px 16px;
+	background: #fff;
+	color: #333;
+	border: 1px solid #ddd;
+	border-radius: 8px;
+	font-size: 13px;
+	font-weight: 500;
+	cursor: pointer;
+	transition:
+		background 0.15s,
+		border-color 0.15s;
+	font-family: inherit;
+}
+.btnSecondary:hover {
+	background: #f5f5f5;
+	border-color: #bbb;
+}
+
+.btnDanger {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	padding: 7px 12px;
+	background: #fff;
+	color: #dc2626;
+	border: 1px solid #fca5a5;
+	border-radius: 7px;
+	font-size: 12px;
+	font-weight: 500;
+	cursor: pointer;
+	transition: background 0.15s;
+	font-family: inherit;
+}
+.btnDanger:hover {
+	background: #fef2f2;
+}
+
+/* ─── Month Grid ──────────────────────────── */
+.monthGrid {
+	display: grid;
+	grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+	gap: 20px;
+}
+
+.monthCard {
+	background: #fff;
+	border: 1px solid #e8e8e8;
+	border-radius: 16px;
+	padding: 26px;
+	cursor: pointer;
+	transition:
+		box-shadow 0.2s,
+		border-color 0.2s,
+		transform 0.15s;
+	position: relative;
+}
+.monthCard:hover {
+	box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+	border-color: #c8d8f0;
+	transform: translateY(-2px);
+}
+
+.monthCardHeader {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	margin-bottom: 12px;
+}
+
+.monthCardIcon {
+	width: 42px;
+	height: 42px;
+	background: #eff6ff;
+	border-radius: 11px;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	color: #0f62fe;
+	flex-shrink: 0;
+}
+
+.monthCardTitle {
+	font-size: 18px;
+	font-weight: 600;
+	color: #1a1a1a;
+}
+
+.monthCardMeta {
+	font-size: 13px;
+	color: #555;
+	margin-bottom: 14px;
+}
+
+.monthCardTags {
+	display: flex;
+	gap: 6px;
+	flex-wrap: wrap;
+	align-items: center;
+	margin-bottom: 16px;
+}
+
+.tag {
+	font-size: 12px;
+	padding: 4px 10px;
+	border-radius: 20px;
+	font-weight: 500;
+}
+.tagDraft {
+	background: #fef9c3;
+	color: #854d0e;
+}
+.tagPublished {
+	background: #dcfce7;
+	color: #166534;
+}
+.tagAircraft {
+	background: #f1f5f9;
+	color: #475569;
+}
+.tagRevision {
+	background: #ede9fe;
+	color: #5b21b6;
+}
+.tagClickable {
+	border: none;
+	cursor: pointer;
+	font-family: inherit;
+	transition:
+		opacity 0.15s,
+		transform 0.1s;
+}
+.tagClickable:hover {
+	opacity: 0.8;
+	transform: scale(1.03);
+}
+.tagClickable:disabled {
+	cursor: not-allowed;
+	opacity: 0.5;
+}
+
+/* Revision stepper — inline −/version/+ control */
+.revisionStepper {
+	display: flex;
+	align-items: center;
+	gap: 0;
+	background: #ede9fe;
+	border-radius: 20px;
+	overflow: hidden;
+}
+
+.revisionBtn {
+	background: none;
+	border: none;
+	padding: 4px 10px;
+	font-size: 14px;
+	font-weight: 700;
+	color: #5b21b6;
+	cursor: pointer;
+	font-family: inherit;
+	transition: background 0.12s;
+	line-height: 1;
+}
+.revisionBtn:hover:not(:disabled) {
+	background: #ddd6fe;
+}
+.revisionBtn:disabled {
+	opacity: 0.3;
+	cursor: not-allowed;
+}
+
+.revisionLabel {
+	font-size: 12px;
+	font-weight: 500;
+	color: #5b21b6;
+	padding: 0 2px;
+	white-space: nowrap;
+}
+
+.monthCardFooter {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+}
+
+.monthCardEdit {
+	font-size: 13px;
+	font-weight: 500;
+	color: #0f62fe;
+}
+
+/* ─── New Month Card ──────────────────────── */
+.newMonthCard {
+	background: #fff;
+	border: 1.5px dashed #d1d5db;
+	border-radius: 16px;
+	padding: 26px;
+	cursor: pointer;
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+	gap: 8px;
+	min-height: 200px;
+	transition:
+		border-color 0.2s,
+		background 0.2s;
+	color: #6b7280;
+}
+.newMonthCard:hover {
+	border-color: #0f62fe;
+	background: #f0f7ff;
+	color: #0f62fe;
+}
+
+.newMonthCardLabel {
+	font-size: 13px;
+	font-weight: 500;
+}
+
+/* ─── Empty State ─────────────────────────── */
+.emptyState {
+	text-align: center;
+	padding: 60px 20px;
+	color: #aaa;
+}
+.emptyStateIcon {
+	margin-bottom: 12px;
+	opacity: 0.4;
+}
+.emptyStateText {
+	font-size: 15px;
+	margin-bottom: 4px;
+	color: #666;
+}
+.emptyStateSub {
+	font-size: 13px;
+	color: #aaa;
+}
+
+/* ─── Loading ─────────────────────────────── */
+.loadingWrap {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	padding: 60px;
+	gap: 10px;
+	color: #888;
+	font-size: 14px;
+}
+
+.spinner {
+	width: 20px;
+	height: 20px;
+	border: 2px solid #e5e7eb;
+	border-top-color: #0f62fe;
+	border-radius: 50%;
+	animation: spin 0.7s linear infinite;
+	flex-shrink: 0;
+}
+@keyframes spin {
+	to {
+		transform: rotate(360deg);
+	}
+}
+
+/* ─── Modal ───────────────────────────────── */
+.modalOverlay {
+	position: fixed;
+	inset: 0;
+	background: rgba(0, 0, 0, 0.4);
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	z-index: 1000;
+	padding: 20px;
+}
+
+.modal {
+	background: #fff;
+	border-radius: 16px;
+	width: 100%;
+	max-width: 440px;
+	padding: 28px;
+	box-shadow: 0 20px 60px rgba(0, 0, 0, 0.15);
+}
+
+.modalTitle {
+	font-size: 17px;
+	font-weight: 600;
+	color: #1a1a1a;
+	margin-bottom: 6px;
+}
+
+.modalSub {
+	font-size: 13px;
+	color: #888;
+	margin-bottom: 20px;
+}
+
+.formGroup {
+	margin-bottom: 16px;
+}
+
+.formLabel {
+	display: block;
+	font-size: 12px;
+	font-weight: 500;
+	color: #555;
+	margin-bottom: 6px;
+	text-transform: uppercase;
+	letter-spacing: 0.04em;
+}
+
+.formSelect {
+	width: 100%;
+	padding: 10px 12px;
+	border: 1px solid #ddd;
+	border-radius: 8px;
+	font-size: 14px;
+	color: #333;
+	background: #fff;
+	font-family: inherit;
+	cursor: pointer;
+	appearance: none;
+	background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23666' d='M6 8L1 3h10z'/%3E%3C/svg%3E");
+	background-repeat: no-repeat;
+	background-position: right 12px center;
+}
+.formSelect:focus {
+	outline: none;
+	border-color: #0f62fe;
+	box-shadow: 0 0 0 3px rgba(15, 98, 254, 0.1);
+}
+
+.modalFooter {
+	display: flex;
+	gap: 10px;
+	justify-content: flex-end;
+	margin-top: 24px;
+}
+
+/* ─── Access Denied ───────────────────────── */
+.accessDenied {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+	min-height: 50vh;
+	gap: 12px;
+	color: #888;
+}
+
+@media (max-width: 640px) {
+	.container {
+		padding: 16px;
+	}
+	.pageHeader {
+		flex-direction: column;
+	}
+	.headerActions {
+		width: 100%;
+	}
+	.btnPrimary,
+	.btnSecondary {
+		flex: 1;
+		justify-content: center;
+	}
+}

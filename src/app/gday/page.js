@@ -5,7 +5,9 @@ import React, { useState, useRef, useEffect } from 'react'
 import Head from 'next/head'
 import { Calendar, Camera, X, Copy, User, ChevronDown, ChevronUp } from 'lucide-react'
 import { toast, Toaster } from 'react-hot-toast'
-import { useAuth } from '../../contexts/AuthContext' // Adjust path as needed
+import { useAuth } from '../../contexts/AuthContext'
+import { useRouter } from 'next/navigation'
+import { hasAppAccess } from '../../lib/permissionHelpers'
 import styles from '../../styles/GDayPlanner.module.css'
 
 const GDayPlanner = () => {
@@ -22,7 +24,15 @@ const GDayPlanner = () => {
     const [showLeaveTypes, setShowLeaveTypes] = useState(true)
     
     // Get user data from auth context
-    const { user } = useAuth()
+    const { user, loading } = useAuth()
+    const router = useRouter()
+
+    // Auth guard
+    useEffect(() => {
+        if (!loading && (!user || !hasAppAccess(user, 'gday'))) {
+            router.replace('/dashboard')
+        }
+    }, [user, loading, router])
     const userDetails = { 
         name: user?.name || user?.user_metadata?.name || user?.email?.split('@')[0] || '使用者'
     }
@@ -378,6 +388,8 @@ const GDayPlanner = () => {
             setShowLeaveTypes(wasVisible)
         }
     }
+
+    if (loading || !user || !hasAppAccess(user, 'gday')) return null
 
     return (
         <>
