@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { ChevronLeft, Plus, GripVertical, Save } from "lucide-react";
 import toast from "react-hot-toast";
 import {
@@ -335,6 +335,36 @@ export default function DispatchDutyBuilder({ month, duty, onBack, onSaved }) {
 		if (digits.length <= 2) return digits;
 		return `${digits.slice(0, 2)}:${digits.slice(2)}`;
 	}
+
+	// Compute per-sector time errors: { [index]: string }
+	const sectorErrors = {};
+	sectors.forEach((s, i) => {
+		if (
+			!s.dep_time ||
+			!s.arr_time ||
+			s.dep_time.length < 5 ||
+			s.arr_time.length < 5
+		)
+			return;
+		const [dh, dm] = s.dep_time.split(":").map(Number);
+		const [ah, am] = s.arr_time.split(":").map(Number);
+		const depMin = dh * 60 + dm;
+		const arrMin = ah * 60 + am;
+		if (arrMin <= depMin) {
+			sectorErrors[i] = "arr"; // arrival before/same as departure
+		}
+		// Check consecutive sectors: this dep should be >= prev arr
+		if (i > 0) {
+			const prev = sectors[i - 1];
+			if (prev.arr_time?.length === 5) {
+				const [ph, pm] = prev.arr_time.split(":").map(Number);
+				const prevArrMin = ph * 60 + pm;
+				if (depMin < prevArrMin) {
+					sectorErrors[i] = sectorErrors[i] ? "both" : "dep";
+				}
+			}
+		}
+	});
 	const computedStats = useCallback(() => {
 		if (!reportingTime || !dutyEndTime) return null;
 		const [rh, rm] = reportingTime.split(":").map(Number);
@@ -819,238 +849,294 @@ export default function DispatchDutyBuilder({ month, duty, onBack, onSaved }) {
 								</div>
 
 								{sectors.map((s, i) => (
-									<div
-										key={i}
-										className={`${styles.sectorItem} ${s.is_highlight ? styles.highlighted : ""} ${sectorDragOverIdx === i ? styles.sectorDragOver : ""}`}
-										style={{
-											gridTemplateColumns:
-												"18px 24px 90px 108px 56px 64px 90px 108px 32px 28px",
-											opacity:
-												sectorDragIdx === i ? 0.4 : 1,
-										}}
-										draggable
-										onDragStart={() => setSectorDragIdx(i)}
-										onDragOver={(e) => {
-											e.preventDefault();
-											setSectorDragOverIdx(i);
-										}}
-										onDragLeave={() =>
-											setSectorDragOverIdx(null)
-										}
-										onDrop={() => {
-											if (sectorDragIdx !== null)
-												moveSector(sectorDragIdx, i);
-											setSectorDragIdx(null);
-											setSectorDragOverIdx(null);
-										}}
-										onDragEnd={() => {
-											setSectorDragIdx(null);
-											setSectorDragOverIdx(null);
-										}}
-									>
-										{/* Drag handle */}
+									<React.Fragment key={i}>
 										<div
+											className={`${styles.sectorItem} ${s.is_highlight ? styles.highlighted : ""} ${sectorDragOverIdx === i ? styles.sectorDragOver : ""}`}
 											style={{
-												color: "#aaa",
-												cursor: "grab",
-												paddingTop: 8,
-												textAlign: "center",
-												fontSize: 14,
+												gridTemplateColumns:
+													"18px 24px 90px 108px 56px 64px 90px 108px 32px 28px",
+												opacity:
+													sectorDragIdx === i
+														? 0.4
+														: 1,
+											}}
+											draggable
+											onDragStart={() =>
+												setSectorDragIdx(i)
+											}
+											onDragOver={(e) => {
+												e.preventDefault();
+												setSectorDragOverIdx(i);
+											}}
+											onDragLeave={() =>
+												setSectorDragOverIdx(null)
+											}
+											onDrop={() => {
+												if (sectorDragIdx !== null)
+													moveSector(
+														sectorDragIdx,
+														i,
+													);
+												setSectorDragIdx(null);
+												setSectorDragOverIdx(null);
+											}}
+											onDragEnd={() => {
+												setSectorDragIdx(null);
+												setSectorDragOverIdx(null);
 											}}
 										>
-											⠿
-										</div>
+											{/* Drag handle */}
+											<div
+												style={{
+													color: "#aaa",
+													cursor: "grab",
+													paddingTop: 8,
+													textAlign: "center",
+													fontSize: 14,
+												}}
+											>
+												⠿
+											</div>
 
-										<span className={styles.sectorSeq}>
-											{i + 1}
-										</span>
+											<span className={styles.sectorSeq}>
+												{i + 1}
+											</span>
 
-										{/* Dep airport — options show code only so selected value is clean */}
-										<div className={styles.airportCell}>
-											<select
+											{/* Dep airport — options show code only so selected value is clean */}
+											<div className={styles.airportCell}>
+												<select
+													className={
+														styles.sectorAirportSelect
+													}
+													value={s.dep_airport}
+													onChange={(e) =>
+														updateSector(
+															i,
+															"dep_airport",
+															e.target.value,
+														)
+													}
+												>
+													<option value="">
+														— 選擇 —
+													</option>
+													{AIRPORT_OPTIONS.map(
+														(a) => (
+															<option
+																key={a.code}
+																value={a.code}
+															>
+																{a.code}
+															</option>
+														),
+													)}
+												</select>
+												<span
+													className={
+														styles.airportChineseName
+													}
+												>
+													{AIRPORT_OPTIONS.find(
+														(a) =>
+															a.code ===
+															s.dep_airport,
+													)?.name || ""}
+												</span>
+											</div>
+
+											{/* Dep time */}
+											<input
+												type="text"
+												inputMode="numeric"
+												pattern="[0-9]{2}:[0-9]{2}"
+												placeholder="HH:MM"
+												maxLength={5}
 												className={
-													styles.sectorAirportSelect
+													styles.sectorTimeInput
 												}
-												value={s.dep_airport}
+												value={s.dep_time}
 												onChange={(e) =>
 													updateSector(
 														i,
-														"dep_airport",
+														"dep_time",
+														formatTimeInput(
+															e.target.value,
+														),
+													)
+												}
+												style={
+													sectorErrors[i] === "dep" ||
+													sectorErrors[i] === "both"
+														? {
+																border: "2px solid #dc2626",
+																background:
+																	"#fef2f2",
+															}
+														: {}
+												}
+											/>
+
+											{/* Airline prefix */}
+											<select
+												className={
+													styles.sectorAirlineSelect
+												}
+												value={s.airline || "AE"}
+												onChange={(e) =>
+													updateSector(
+														i,
+														"airline",
 														e.target.value,
 													)
 												}
 											>
-												<option value="">
-													— 選擇 —
-												</option>
-												{AIRPORT_OPTIONS.map((a) => (
-													<option
-														key={a.code}
-														value={a.code}
-													>
-														{a.code}
+												{AIRLINES.map((a) => (
+													<option key={a} value={a}>
+														{a}
 													</option>
 												))}
 											</select>
-											<span
+
+											{/* Flight number digits */}
+											<input
 												className={
-													styles.airportChineseName
+													styles.sectorItemInput
 												}
-											>
-												{AIRPORT_OPTIONS.find(
-													(a) =>
-														a.code ===
-														s.dep_airport,
-												)?.name || ""}
-											</span>
-										</div>
-
-										{/* Dep time */}
-										<input
-											type="text"
-											inputMode="numeric"
-											pattern="[0-9]{2}:[0-9]{2}"
-											placeholder="HH:MM"
-											maxLength={5}
-											className={styles.sectorTimeInput}
-											value={s.dep_time}
-											onChange={(e) =>
-												updateSector(
-													i,
-													"dep_time",
-													formatTimeInput(
-														e.target.value,
-													),
-												)
-											}
-										/>
-
-										{/* Airline prefix */}
-										<select
-											className={
-												styles.sectorAirlineSelect
-											}
-											value={s.airline || "AE"}
-											onChange={(e) =>
-												updateSector(
-													i,
-													"airline",
-													e.target.value,
-												)
-											}
-										>
-											{AIRLINES.map((a) => (
-												<option key={a} value={a}>
-													{a}
-												</option>
-											))}
-										</select>
-
-										{/* Flight number digits */}
-										<input
-											className={styles.sectorItemInput}
-											value={s.flight_number}
-											onChange={(e) =>
-												updateSector(
-													i,
-													"flight_number",
-													e.target.value,
-												)
-											}
-											placeholder="301"
-											maxLength={6}
-											style={{ textAlign: "center" }}
-										/>
-
-										{/* Arr airport — options show code only */}
-										<div className={styles.airportCell}>
-											<select
-												className={
-													styles.sectorAirportSelect
-												}
-												value={s.arr_airport}
+												value={s.flight_number}
 												onChange={(e) =>
 													updateSector(
 														i,
-														"arr_airport",
+														"flight_number",
 														e.target.value,
 													)
 												}
-											>
-												<option value="">
-													— 選擇 —
-												</option>
-												{AIRPORT_OPTIONS.map((a) => (
-													<option
-														key={a.code}
-														value={a.code}
-													>
-														{a.code}
+												placeholder="301"
+												maxLength={6}
+												style={{ textAlign: "center" }}
+											/>
+
+											{/* Arr airport — options show code only */}
+											<div className={styles.airportCell}>
+												<select
+													className={
+														styles.sectorAirportSelect
+													}
+													value={s.arr_airport}
+													onChange={(e) =>
+														updateSector(
+															i,
+															"arr_airport",
+															e.target.value,
+														)
+													}
+												>
+													<option value="">
+														— 選擇 —
 													</option>
-												))}
-											</select>
-											<span
+													{AIRPORT_OPTIONS.map(
+														(a) => (
+															<option
+																key={a.code}
+																value={a.code}
+															>
+																{a.code}
+															</option>
+														),
+													)}
+												</select>
+												<span
+													className={
+														styles.airportChineseName
+													}
+												>
+													{AIRPORT_OPTIONS.find(
+														(a) =>
+															a.code ===
+															s.arr_airport,
+													)?.name || ""}
+												</span>
+											</div>
+
+											{/* Arr time */}
+											<input
+												type="text"
+												inputMode="numeric"
+												pattern="[0-9]{2}:[0-9]{2}"
+												placeholder="HH:MM"
+												maxLength={5}
 												className={
-													styles.airportChineseName
+													styles.sectorTimeInput
 												}
+												value={s.arr_time}
+												onChange={(e) =>
+													updateSector(
+														i,
+														"arr_time",
+														formatTimeInput(
+															e.target.value,
+														),
+													)
+												}
+												style={
+													sectorErrors[i] === "arr" ||
+													sectorErrors[i] === "both"
+														? {
+																border: "2px solid #dc2626",
+																background:
+																	"#fef2f2",
+															}
+														: {}
+												}
+											/>
+
+											{/* Highlight toggle */}
+											<button
+												className={`${styles.sectorHighlightBtn} ${s.is_highlight ? styles.active : ""}`}
+												onClick={() =>
+													updateSector(
+														i,
+														"is_highlight",
+														!s.is_highlight,
+													)
+												}
+												title="標記為特殊航段 (★)"
+												type="button"
 											>
-												{AIRPORT_OPTIONS.find(
-													(a) =>
-														a.code ===
-														s.arr_airport,
-												)?.name || ""}
-											</span>
+												★
+											</button>
+
+											{/* Remove */}
+											<button
+												className={styles.btnDanger}
+												onClick={() => removeSector(i)}
+												disabled={sectors.length <= 1}
+												type="button"
+												title="移除航段"
+											>
+												×
+											</button>
 										</div>
-
-										{/* Arr time */}
-										<input
-											type="text"
-											inputMode="numeric"
-											pattern="[0-9]{2}:[0-9]{2}"
-											placeholder="HH:MM"
-											maxLength={5}
-											className={styles.sectorTimeInput}
-											value={s.arr_time}
-											onChange={(e) =>
-												updateSector(
-													i,
-													"arr_time",
-													formatTimeInput(
-														e.target.value,
-													),
-												)
-											}
-										/>
-
-										{/* Highlight toggle */}
-										<button
-											className={`${styles.sectorHighlightBtn} ${s.is_highlight ? styles.active : ""}`}
-											onClick={() =>
-												updateSector(
-													i,
-													"is_highlight",
-													!s.is_highlight,
-												)
-											}
-											title="標記為特殊航段 (★)"
-											type="button"
-										>
-											★
-										</button>
-
-										{/* Remove */}
-										<button
-											className={styles.btnDanger}
-											onClick={() => removeSector(i)}
-											disabled={sectors.length <= 1}
-											type="button"
-											title="移除航段"
-										>
-											×
-										</button>
-									</div>
+										{sectorErrors[i] && (
+											<div
+												style={{
+													fontSize: 12,
+													color: "#dc2626",
+													padding: "2px 12px 6px",
+													display: "flex",
+													alignItems: "center",
+													gap: 4,
+												}}
+											>
+												⚠{" "}
+												{sectorErrors[i] === "arr"
+													? "降落時間早於起飛時間"
+													: sectorErrors[i] === "dep"
+														? "起飛時間早於上一航段降落時間"
+														: "時間順序錯誤"}
+											</div>
+										)}
+									</React.Fragment>
 								))}
-
 								<div
 									style={{
 										display: "flex",

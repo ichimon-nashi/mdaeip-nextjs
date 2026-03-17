@@ -170,6 +170,28 @@
 	background: #f5f5f5;
 }
 
+.btnPublish {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	padding: 8px 16px;
+	background: #16a34a;
+	color: #fff;
+	border: none;
+	border-radius: 8px;
+	font-size: 13px;
+	font-weight: 600;
+	cursor: pointer;
+	transition: background 0.15s;
+	font-family: inherit;
+	white-space: nowrap;
+}
+.btnPublish:hover {
+	background: #15803d;
+}
+
+/* (base filter removed — use per-row hide toggle instead) */
+
 .btnDanger {
 	display: flex;
 	align-items: center;
@@ -966,6 +988,13 @@
 	border-radius: 50%;
 	flex-shrink: 0;
 }
+.legendDotToday {
+	width: 8px;
+	height: 8px;
+	background: #0f62fe;
+	border-radius: 50%;
+	flex-shrink: 0;
+}
 
 /* ════════════════════════════════════════════
    FT / FDP STATS (Tab C)
@@ -1144,28 +1173,115 @@
 	font-size: 15px;
 }
 
+@media (max-width: 1024px) {
+	/* Tablet portrait — sidebar narrower */
+	.splitLayout {
+		grid-template-columns: 220px 1fr;
+	}
+}
+
 @media (max-width: 768px) {
+	/* Mobile — sidebar takes full width, detail is a fixed bottom sheet */
 	.splitLayout {
 		grid-template-columns: 1fr;
+		grid-template-rows: 1fr;
+		min-height: unset;
+		position: relative;
 	}
+
+	/* Sidebar: takes full available height, scrollable */
 	.dutySidebar {
 		border-right: none;
-		border-bottom: 1px solid #e8e8e8;
-		max-height: 200px;
+		border-bottom: none;
+		max-height: unset;
+		height: 100%;
+		overflow-y: auto;
 	}
+
+	/* Detail area: fixed bottom sheet that slides up */
+	.detailArea {
+		position: fixed;
+		bottom: 0;
+		left: 0;
+		right: 0;
+		z-index: 200;
+		background: #f8f7f4;
+		padding: 0 12px 20px;
+		max-height: 70vh;
+		overflow-y: auto;
+		border-top: 1px solid #e8e8e8;
+		border-radius: 16px 16px 0 0;
+		box-shadow: 0 -4px 24px rgba(0, 0, 0, 0.12);
+	}
+
+	/* Pull handle at top of bottom sheet */
+	.detailArea::before {
+		content: "";
+		display: block;
+		width: 40px;
+		height: 4px;
+		background: #d1d5db;
+		border-radius: 2px;
+		margin: 10px auto 12px;
+	}
+
+	/* Stats: single horizontal row, 5 compact cells */
 	.statsRow {
-		grid-template-columns: repeat(2, 1fr);
+		grid-template-columns: repeat(5, 1fr);
+		gap: 0;
 	}
-	.topBar,
+	.statCell {
+		padding: 8px 4px;
+	}
+	.statLabel {
+		font-size: 9px;
+		letter-spacing: 0;
+	}
+	.statValue {
+		font-size: 13px;
+		margin-top: 2px;
+	}
+
+	/* Shrink the detail card header on mobile */
+	.detailCode {
+		font-size: 18px;
+	}
+	.detailReportTime {
+		font-size: 13px;
+	}
+	.detailEndTime {
+		font-size: 11px;
+	}
+
+	.topBar {
+		padding: 10px 14px;
+		flex-wrap: wrap;
+		gap: 8px;
+	}
+	.topBarRight {
+		gap: 6px;
+	}
 	.weekTabWrap,
 	.ftTabWrap {
-		padding: 12px 16px;
+		padding: 12px 14px;
 	}
-	.detailArea {
-		padding: 14px;
+	.weekNav {
+		flex-wrap: wrap;
+		gap: 8px;
 	}
 	.tabRow {
-		padding: 0 16px;
+		padding: 0 14px;
 		overflow-x: auto;
+	}
+	.weekGrid {
+		min-width: 480px;
+	}
+	.wgDayHead {
+		min-width: 60px;
+	}
+
+	/* Push page content up so bottom sheet doesn't overlap last item */
+	.splitLayout {
+		padding-bottom: 72vh;
 	}
 }

@@ -12,7 +12,9 @@ import {
 	Copy,
 } from "lucide-react";
 import toast from "react-hot-toast";
+import { supabase } from "../../lib/supabase";
 import {
+	pdxMonthHelpers,
 	pdxDutyHelpers,
 	pdxSectorHelpers,
 	pdxStatsHelpers,
@@ -87,6 +89,7 @@ export default function DispatchMonthView({
 	onBack,
 	onNewDuty,
 	onEditDuty,
+	savedCounter = 0,
 }) {
 	const [activeTab, setActiveTab] = useState("list");
 	const [duties, setDuties] = useState([]);
@@ -96,6 +99,11 @@ export default function DispatchMonthView({
 	const [loading, setLoading] = useState(true);
 	const [deleting, setDeleting] = useState(null);
 	const [fromWeek, setFromWeek] = useState(false);
+	// Track status/revision locally so publish changes reflect immediately
+	const [monthState, setMonthState] = useState({
+		status: month.status,
+		revision: month.revision || 0,
+	});
 	const [dragId, setDragId] = useState(null);
 	const [dragOverId, setDragOverId] = useState(null);
 	const [weekDragCode, setWeekDragCode] = useState(null);
@@ -108,6 +116,57 @@ export default function DispatchMonthView({
 			next.has(code) ? next.delete(code) : next.add(code);
 			return next;
 		});
+	}
+
+	// When switching to week tab, jump to today's week if in this month
+	function handleWeekTabClick() {
+		setActiveTab("week");
+		setFromWeek(false);
+		setTooltip(null);
+		if (todayStr >= monthStart && todayStr <= monthEnd) {
+			const todayWeekIdx = weeks.findIndex((w) => w.includes(todayStr));
+			if (todayWeekIdx >= 0) setWeekIndex(todayWeekIdx);
+		}
+	}
+
+	async function handlePublish() {
+		const isPublished = monthState.status === "published";
+		if (isPublished) {
+			const { error } = await pdxMonthHelpers.updateStatus(
+				month.id,
+				"draft",
+			);
+			if (error) {
+				toast.error("更新失敗");
+				return;
+			}
+			setMonthState((prev) => ({ ...prev, status: "draft" }));
+			toast.success("已設為草稿");
+		} else {
+			// Always read current revision from DB to avoid stale local state
+			const { data: fresh, error: fetchErr } = await supabase
+				.from("pdx_months")
+				.select("revision")
+				.eq("id", month.id)
+				.single();
+			if (fetchErr) {
+				toast.error("發布失敗");
+				return;
+			}
+			const newRevision = (fresh?.revision || 0) + 1;
+			const { error } = await supabase
+				.from("pdx_months")
+				.update({ status: "published", revision: newRevision })
+				.eq("id", month.id);
+			if (error) {
+				toast.error("發布失敗");
+				return;
+			}
+			setMonthState({ status: "published", revision: newRevision });
+			toast.success(
+				`已發布　修訂版次 ${String(newRevision).padStart(3, "0")}`,
+			);
+		}
 	}
 
 	const weeks = getWeeksForMonth(month.year, month.month);
@@ -150,6 +209,17 @@ export default function DispatchMonthView({
 		if (dutyList.length > 0) setSelectedId(dutyList[0].id);
 		setLoading(false);
 	}, [month.id]);
+
+	// Auto-revert to draft whenever a duty is saved, if currently published
+	useEffect(() => {
+		if (savedCounter === 0) return; // skip on initial mount
+		if (monthState.status === "published") {
+			pdxMonthHelpers.updateStatus(month.id, "draft").then(() => {
+				setMonthState((prev) => ({ ...prev, status: "draft" }));
+				toast("已自動設為草稿", { icon: "📝" });
+			});
+		}
+	}, [savedCounter]);
 
 	// Set correct starting week whenever month changes
 	useEffect(() => {
@@ -194,6 +264,12 @@ export default function DispatchMonthView({
 				return n;
 			});
 			setSelectedId(remaining[0]?.id || null);
+			// Auto-revert to draft if currently published
+			if (monthState.status === "published") {
+				await pdxMonthHelpers.updateStatus(month.id, "draft");
+				setMonthState((prev) => ({ ...prev, status: "draft" }));
+				toast("已自動設為草稿", { icon: "📝" });
+			}
 		}
 		setDeleting(null);
 	}
@@ -463,13 +539,14 @@ export default function DispatchMonthView({
 				const wrap = document.createElement("div");
 				wrap.style.cssText =
 					"position:fixed;left:-9999px;top:0;width:860px;background:#fff;padding:28px 32px;font-family:'Helvetica Neue',Arial,sans-serif;box-sizing:border-box;";
-				// Page header on every page
+				// Page header on every page — logo left, meta right
 				wrap.innerHTML = `
-          <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:${isFirst ? 18 : 10}px;${!isFirst ? "border-top:1px solid #eee;padding-top:12px;" : ""}">
-            <div>
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:${isFirst ? 18 : 10}px;${!isFirst ? "border-top:1px solid #eee;padding-top:12px;" : ""}">
+            <div style="display:flex;align-items:center;gap:14px;">
+              <img src="/assets/mdaLogo.jpg" style="height:36px;width:auto;object-fit:contain;" crossorigin="anonymous" />
               <span style="font-size:20px;font-weight:700;color:#1a1a1a;">${label} 任務派遣表</span>
             </div>
-            <div style="font-size:11px;color:#aaa;">Mandarin Airlines　版次 ${String(month.revision || 0).padStart(3, "0")}　製表 ${new Date().toLocaleDateString("zh-TW")}</div>
+            <div style="font-size:11px;color:#555;text-align:right;">版次 ${String(monthState.revision).padStart(3, "0")}<br/>製表 ${new Date().toLocaleDateString("zh-TW")}</div>
           </div>
           ${innerHtml}
         `;
@@ -624,24 +701,28 @@ export default function DispatchMonthView({
 									? Math.floor(s.fdp_minutes / 60)
 									: 0;
 								const fdpM = s ? s.fdp_minutes % 60 : 0;
-								let card = `<div style="background:#fff;border:1px solid #e0e0e0;border-left:4px solid ${baseColors[base]};border-radius:10px;overflow:hidden;">
-              <div style="padding:12px 14px 10px;border-bottom:1px solid #f0f0f0;display:flex;justify-content:space-between;align-items:flex-start;">
+								const isSpecialDuty = !!duty.label;
+								let card = `<div style="background:${isSpecialDuty ? "#fffef7" : "#fff"};border:1px solid ${isSpecialDuty ? "#fef08a" : "#e0e0e0"};border-left:4px solid ${baseColors[base]};border-radius:10px;overflow:hidden;${isSpecialDuty ? "" : ""}">
+              <div style="padding:12px 14px 10px;border-bottom:1px solid ${isSpecialDuty ? "#fef3c7" : "#f0f0f0"};display:flex;justify-content:space-between;align-items:flex-start;background:${isSpecialDuty ? "#fffef7" : "#fff"};">
                 <div>
-                  <span style="font-size:20px;font-weight:700;">${duty.duty_code}</span>
-                  ${duty.label ? `<span style="font-size:12px;color:#f59e0b;margin-left:8px;">${duty.label}</span>` : ""}
+                  <div style="display:flex;align-items:center;gap:8px;">
+                    <span style="font-size:20px;font-weight:700;">${duty.duty_code}</span>
+                    ${isSpecialDuty ? `<span style="font-size:11px;font-weight:700;padding:2px 8px;border-radius:10px;background:#fbbf24;color:#fff;">特殊日期</span>` : ""}
+                  </div>
+                  ${duty.label ? `<div style="font-size:12px;color:#d97706;font-weight:600;margin-top:3px;">${duty.label}</div>` : ""}
                   <div style="margin-top:5px;display:flex;gap:5px;">
-                    <span style="font-size:11px;padding:2px 8px;border-radius:10px;background:#f1f5f9;color:#475569;">${duty.aircraft_type}</span>
+                    <span style="font-size:11px;padding:2px 8px;border-radius:10px;background:#f1f5f9;color:#374151;">${duty.aircraft_type}</span>
                     <span style="font-size:11px;padding:2px 8px;border-radius:10px;background:${base === "KHH" ? "#dbeafe" : base === "TSA" ? "#dcfce7" : "#ffedd5"};color:${baseColors[base]};">${base}</span>
                   </div>
                 </div>
                 <div style="text-align:right;">
-                  <div style="font-size:11px;color:#aaa;">報到</div>
+                  <div style="font-size:11px;color:#555;">報到</div>
                   <div style="font-size:15px;font-weight:700;">${duty.reporting_time?.slice(0, 5) || ""}</div>
-                  <div style="font-size:12px;color:#888;">結束 ${duty.duty_end_time?.slice(0, 5) || ""}</div>
+                  <div style="font-size:12px;color:#444;">結束 ${duty.duty_end_time?.slice(0, 5) || ""}</div>
                 </div>
               </div>`;
 								if (s) {
-									card += `<div style="display:grid;grid-template-columns:repeat(4,1fr);border-bottom:1px solid #f0f0f0;">
+									card += `<div style="display:grid;grid-template-columns:repeat(4,1fr);border-bottom:1px solid ${isSpecialDuty ? "#fef3c7" : "#f0f0f0"};background:${isSpecialDuty ? "#fffef7" : "#fff"};">
                 ${[
 					["航段", `${s.sector_count}段`, "#1a1a1a"],
 					[
@@ -662,20 +743,20 @@ export default function DispatchMonthView({
 				]
 					.map(
 						([l, v, c]) =>
-							`<div style="padding:7px;text-align:center;"><div style="font-size:10px;color:#aaa;">${l}</div><div style="font-size:13px;font-weight:700;color:${c};">${v}</div></div>`,
+							`<div style="padding:7px;text-align:center;background:${isSpecialDuty ? "#fffef7" : "#fff"};"><div style="font-size:10px;color:#555;text-transform:uppercase;">${l}</div><div style="font-size:13px;font-weight:700;color:${c};">${v}</div></div>`,
 					)
 					.join("")}
               </div>`;
 								}
-								card += `<div style="padding:10px 14px;">`;
+								card += `<div style="padding:10px 14px;background:${isSpecialDuty ? "#fffef7" : "#fff"};">`;
 								dutySectors.forEach((sec, si) => {
-									card += `<div style="display:grid;grid-template-columns:44px 36px 14px 36px 1fr 44px;gap:3px;padding:3px 0;${sec.is_highlight ? "color:#d97706;" : ""}">
+									card += `<div style="display:grid;grid-template-columns:44px 36px 14px 36px 1fr 44px;gap:3px;padding:3px 0;background:${isSpecialDuty ? "#fffef7" : "#fff"};${sec.is_highlight ? "color:#d97706;" : ""}">
                 <span style="font-size:12px;font-weight:700;">${sec.dep_time?.slice(0, 5) || ""}</span>
                 <span style="font-size:12px;font-weight:700;">${sec.dep_airport}</span>
-                <span style="font-size:11px;color:#ccc;text-align:center;">→</span>
+                <span style="font-size:11px;color:#888;text-align:center;">→</span>
                 <span style="font-size:12px;font-weight:700;">${sec.arr_airport}</span>
-                <span style="font-size:11px;color:#999;padding-left:4px;">${sec.flight_number}${sec.is_highlight ? " ★" : ""}</span>
-                <span style="font-size:12px;color:#888;text-align:right;">${sec.arr_time?.slice(0, 5) || ""}</span>
+                <span style="font-size:11px;color:#555;padding-left:4px;">${sec.flight_number}${sec.is_highlight ? " ★" : ""}</span>
+                <span style="font-size:12px;color:#444;text-align:right;">${sec.arr_time?.slice(0, 5) || ""}</span>
               </div>`;
 									if (si < dutySectors.length - 1) {
 										const [h1, m1] = (
@@ -692,21 +773,21 @@ export default function DispatchMonthView({
 										const gnd =
 											h2 * 60 + m2 - (h1 * 60 + m1);
 										if (gnd > 0)
-											card += `<div style="font-size:10px;color:#ccc;font-style:italic;padding:1px 0 1px 50px;">地停 ${gnd < 60 ? gnd + "m" : Math.floor(gnd / 60) + "h" + (gnd % 60 ? String(gnd % 60).padStart(2, "0") + "m" : "")}</div>`;
+											card += `<div style="font-size:10px;color:#777;font-style:italic;padding:1px 0 1px 50px;background:${isSpecialDuty ? "#fffef7" : "#fff"};">地停 ${gnd < 60 ? gnd + "m" : Math.floor(gnd / 60) + "h" + (gnd % 60 ? String(gnd % 60).padStart(2, "0") + "m" : "")}</div>`;
 									}
 								});
-								card += `</div><div style="padding:7px 14px;border-top:1px solid #f0f0f0;display:flex;gap:3px;align-items:center;flex-wrap:wrap;">`;
+								card += `</div><div style="padding:7px 14px;border-top:1px solid ${isSpecialDuty ? "#fef3c7" : "#f0f0f0"};background:${isSpecialDuty ? "#fffef7" : "#fff"};display:flex;gap:3px;align-items:center;flex-wrap:wrap;">`;
 								if (duty.specific_dates?.length) {
-									card += `<span style="font-size:11px;color:#f59e0b;">指定日期: ${duty.specific_dates.map((d) => d.slice(5).replace("-", "/")).join(", ")}</span>`;
+									card += `<span style="font-size:11px;color:#d97706;font-weight:600;">指定日期: ${duty.specific_dates.map((d) => d.slice(5).replace("-", "/")).join(", ")}</span>`;
 								} else {
 									[1, 2, 3, 4, 5, 6, 7].forEach((d) => {
 										const on =
 											duty.active_weekdays?.includes(d);
-										card += `<span style="width:19px;height:19px;border-radius:50%;font-size:10px;font-weight:600;display:inline-flex;align-items:center;justify-content:center;background:${on ? "#dbeafe" : "#f1f5f9"};color:${on ? "#1d4ed8" : "#cbd5e1"};">${["一", "二", "三", "四", "五", "六", "日"][d - 1]}</span>`;
+										card += `<span style="width:19px;height:19px;border-radius:50%;font-size:10px;font-weight:600;display:inline-flex;align-items:center;justify-content:center;background:${on ? "#dbeafe" : "#f1f5f9"};color:${on ? "#1d4ed8" : "#9ca3af"};">${["一", "二", "三", "四", "五", "六", "日"][d - 1]}</span>`;
 									});
 									if (duty.label)
-										card += `<span style="font-size:11px;color:#f59e0b;margin-left:5px;">${duty.label}</span>`;
-									card += `<span style="font-size:11px;color:#bbb;margin-left:8px;">${duty.date_from?.slice(5).replace("-", "/")} – ${duty.date_to?.slice(5).replace("-", "/")}</span>`;
+										card += `<span style="font-size:11px;color:#d97706;font-weight:600;margin-left:5px;">${duty.label}</span>`;
+									card += `<span style="font-size:11px;color:#555;margin-left:8px;">${duty.date_from?.slice(5).replace("-", "/")} – ${duty.date_to?.slice(5).replace("-", "/")}</span>`;
 								}
 								card += `</div></div>`;
 								return card;
@@ -715,7 +796,7 @@ export default function DispatchMonthView({
 
 					if (!isFirst) pdf.addPage();
 					const canvas = await renderSection(html, isFirst, pdf);
-					const imgData = canvas.toDataURL("image/jpeg", 0.82);
+					const imgData = canvas.toDataURL("image/jpeg", 0.72);
 					const imgH = (canvas.height / canvas.width) * pdfW;
 					pdf.addImage(
 						imgData,
@@ -759,12 +840,26 @@ export default function DispatchMonthView({
 					<span style={{ color: "#ddd" }}>|</span>
 					<span className={styles.topBarTitle}>{label}</span>
 					<span
-						className={`${styles.statusBadge} ${month.status === "published" ? styles.statusPublished : styles.statusDraft}`}
+						className={`${styles.statusBadge} ${monthState.status === "published" ? styles.statusPublished : styles.statusDraft}`}
 					>
-						{month.status === "published" ? "已發布" : "草稿"}
+						{monthState.status === "published"
+							? `已發布 v${String(monthState.revision).padStart(3, "0")}`
+							: "草稿"}
 					</span>
 				</div>
 				<div className={styles.topBarRight}>
+					<button
+						className={
+							monthState.status === "published"
+								? styles.btnSecondary
+								: styles.btnPublish
+						}
+						onClick={handlePublish}
+					>
+						{monthState.status === "published"
+							? "取消發布"
+							: "發布"}
+					</button>
 					<button
 						className={styles.btnSecondary}
 						onClick={handleExport}
@@ -794,11 +889,7 @@ export default function DispatchMonthView({
 				</button>
 				<button
 					className={`${styles.tabBtn} ${activeTab === "week" ? styles.tabActive : ""}`}
-					onClick={() => {
-						setActiveTab("week");
-						setFromWeek(false);
-						setTooltip(null);
-					}}
+					onClick={handleWeekTabClick}
 				>
 					週次檢視
 				</button>
@@ -953,7 +1044,7 @@ export default function DispatchMonthView({
 									選擇左側班型查看詳情
 								</div>
 								<div className={styles.emptySelectionSub}>
-									或點擊「新增班型」建立
+									或點選「新增班型」建立
 								</div>
 							</div>
 						) : (
@@ -1390,6 +1481,137 @@ export default function DispatchMonthView({
 						>
 							<ChevronRight size={16} />
 						</button>
+						{/* Today jump button — only shown when today is in this month */}
+						{todayStr >= monthStart && todayStr <= monthEnd && (
+							<button
+								className={styles.weekNavBtn}
+								onClick={handleWeekTabClick}
+								title="跳至今天"
+								style={{
+									fontSize: 12,
+									padding: "0 10px",
+									width: "auto",
+								}}
+							>
+								今天
+							</button>
+						)}
+						{/* Reset hidden rows — visible when any are hidden */}
+						{hiddenCodes.size > 0 && (
+							<button
+								onClick={() => setHiddenCodes(new Set())}
+								style={{
+									marginLeft: 8,
+									fontSize: 12,
+									color: "#0f62fe",
+									background: "#eff6ff",
+									border: "1px solid #bfdbfe",
+									borderRadius: 8,
+									padding: "5px 12px",
+									cursor: "pointer",
+									fontFamily: "inherit",
+									whiteSpace: "nowrap",
+								}}
+							>
+								全部顯示（{hiddenCodes.size}）
+							</button>
+						)}
+						{/* Base quick-hide pills */}
+						<div
+							style={{
+								display: "flex",
+								gap: 6,
+								marginLeft: 12,
+								flexWrap: "wrap",
+							}}
+						>
+							{[
+								{ key: "all", label: "全選", color: null },
+								{
+									key: "KHH",
+									label: "高雄",
+									color: "#2563eb",
+									bg: "#dbeafe",
+								},
+								{
+									key: "TSA",
+									label: "台北",
+									color: "#16a34a",
+									bg: "#dcfce7",
+								},
+								{
+									key: "RMQ",
+									label: "台中",
+									color: "#ea580c",
+									bg: "#ffedd5",
+								},
+							].map((f) => {
+								// Determine active state: "all" = nothing hidden, base = that base's codes all visible, others hidden
+								const allCodesForBase =
+									f.key === "all"
+										? []
+										: duties
+												.filter((d) => d.base === f.key)
+												.map((d) => d.duty_code);
+								const otherCodes = duties
+									.filter((d) => d.base !== f.key)
+									.map((d) => d.duty_code);
+								const isActive =
+									f.key === "all"
+										? hiddenCodes.size === 0
+										: otherCodes.every((c) =>
+												hiddenCodes.has(c),
+											) &&
+											allCodesForBase.every(
+												(c) => !hiddenCodes.has(c),
+											);
+								return (
+									<button
+										key={f.key}
+										onClick={() => {
+											if (f.key === "all") {
+												setHiddenCodes(new Set());
+											} else {
+												// Hide all duties NOT from this base, keep this base's visible
+												const toHide = new Set(
+													duties
+														.filter(
+															(d) =>
+																d.base !==
+																f.key,
+														)
+														.map(
+															(d) => d.duty_code,
+														),
+												);
+												setHiddenCodes(toHide);
+											}
+										}}
+										style={{
+											padding: "5px 12px",
+											borderRadius: 20,
+											fontSize: 12,
+											fontWeight: 500,
+											border: isActive
+												? `2px solid ${f.color || "#1a1a1a"}`
+												: "1.5px solid #e5e7eb",
+											background: isActive
+												? f.bg || "#1a1a1a"
+												: "#fff",
+											color: isActive
+												? f.color || "#fff"
+												: "#555",
+											cursor: "pointer",
+											fontFamily: "inherit",
+											whiteSpace: "nowrap",
+											transition: "all 0.12s",
+										}}
+									>
+										{f.label}
+									</button>
+								);
+							})}
+						</div>
 					</div>
 
 					{duties.length === 0 ? (
@@ -1762,39 +1984,16 @@ export default function DispatchMonthView({
 									<span className={styles.legendDotSpecial} />
 									特殊日期（與一般班型不同）
 								</span>
-								{hiddenCodes.size > 0 && (
-									<span className={styles.legendItem}>
-										<span
-											style={{
-												fontSize: 12,
-												color: "#64748b",
-											}}
-										>
-											已隱藏 {hiddenCodes.size} 個班型
-										</span>
-										<button
-											onClick={() =>
-												setHiddenCodes(new Set())
-											}
-											style={{
-												fontSize: 12,
-												color: "#0f62fe",
-												background: "none",
-												border: "none",
-												cursor: "pointer",
-												fontFamily: "inherit",
-												padding: 0,
-											}}
-										>
-											全部顯示
-										</button>
-									</span>
-								)}
+								<span className={styles.legendItem}>
+									<span className={styles.legendDotToday} />
+									今天
+								</span>
 								<span
 									className={styles.legendItem}
 									style={{ color: "#555" }}
 								>
-									點擊格子跳至班型列表
+									點選格子跳至班型列表　| 點選 —
+									隱藏/顯示該班型
 								</span>
 							</div>
 						</div>

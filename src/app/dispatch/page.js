@@ -1,11 +1,8 @@
-// src/app/dispatch/page.js
-
 "use client";
 
 import { useState, useEffect } from "react";
 import { useAuth } from "../../contexts/AuthContext";
 import { useRouter } from "next/navigation";
-import { hasAppAccess } from "../../lib/permissionHelpers";
 import DispatchDashboard from "../../components/dispatch/DispatchDashboard";
 import DispatchMonthView from "../../components/dispatch/DispatchMonthView";
 import DispatchDutyBuilder from "../../components/dispatch/DispatchDutyBuilder";
@@ -26,14 +23,14 @@ export default function DispatchPage() {
 	const [selectedMonth, setSelectedMonth] = useState(null);
 	const [editingDuty, setEditingDuty] = useState(null);
 
-	// Auth guard — admin and 51892 only
+	// Auth guard — same pattern as database-management
 	useEffect(() => {
-		if (!loading && (!user || !hasAppAccess(user, "dispatch"))) {
+		if (!loading && (!user || user.access_level !== 99)) {
 			router.replace("/schedule");
 		}
 	}, [user, loading, router]);
 
-	if (loading || !user || !hasAppAccess(user, "dispatch")) {
+	if (loading || !user || user.access_level !== 99) {
 		return null;
 	}
 
@@ -61,9 +58,12 @@ export default function DispatchPage() {
 		setView(VIEW.EDIT_DUTY);
 	}
 
+	const [savedCounter, setSavedCounter] = useState(0);
+
 	function handleDutySaved() {
 		setEditingDuty(null);
 		setView(VIEW.MONTH);
+		setSavedCounter((c) => c + 1); // signal MonthView a save just happened
 	}
 
 	function handleBackToMonth() {
@@ -84,6 +84,7 @@ export default function DispatchPage() {
 				onBack={handleBackToDashboard}
 				onNewDuty={handleNewDuty}
 				onEditDuty={handleEditDuty}
+				savedCounter={savedCounter}
 			/>
 		);
 	}
@@ -99,5 +100,6 @@ export default function DispatchPage() {
 		);
 	}
 
+	// Fallback
 	return <DispatchDashboard onSelectMonth={handleSelectMonth} />;
 }

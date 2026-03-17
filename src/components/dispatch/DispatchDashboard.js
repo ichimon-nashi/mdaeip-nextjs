@@ -228,9 +228,7 @@ export default function DispatchDashboard({ onSelectMonth }) {
 			<div className={styles.pageHeader}>
 				<div>
 					<div className={styles.pageTitle}>派遣表系統</div>
-					<div className={styles.pageSubtitle}>
-						建立與管理每月飛行班次派遣資料
-					</div>
+					<div className={styles.pageSubtitle}>派遣表維護及管理</div>
 				</div>
 				<div className={styles.headerActions}>
 					<button
@@ -253,7 +251,7 @@ export default function DispatchDashboard({ onSelectMonth }) {
 						尚未建立任何月份
 					</div>
 					<div className={styles.emptyStateSub}>
-						點擊「新增月份」開始建立派遣表
+						點選「新增月份」開始建立派遣表
 					</div>
 				</div>
 			) : (
@@ -284,8 +282,8 @@ export default function DispatchDashboard({ onSelectMonth }) {
 									disabled={updatingId === m.id}
 									title={
 										m.status === "published"
-											? "點擊設為草稿"
-											: "點擊發布"
+											? "點選設為草稿"
+											: "點選發布"
 									}
 								>
 									{m.status === "published"
