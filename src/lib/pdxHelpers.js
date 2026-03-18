@@ -56,6 +56,22 @@ export const pdxMonthHelpers = {
 		}
 	},
 
+	async updateYearMonth(id, year, month) {
+		try {
+			const { data, error } = await supabase
+				.from("pdx_months")
+				.update({ year, month })
+				.eq("id", id)
+				.select()
+				.single();
+			if (error) throw error;
+			return { data, error: null };
+		} catch (error) {
+			console.error("pdxMonthHelpers.updateYearMonth:", error);
+			return { data: null, error: error.message };
+		}
+	},
+
 	async updateStatus(id, status) {
 		try {
 			const updates = { status };

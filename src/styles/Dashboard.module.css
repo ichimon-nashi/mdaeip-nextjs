@@ -1,436 +1,390 @@
-/* DASHBOARD PAGE - Mobile-First Design with Synchronized Scrolling */
+/* DASHBOARD PAGE - Viewport-fit, transparent bg, glassmorphism cards */
 
+/* ─── Container: transparent so layout background shows through ─────────── */
 .dashboardContainer {
-	min-height: 100vh;
-	padding-bottom: 0;
+	/* Fit exactly in whatever the parent gives us — no extra height */
+	height: 100%;
+	display: flex;
+	flex-direction: column;
+	overflow: hidden;           /* prevent any page-level scroll */
+	background: transparent;   /* show layout background */
 	-webkit-text-size-adjust: 100%;
-	-moz-text-size-adjust: 100%;
-	-ms-text-size-adjust: 100%;
 	text-size-adjust: 100%;
 }
 
-/* Month and Time Header */
-.monthHeader {
-	background: linear-gradient(135deg, #1e40af, #3b82f6);
-	color: white;
-	padding: 1rem;
-	box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-	position: sticky;
-	top: 0;
-	z-index: 30;
-	border-bottom: 2px solid rgba(255, 255, 255, 0.2);
-}
-
-.monthInfo {
-	display: flex;
-	justify-content: space-between;
-	align-items: center;
-	max-width: 100%;
-	margin: 0 auto;
-}
-
-.monthText {
-	font-size: 1rem;
-	font-weight: 600;
-}
-
-.timeText {
-	font-size: 0.875rem;
-	opacity: 0.9;
-}
-
-/* Horizontal Date Scroll Container */
-.dateScrollContainer {
-	position: fixed;
-	top: 3.5rem;
-	left: 0;
-	right: 0;
-	z-index: 40;
-	background: white;
-	overflow-x: auto;
-	overflow-y: hidden;
-	-webkit-overflow-scrolling: touch;
-	border-bottom: 2px solid #e5e7eb;
-	box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-	scrollbar-width: none;
-	-ms-overflow-style: none;
-	cursor: grab;
-	user-select: none;
-	/* GPU acceleration for smoother scrolling on iOS */
-	transform: translateZ(0);
-	-webkit-transform: translateZ(0);
-	will-change: scroll-position;
-}
-
-.dateScrollContainer:active {
-	cursor: grabbing;
-}
-
-.dateScrollContainer::-webkit-scrollbar {
-	display: none; /* Chrome, Safari, Opera */
-}
-
-.dateScrollContent {
-	display: flex;
-	padding: 0.5rem 0;
-	min-width: max-content;
-	width: max-content;
-}
-
-.dateItem {
+/* ─── Welcome Section ───────────────────────────────────────────────────── */
+.welcomeSection {
 	flex-shrink: 0;
-	width: 65px;
-	padding: 0.5rem;
-	text-align: center;
-	border-right: 1px solid #f3f4f6;
-	transition: all 0.2s ease;
-	cursor: pointer;
+	padding: 0.625rem 0.75rem 0;
+}
+
+@media (min-width: 640px)  { .welcomeSection { padding: 0.75rem 1rem 0; } }
+@media (min-width: 768px)  { .welcomeSection { padding: 1rem 1.5rem 0; } }
+
+.welcomeCard {
+	background: rgba(255, 255, 255, 0.18);
+	backdrop-filter: blur(12px);
+	-webkit-backdrop-filter: blur(12px);
+	border-radius: 0.875rem;
+	padding: 0.75rem 1rem;
+	border: 1px solid rgba(255, 255, 255, 0.35);
+	box-shadow: 0 2px 12px rgba(0,0,0,0.12);
+}
+
+@media (min-width: 768px) { .welcomeCard { padding: 1rem 1.25rem; } }
+
+.welcomeGreeting {
+	display: flex;
+	align-items: center;
+	gap: 0.5rem;
+	margin-bottom: 0.625rem;
+}
+
+.welcomeIcon {
+	display: flex;
+	align-items: center;
+	color: #fde68a;
+	flex-shrink: 0;
+}
+
+.welcomeText {
+	font-size: 0.9375rem;
+	font-weight: 700;
+	color: white;
+	text-shadow: 0 1px 3px rgba(0,0,0,0.3);
+	flex: 1;
+}
+
+.welcomeTime {
+	font-size: 0.875rem;
+	font-weight: 600;
+	color: rgba(255,255,255,0.8);
+	font-variant-numeric: tabular-nums;
+	flex-shrink: 0;
+}
+
+@media (min-width: 768px) {
+	.welcomeText { font-size: 1.0625rem; }
+}
+
+.welcomeLoading {
+	display: flex;
+	gap: 0.375rem;
+	align-items: center;
+	padding: 0.25rem 0;
+}
+
+.welcomeLoadingDot {
+	width: 7px;
+	height: 7px;
+	border-radius: 50%;
+	background: rgba(255,255,255,0.5);
+	animation: dotPulse 1.2s ease-in-out infinite;
+}
+.welcomeLoadingDot:nth-child(2) { animation-delay: 0.2s; }
+.welcomeLoadingDot:nth-child(3) { animation-delay: 0.4s; }
+
+@keyframes dotPulse {
+	0%, 80%, 100% { opacity: 0.3; transform: scale(0.85); }
+	40%            { opacity: 1;   transform: scale(1); }
+}
+
+.welcomeDutyRows {
 	display: flex;
 	flex-direction: column;
-	align-items: center;
-	gap: 0.25rem;
+	gap: 0.5rem;
 }
 
-.dateItem:hover {
-	background-color: #f9fafb;
-}
-
-.dateItem.today {
-	background-color: #fef3c7;
-	border-left: 2px solid #f59e0b;
-	border-right: 2px solid #f59e0b;
-}
-
-.dateItem.active {
-	background-color: #dbeafe;
-	border: 2px solid #3b82f6;
-	box-shadow: 0 2px 8px rgba(59, 130, 246, 0.3);
-}
-
-.dateItem.active.today {
-	background: linear-gradient(135deg, #fef3c7, #dbeafe);
-	border: 2px solid #3b82f6;
-}
-
-.dateDay {
-	font-size: 1rem;
-	font-weight: 700;
-	color: #111827;
-	line-height: 1.2;
-}
-
-.dateMonth {
-	font-size: 0.625rem;
-	color: #9ca3af;
-	font-weight: 600;
-	line-height: 1;
-	margin-bottom: 0.125rem;
-}
-
-.dateWeekday {
-	font-size: 0.75rem;
-	color: #6b7280;
-	text-transform: uppercase;
-	line-height: 1;
-}
-
-.dutyIndicators {
-	display: flex;
-	gap: 0.25rem;
-	flex-wrap: wrap;
-	justify-content: center;
-	min-height: 20px;
-	margin-top: 0.25rem;
-}
-
-.dutyBadge {
+.welcomeDutyRow {
 	display: flex;
 	align-items: center;
-	justify-content: center;
-	padding: 0.125rem 0.375rem;
-	border-radius: 0.25rem;
-	font-size: 0.625rem;
-	font-weight: 700;
-	min-width: 24px;
-	height: 18px;
-	color: #1f2937;
+	gap: 0.5rem;
 }
 
-.resvIndicator {
-	background-color: #fef3c7;
-	color: #92400e;
-	padding: 0.125rem 0.375rem;
-	border-radius: 0.25rem;
-	font-size: 0.625rem;
-	font-weight: 600;
-	line-height: 1;
-}
+.welcomeDutyRowSecondary { opacity: 0.8; }
 
-.offIndicator {
-	background-color: #dcfce7;
-	color: #166534;
-	padding: 0.125rem 0.375rem;
-	border-radius: 0.25rem;
-	font-size: 0.625rem;
-	font-weight: 600;
-	line-height: 1;
-}
-
-.naIndicator {
-	background-color: #f3f4f6;
-	color: #6b7280;
-	padding: 0.125rem 0.375rem;
-	border-radius: 0.25rem;
-	font-size: 0.625rem;
-	font-weight: 600;
-	line-height: 1;
-}
-
-.emptyIndicator {
-	background-color: #fef3c7;
-	color: #92400e;
-	padding: 0.125rem 0.375rem;
-	border-radius: 0.25rem;
-	font-size: 0.625rem;
-	font-weight: 600;
-	line-height: 1;
-}
-
-/* Vertical Schedule List */
-.scheduleList {
-	padding: 0.5rem;
-	padding-bottom: 2rem;
-	margin-top: 6rem;
-	overflow-x: hidden;
-	overflow-y: auto;
-	-webkit-overflow-scrolling: touch;
-	height: calc(100vh - 6rem);
-	scrollbar-width: none; /* Firefox */
-	-ms-overflow-style: none; /* IE and Edge */
-	margin-left: auto;
-	margin-right: auto;
-	width: 100%;
-	position: relative;
-	/* GPU acceleration for smoother scrolling on iOS */
-	transform: translateZ(0);
-	-webkit-transform: translateZ(0);
-	will-change: scroll-position;
-	/* Prevent bounce scrolling issues on iOS */
-	overscroll-behavior-y: contain;
-}
-
-/* Tablet */
-@media (min-width: 640px) {
-	.scheduleList {
-		width: 85%;
-	}
-}
-
-/* Desktop */
-@media (min-width: 768px) {
-	.scheduleList {
-		padding: 1rem 2rem;
-		padding-bottom: 2rem;
-		width: 85%;
-	}
-}
-
-.scheduleList::-webkit-scrollbar {
-	display: none; /* Chrome, Safari, Opera */
-}
-
-.scheduleItem {
-	background: white;
-	border-radius: 0.75rem;
-	margin-bottom: 0.75rem;
-	box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-	overflow: hidden;
-	transition: all 0.2s ease;
-}
-
-.scheduleItem.activeScheduleItem {
-	box-shadow: 0 6px 16px rgba(34, 197, 94, 0.5);
-	border: 4px solid #22c55e;
-	border-left: 8px solid #22c55e;
-	transform: scale(1.02);
-	background: linear-gradient(to right, rgba(34, 197, 94, 0.08), white);
-	animation: activePulse 2s ease-in-out infinite;
-	scroll-margin-top: 10rem;
-}
-
-@media (min-width: 768px) {
-	.scheduleItem.activeScheduleItem {
-		scroll-margin-top: 12rem;
-	}
-}
-
-@keyframes activePulse {
-	0%, 100% {
-		box-shadow: 0 6px 16px rgba(34, 197, 94, 0.5);
-		border-color: #22c55e;
-	}
-	50% {
-		box-shadow: 0 10px 24px rgba(34, 197, 94, 0.8);
-		border-color: #4ade80;
-		border-left-color: #4ade80;
-	}
-}
-
-.scheduleItem:hover {
-	box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
-}
-
-.dateLabel {
-	background-color: #f3f4f6;
-	padding: 0.5rem 1rem;
-	border-bottom: 1px solid #e5e7eb;
-}
-
-.dateLabelDay {
-	font-size: 0.875rem;
-	font-weight: 600;
-	color: #6b7280;
-}
-
-.dutySummary {
-	padding: 1rem;
+.welcomeDayLabel {
 	display: flex;
 	align-items: center;
-	gap: 0.75rem;
-	cursor: pointer;
-	transition: all 0.2s ease;
-	position: relative;
-}
-
-.dutySummary:active {
-	transform: scale(0.98);
-}
-
-.dutyIcon {
+	gap: 0.375rem;
 	flex-shrink: 0;
-	width: 2.5rem;
-	height: 2.5rem;
-	border-radius: 50%;
-	background-color: rgba(255, 255, 255, 0.5);
-	display: flex;
-	align-items: center;
-	justify-content: center;
-	color: #374151;
+	min-width: 6.5rem;
 }
 
-.iconEmoji {
-	font-size: 1.25rem;
+.welcomeDayBadge {
+	background: rgba(255,255,255,0.9);
+	color: #1e40af;
+	font-size: 0.6875rem;
+	font-weight: 800;
+	padding: 0.15rem 0.45rem;
+	border-radius: 0.375rem;
+	flex-shrink: 0;
 }
 
-.dutyInfo {
+.welcomeDayBadgeTomorrow {
+	background: rgba(255,255,255,0.55);
+	color: white;
+}
+
+.welcomeDayDate {
+	font-size: 0.6875rem;
+	color: rgba(255,255,255,0.75);
+	font-weight: 500;
+	white-space: nowrap;
+}
+
+.welcomeDutyChip {
 	flex: 1;
 	min-width: 0;
-}
-
-.dutyRoute {
-	font-size: 1rem;
+	padding: 0.3rem 0.625rem;
+	border-radius: 0.5rem;
+	font-size: 0.8125rem;
 	font-weight: 700;
-	color: #111827;
-	margin-bottom: 0.25rem;
-	line-height: 1.2;
+	border: 1.5px solid transparent;
 	white-space: nowrap;
 	overflow: hidden;
 	text-overflow: ellipsis;
 }
 
-.dutyTime {
-	font-size: 0.875rem;
-	color: #6b7280;
-	line-height: 1.2;
-}
+@media (min-width: 768px) { .welcomeDutyChip { font-size: 0.875rem; } }
 
-.flightNumber {
-	flex-shrink: 0;
-	background-color: rgba(255, 255, 255, 0.7);
-	padding: 0.375rem 0.75rem;
-	border-radius: 0.375rem;
-	font-size: 0.875rem;
-	font-weight: 600;
-	color: #374151;
-	margin-right: 0.5rem;
-}
-
-.expandIcon {
-	flex-shrink: 0;
-	color: #6b7280;
-	transition: transform 0.2s ease;
-}
-
-.dutySummary:hover .expandIcon {
-	transform: scale(1.1);
-}
-
-/* Expanded Duty Details */
-.dutyDetails {
-	padding: 1rem;
-	background-color: #f9fafb;
-	border-top: 1px solid #e5e7eb;
-	animation: slideDown 0.2s ease;
-}
-
-@keyframes slideDown {
-	from {
-		opacity: 0;
-		max-height: 0;
-	}
-	to {
-		opacity: 1;
-		max-height: 500px;
-	}
-}
-
-.detailRow {
-	display: flex;
-	align-items: flex-start;
-	padding: 0.5rem 0;
-	border-bottom: 1px solid #e5e7eb;
-	gap: 0.5rem;
-}
-
-.detailRow:last-child {
-	border-bottom: none;
-}
-
-.detailLabel {
-	font-size: 0.875rem;
-	font-weight: 600;
-	color: #6b7280;
-	min-width: 5rem;
-	flex-shrink: 0;
-}
-
-.detailValue {
-	font-size: 0.875rem;
-	color: #111827;
+/* ─── Calendar Wrapper: takes all remaining vertical space ──────────────── */
+.calendarWrapper {
 	flex: 1;
+	min-height: 0;           /* allow flex child to shrink below content height */
+	display: flex;
+	flex-direction: column;
+	padding: 0.625rem 0.75rem 0.5rem;
+	overflow: hidden;
 }
 
-.crewmatesList {
+@media (min-width: 640px)  { .calendarWrapper { padding: 0.75rem 1rem 0.75rem; } }
+@media (min-width: 768px)  { .calendarWrapper { padding: 1rem 1.5rem 1rem; } }
+
+/* ─── Calendar Header ───────────────────────────────────────────────────── */
+.calendarHeader {
 	display: flex;
-	flex-wrap: wrap;
+	align-items: center;
+	justify-content: space-between;
+	margin-bottom: 0.5rem;
+	flex-shrink: 0;
+}
+
+.calendarNavBtn {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 2.25rem;
+	height: 2.25rem;
+	border-radius: 50%;
+	border: none;
+	background: rgba(255,255,255,0.25);
+	backdrop-filter: blur(8px);
+	color: white;
+	cursor: pointer;
+	transition: all 0.15s ease;
+	flex-shrink: 0;
+}
+.calendarNavBtn:hover  { background: rgba(255,255,255,0.4); transform: scale(1.06); }
+.calendarNavBtn:active { transform: scale(0.95); }
+
+@media (min-width: 768px) { .calendarNavBtn { width: 2.75rem; height: 2.75rem; } }
+
+.calendarMonthTitle {
+	display: flex;
+	align-items: center;
 	gap: 0.375rem;
-	flex: 1;
 }
 
-.crewmateBadge {
-	display: inline-block;
-	background-color: #dbeafe;
+.calendarYear {
+	font-size: 0.9375rem;
+	font-weight: 500;
+	color: rgba(255,255,255,0.7);
+}
+
+.calendarMonthName {
+	font-size: 1.375rem;
+	font-weight: 900;
+	color: white;
+	letter-spacing: -0.02em;
+	text-shadow: 0 1px 4px rgba(0,0,0,0.25);
+}
+
+@media (min-width: 768px) {
+	.calendarYear      { font-size: 1.0625rem; }
+	.calendarMonthName { font-size: 1.625rem; }
+}
+
+.todayChip {
+	background: white;
 	color: #1e40af;
-	padding: 0.25rem 0.625rem;
-	border-radius: 0.375rem;
-	font-size: 0.75rem;
-	font-weight: 600;
-	line-height: 1.2;
+	border: none;
+	border-radius: 1rem;
+	padding: 0.2rem 0.625rem;
+	font-size: 0.6875rem;
+	font-weight: 700;
+	cursor: pointer;
+	transition: opacity 0.15s;
+}
+.todayChip:hover { opacity: 0.85; }
+
+/* ─── Weekday Row ───────────────────────────────────────────────────────── */
+.weekdayRow {
+	display: grid;
+	grid-template-columns: repeat(7, 1fr);
+	margin-bottom: 0.25rem;
+	flex-shrink: 0;
 }
 
-/* Loading States */
+.weekdayLabel {
+	text-align: center;
+	font-size: 0.625rem;
+	font-weight: 700;
+	color: rgba(255,255,255,0.6);
+	padding: 0.25rem 0;
+	text-transform: uppercase;
+	letter-spacing: 0.04em;
+}
+
+.weekendLabel { color: #fca5a5; }
+
+@media (min-width: 640px)  { .weekdayLabel { font-size: 0.6875rem; } }
+@media (min-width: 768px)  { .weekdayLabel { font-size: 0.75rem; } }
+
+/* ─── Calendar Grid ─────────────────────────────────────────────────────── */
+.calendarGrid {
+	display: grid;
+	grid-template-columns: repeat(7, 1fr);
+	gap: 3px;
+	/* Take all remaining space in the flex column and distribute rows evenly */
+	flex: 1;
+	min-height: 0;
+	/* Make rows equal height */
+	grid-auto-rows: 1fr;
+}
+
+@media (min-width: 480px)  { .calendarGrid { gap: 4px; } }
+@media (min-width: 768px)  { .calendarGrid { gap: 5px; } }
+
+/* Empty filler cells must also stretch */
+.calendarCellEmpty {
+	/* participates in grid-auto-rows: 1fr naturally */
+}
+
+.calendarCell {
+	/* Don't use aspect-ratio — let grid-auto-rows: 1fr fill the space */
+	border-radius: 0.5rem;
+	padding: 0.2rem 0.15rem;
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+	cursor: pointer;
+	transition: transform 0.12s ease, box-shadow 0.12s ease;
+	background: rgba(255, 255, 255, 0.15);
+	backdrop-filter: blur(4px);
+	-webkit-backdrop-filter: blur(4px);
+	border: 1px solid rgba(255, 255, 255, 0.22);
+	position: relative;
+	overflow: hidden;
+	gap: 2px;
+	-webkit-transform: translate3d(0,0,0);
+	transform: translate3d(0,0,0);
+}
+
+.calendarCell:hover {
+	transform: scale(1.06) translate3d(0,0,0);
+	z-index: 2;
+	box-shadow: 0 4px 14px rgba(0,0,0,0.2);
+	background: rgba(255, 255, 255, 0.28);
+}
+
+.calendarCell:active { transform: scale(0.97) translate3d(0,0,0); }
+
+.calendarCellToday {
+	background: rgba(255, 255, 255, 0.3) !important;
+	border-color: #fbbf24 !important;
+	box-shadow: 0 0 0 1.5px rgba(251,191,36,0.5);
+}
+
+.calendarCellActive {
+	border-color: rgba(255,255,255,0.7) !important;
+	box-shadow: 0 0 0 2px rgba(255,255,255,0.35) !important;
+}
+
+.calendarCellSelected {
+	background: rgba(255, 255, 255, 0.35) !important;
+	border-color: white !important;
+	box-shadow: 0 0 0 2px rgba(255,255,255,0.5) !important;
+}
+
+.calendarCellWeekend .calendarDayNumber { color: #fca5a5; }
+
+.calendarCellNoData { opacity: 0.35; }
+
+/* ─── Day Number ────────────────────────────────────────────────────────── */
+.calendarDayNumber {
+	font-size: 0.6875rem;
+	font-weight: 700;
+	color: white;
+	text-shadow: 0 1px 2px rgba(0,0,0,0.3);
+	line-height: 1.2;
+	text-align: center;
+}
+
+.calendarDayNumberToday {
+	background: #f59e0b;
+	color: white;
+	border-radius: 50%;
+	width: 1.25rem;
+	height: 1.25rem;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	font-weight: 900;
+	font-size: 0.625rem;
+	text-shadow: none;
+	box-shadow: 0 1px 4px rgba(245,158,11,0.6);
+}
+
+/* ─── Duty Badge in Cell ────────────────────────────────────────────────── */
+.calendarDutyBadge {
+	width: calc(100% - 2px);
+	text-align: center;
+	font-size: 0.44rem;
+	font-weight: 800;
+	padding: 1px 1px;
+	border-radius: 3px;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	line-height: 1.4;
+	flex-shrink: 0;
+}
+
+@media (min-width: 360px)  { .calendarDutyBadge { font-size: 0.5rem; } }
+@media (min-width: 480px)  { .calendarDutyBadge { font-size: 0.5625rem; padding: 1px 2px; } }
+@media (min-width: 640px)  {
+	.calendarCell         { padding: 0.25rem; border-radius: 0.625rem; }
+	.calendarDayNumber    { font-size: 0.8125rem; }
+	.calendarDutyBadge    { font-size: 0.625rem; padding: 2px 3px; }
+	.calendarDayNumberToday { width: 1.5rem; height: 1.5rem; font-size: 0.75rem; }
+}
+@media (min-width: 768px)  {
+	.calendarCell         { padding: 0.375rem 0.3rem; border-radius: 0.75rem; }
+	.calendarDayNumber    { font-size: 0.9375rem; }
+	.calendarDutyBadge    { font-size: 0.6875rem; padding: 2px 4px; border-radius: 4px; }
+	.calendarDayNumberToday { width: 1.75rem; height: 1.75rem; font-size: 0.875rem; }
+}
+@media (min-width: 1024px) {
+	.calendarCell         { padding: 0.5rem; }
+	.calendarDayNumber    { font-size: 1.0625rem; }
+	.calendarDutyBadge    { font-size: 0.75rem; padding: 3px 5px; }
+}
+
+/* ─── Loading States ────────────────────────────────────────────────────── */
 .loadingScreen {
-	min-height: 100vh;
+	height: 100%;
 	display: flex;
 	flex-direction: column;
 	align-items: center;
@@ -440,221 +394,199 @@
 }
 
 .loadingContainer {
+	flex: 1;
 	display: flex;
 	flex-direction: column;
 	align-items: center;
 	justify-content: center;
-	min-height: 300px;
 	gap: 1rem;
 }
 
 .loadingSpinner {
-	width: 2.5rem;
-	height: 2.5rem;
-	border: 4px solid rgba(255, 255, 255, 0.3);
-	border-top: 4px solid white;
+	width: 2.25rem;
+	height: 2.25rem;
+	border: 3px solid rgba(255, 255, 255, 0.3);
+	border-top: 3px solid white;
 	border-radius: 50%;
 	animation: spin 1s linear infinite;
 }
 
 .loadingText {
 	color: white;
-	font-size: 1rem;
+	font-size: 0.9375rem;
 	font-weight: 500;
 }
 
 @keyframes spin {
-	0% { transform: rotate(0deg); }
+	0%   { transform: rotate(0deg); }
 	100% { transform: rotate(360deg); }
 }
 
-/* No Data State */
-.noDataContainer {
+/* ─── Tooltip ───────────────────────────────────────────────────────────── */
+.tooltip {
+	position: fixed;
+	z-index: 200;
+	width: 288px;
+	background: white;
+	border-radius: 1rem;
+	box-shadow: 0 4px 6px rgba(0,0,0,0.07), 0 12px 32px rgba(0,0,0,0.18), 0 0 0 1px rgba(0,0,0,0.06);
+	overflow: hidden;
+}
+
+.tooltipBelow { animation: tooltipSlideDown 0.18s cubic-bezier(0.34, 1.56, 0.64, 1); }
+.tooltipAbove { animation: tooltipSlideUp   0.18s cubic-bezier(0.34, 1.56, 0.64, 1); }
+
+@keyframes tooltipSlideDown {
+	from { opacity: 0; transform: translateX(-50%) translateY(-6px) scale(0.94); }
+	to   { opacity: 1; transform: translateX(-50%) translateY(0)    scale(1); }
+}
+@keyframes tooltipSlideUp {
+	from { opacity: 0; transform: translateX(-50%) translateY(6px)  scale(0.94); }
+	to   { opacity: 1; transform: translateX(-50%) translateY(0)    scale(1); }
+}
+
+@media (min-width: 480px) { .tooltip { width: 320px; } }
+
+.tooltipArrow {
+	position: absolute;
+	left: 50%;
+	transform: translateX(-50%);
+	width: 0;
+	height: 0;
+	border-left: 8px solid transparent;
+	border-right: 8px solid transparent;
+	z-index: 1;
+}
+.tooltipArrowUp   { top: -8px;    border-bottom-width: 8px; border-bottom-style: solid; }
+.tooltipArrowDown { bottom: -8px; border-top-width: 8px;    border-top-style: solid; }
+
+.tooltipHeader {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	padding: 0.875rem 1rem;
+	gap: 0.75rem;
+}
+
+.tooltipHeaderLeft {
+	display: flex;
+	align-items: center;
+	gap: 0.625rem;
+	flex: 1;
+	min-width: 0;
+}
+
+.tooltipIcon {
 	display: flex;
 	align-items: center;
 	justify-content: center;
-	min-height: 300px;
-	padding: 2rem;
+	width: 2rem;
+	height: 2rem;
+	background: rgba(255,255,255,0.5);
+	border-radius: 50%;
+	flex-shrink: 0;
 }
 
-.noDataText {
+.tooltipDate {
+	font-size: 0.75rem;
 	color: #6b7280;
+	font-weight: 500;
+	line-height: 1;
+}
+
+.tooltipDutyCode {
 	font-size: 1rem;
-	text-align: center;
+	font-weight: 800;
+	line-height: 1.25;
+	margin-top: 0.125rem;
 }
 
-/* Tablet and Desktop Adjustments */
-@media (min-width: 768px) {
-	.dashboardContainer {
-		padding: 0;
-	}
-
-	.monthHeader {
-		padding: 1.5rem 2rem;
-	}
-
-	.monthText {
-		font-size: 1.25rem;
-	}
-
-	.timeText {
-		font-size: 1rem;
-	}
-
-	.dateScrollContainer {
-		top: 4rem;
-	}
-
-	.dateItem {
-		width: 75px;
-		padding: 0.75rem;
-	}
-
-	.dateDay {
-		font-size: 1.25rem;
-	}
-
-	.dateWeekday {
-		font-size: 0.875rem;
-	}
-
-	.scheduleList {
-		padding: 1rem 2rem;
-		padding-bottom: 2rem;
-	}
-
-	.scheduleItem {
-		border-radius: 1rem;
-		margin-bottom: 1rem;
-	}
-
-	.dateLabel {
-		padding: 0.75rem 1.5rem;
-	}
-
-	.dateLabelDay {
-		font-size: 1rem;
-	}
-
-	.dutySummary {
-		padding: 1.5rem;
-		gap: 1rem;
-	}
-
-	.dutyIcon {
-		width: 3rem;
-		height: 3rem;
-	}
-
-	.iconEmoji {
-		font-size: 1.5rem;
-	}
-
-	.dutyRoute {
-		font-size: 1.125rem;
-	}
-
-	.dutyTime {
-		font-size: 1rem;
-	}
-
-	.flightNumber {
-		padding: 0.5rem 1rem;
-		font-size: 1rem;
-	}
-
-	.dutyDetails {
-		padding: 1.5rem;
-	}
-
-	.detailLabel {
-		font-size: 1rem;
-		min-width: 6rem;
-	}
-
-	.detailValue {
-		font-size: 1rem;
-	}
-
-	.crewmateBadge {
-		padding: 0.375rem 0.75rem;
-		font-size: 0.875rem;
-	}
-}
-
-/* Return to Today Button */
-.returnToTodayButton {
-	position: fixed;
-	bottom: 2rem;
-	right: 2rem;
-	background: linear-gradient(135deg, #3b82f6, #2563eb);
-	color: white;
+.tooltipClose {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 1.75rem;
+	height: 1.75rem;
+	border-radius: 50%;
 	border: none;
-	border-radius: 50px;
-	padding: 0.75rem 1.5rem;
+	background: rgba(0,0,0,0.08);
+	color: #374151;
+	cursor: pointer;
+	flex-shrink: 0;
+	transition: background 0.15s;
+}
+.tooltipClose:hover { background: rgba(0,0,0,0.15); }
+
+.tooltipBody {
+	padding: 0.75rem 1rem 1rem;
+	display: flex;
+	flex-direction: column;
+	gap: 0.5rem;
+}
+
+.tooltipResvNote {
+	font-size: 0.8rem;
+	color: #92400e;
+	background: #fef3c7;
+	padding: 0.5rem 0.625rem;
+	border-radius: 0.5rem;
+	font-weight: 500;
+	line-height: 1.4;
+}
+
+.tooltipRow {
 	display: flex;
 	align-items: center;
 	gap: 0.5rem;
-	font-size: 1rem;
+}
+
+.tooltipRowIcon { color: #9ca3af; flex-shrink: 0; }
+.tooltipRowLabel { font-size: 0.75rem; color: #9ca3af; font-weight: 600; min-width: 2.5rem; flex-shrink: 0; }
+.tooltipRowValue { font-size: 0.875rem; color: #111827; font-weight: 600; font-variant-numeric: tabular-nums; }
+
+.tooltipCrewSection {
+	margin-top: 0.25rem;
+	padding-top: 0.5rem;
+	border-top: 1px solid #f3f4f6;
+}
+
+.tooltipCrewLabel { font-size: 0.75rem; color: #9ca3af; font-weight: 600; margin-bottom: 0.375rem; }
+.tooltipCrewList  { display: flex; flex-wrap: wrap; gap: 0.375rem; }
+
+.tooltipCrewBadge {
+	display: inline-block;
+	padding: 0.2rem 0.5rem;
+	border-radius: 0.375rem;
+	font-size: 0.75rem;
 	font-weight: 600;
-	cursor: pointer;
-	box-shadow: 0 4px 12px rgba(59, 130, 246, 0.4);
-	transition: all 0.3s ease;
-	z-index: 50;
+	line-height: 1.3;
 }
 
-.returnToTodayButton:hover {
-	transform: translateY(-2px);
-	box-shadow: 0 6px 20px rgba(59, 130, 246, 0.6);
-	background: linear-gradient(135deg, #2563eb, #1e40af);
+.tooltipNoCrewText { font-size: 0.8rem; color: #9ca3af; }
+
+.tooltipOffMessage {
+	display: flex;
+	align-items: center;
+	gap: 0.625rem;
+	color: #6b7280;
+	font-size: 0.875rem;
+	font-weight: 600;
+	padding: 0.25rem 0;
 }
 
-.returnToTodayButton:active {
-	transform: translateY(0);
-}
-
-@media (max-width: 768px) {
-	.returnToTodayButton {
-		bottom: 1rem;
-		right: 1rem;
-		padding: 0.625rem 1.25rem;
-		font-size: 0.875rem;
-	}
-}
-
-/* Fix for iOS Safari - Safe areas and viewport height */
+/* ─── iOS safe areas ────────────────────────────────────────────────────── */
 @supports (-webkit-touch-callout: none) {
 	.dashboardContainer {
-		/* Account for safe areas on notched devices */
 		padding-left: env(safe-area-inset-left);
 		padding-right: env(safe-area-inset-right);
 	}
-
-	.dateScrollContainer {
-		/* Adjust for safe areas */
-		left: env(safe-area-inset-left);
-		right: env(safe-area-inset-right);
-	}
-
-	.scheduleList {
-		/* Use iOS-specific fill-available instead of calc */
-		height: -webkit-fill-available;
-		min-height: -webkit-fill-available;
-	}
 }
 
-/* Prevent items from disappearing on iOS when zoomed */
-@media screen and (-webkit-min-device-pixel-ratio: 0) {
-	.scheduleItem {
-		-webkit-transform: translate3d(0, 0, 0);
-		transform: translate3d(0, 0, 0);
-	}
-}
-
-/* Apply font rendering to dashboard container */
+/* ─── Font rendering ────────────────────────────────────────────────────── */
 .dashboardContainer,
 .dashboardContainer * {
 	-webkit-font-smoothing: antialiased;
 	-moz-osx-font-smoothing: grayscale;
-	font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang TC", "Microsoft JhengHei", "Noto Sans TC", "Heiti TC", sans-serif;
+	font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang TC",
+		"Microsoft JhengHei", "Noto Sans TC", "Heiti TC", sans-serif;
 }

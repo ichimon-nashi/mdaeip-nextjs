@@ -541,7 +541,9 @@ export default function DispatchDutyBuilder({ month, duty, onBack, onSaved }) {
 					<button
 						className={styles.btnPrimary}
 						onClick={handleSave}
-						disabled={saving}
+						disabled={
+							saving || Object.keys(sectorErrors).length > 0
+						}
 					>
 						{saving ? (
 							<>

@@ -8,14 +8,24 @@ import {
 	Copy,
 	ChevronRight,
 	Layers,
+	Edit2,
 } from "lucide-react";
 import toast from "react-hot-toast";
 import { supabase } from "../../lib/supabase";
 import { pdxMonthHelpers, monthLabel, daysInMonth } from "../../lib/pdxHelpers";
 import styles from "../../styles/DispatchDashboard.module.css";
 
-const YEARS = [2025, 2026, 2027];
+const currentYear = new Date().getFullYear();
+const YEARS = [currentYear - 1, currentYear, currentYear + 1, currentYear + 2];
 const MONTHS = Array.from({ length: 12 }, (_, i) => i + 1);
+
+function getNextMonthDefaults() {
+	const now = new Date();
+	const nextMonth = now.getMonth() + 2 > 12 ? 1 : now.getMonth() + 2;
+	const nextYear =
+		now.getMonth() + 2 > 12 ? now.getFullYear() + 1 : now.getFullYear();
+	return { year: nextYear, month: nextMonth };
+}
 
 export default function DispatchDashboard({ onSelectMonth }) {
 	const [months, setMonths] = useState([]);
@@ -40,6 +50,49 @@ export default function DispatchDashboard({ onSelectMonth }) {
 
 	const [deleting, setDeleting] = useState(null);
 	const [updatingId, setUpdatingId] = useState(null);
+	const [editingMonth, setEditingMonth] = useState(null); // month object being edited
+	const [editYear, setEditYear] = useState(null);
+	const [editMonth, setEditMonth] = useState(null);
+	const [editSaving, setEditSaving] = useState(false);
+
+	async function handleEditYearMonth() {
+		if (!editingMonth) return;
+		// Check not duplicate
+		const exists = months.find(
+			(m) =>
+				m.id !== editingMonth.id &&
+				m.year === editYear &&
+				m.month === editMonth,
+		);
+		if (exists) {
+			toast.error(
+				`${editYear}年${String(editMonth).padStart(2, "0")}月 已存在`,
+			);
+			return;
+		}
+		setEditSaving(true);
+		const { error } = await pdxMonthHelpers.updateYearMonth(
+			editingMonth.id,
+			editYear,
+			editMonth,
+		);
+		if (error) {
+			toast.error("更新失敗: " + error);
+		} else {
+			setMonths((prev) =>
+				prev.map((m) =>
+					m.id === editingMonth.id
+						? { ...m, year: editYear, month: editMonth }
+						: m,
+				),
+			);
+			toast.success(
+				`已更新為 ${editYear}年${String(editMonth).padStart(2, "0")}月`,
+			);
+			setEditingMonth(null);
+		}
+		setEditSaving(false);
+	}
 
 	async function handleToggleStatus(e, m) {
 		e.stopPropagation();
@@ -233,7 +286,12 @@ export default function DispatchDashboard({ onSelectMonth }) {
 				<div className={styles.headerActions}>
 					<button
 						className={styles.btnPrimary}
-						onClick={() => setShowNewModal(true)}
+						onClick={() => {
+							const d = getNextMonthDefaults();
+							setNewYear(d.year);
+							setNewMonth(d.month);
+							setShowNewModal(true);
+						}}
 					>
 						<Plus size={15} />
 						新增月份
@@ -340,6 +398,23 @@ export default function DispatchDashboard({ onSelectMonth }) {
 											padding: "5px 10px",
 											fontSize: 11,
 										}}
+										onClick={(e) => {
+											e.stopPropagation();
+											setEditingMonth(m);
+											setEditYear(m.year);
+											setEditMonth(m.month);
+										}}
+										title="修改年月"
+									>
+										<Edit2 size={12} />
+										修改年月
+									</button>
+									<button
+										className={styles.btnSecondary}
+										style={{
+											padding: "5px 10px",
+											fontSize: 11,
+										}}
 										onClick={(e) => openCopy(e, m)}
 										title="複製到其他月份"
 									>
@@ -373,7 +448,12 @@ export default function DispatchDashboard({ onSelectMonth }) {
 					{/* New card shortcut */}
 					<div
 						className={styles.newMonthCard}
-						onClick={() => setShowNewModal(true)}
+						onClick={() => {
+							const d = getNextMonthDefaults();
+							setNewYear(d.year);
+							setNewMonth(d.month);
+							setShowNewModal(true);
+						}}
 					>
 						<Plus size={24} />
 						<span className={styles.newMonthCardLabel}>
@@ -541,6 +621,88 @@ export default function DispatchDashboard({ onSelectMonth }) {
 									</>
 								) : (
 									"確認複製"
+								)}
+							</button>
+						</div>
+					</div>
+				</div>
+			)}
+
+			{/* Edit Year/Month Modal */}
+			{editingMonth && (
+				<div
+					className={styles.modalOverlay}
+					onClick={() => setEditingMonth(null)}
+				>
+					<div
+						className={styles.modal}
+						onClick={(e) => e.stopPropagation()}
+					>
+						<div className={styles.modalTitle}>修改年月</div>
+						<div className={styles.modalSub}>
+							修改後，原有班型資料不受影響
+						</div>
+
+						<div className={styles.formGroup}>
+							<label className={styles.formLabel}>年份</label>
+							<select
+								className={styles.formSelect}
+								value={editYear}
+								onChange={(e) =>
+									setEditYear(Number(e.target.value))
+								}
+							>
+								{YEARS.map((y) => (
+									<option key={y} value={y}>
+										{y}年
+									</option>
+								))}
+							</select>
+						</div>
+
+						<div className={styles.formGroup}>
+							<label className={styles.formLabel}>月份</label>
+							<select
+								className={styles.formSelect}
+								value={editMonth}
+								onChange={(e) =>
+									setEditMonth(Number(e.target.value))
+								}
+							>
+								{MONTHS.map((mo) => (
+									<option key={mo} value={mo}>
+										{mo.toString().padStart(2, "0")}月
+									</option>
+								))}
+							</select>
+						</div>
+
+						<div className={styles.modalFooter}>
+							<button
+								className={styles.btnSecondary}
+								onClick={() => setEditingMonth(null)}
+							>
+								取消
+							</button>
+							<button
+								className={styles.btnPrimary}
+								onClick={handleEditYearMonth}
+								disabled={editSaving}
+							>
+								{editSaving ? (
+									<>
+										<div
+											className={styles.spinner}
+											style={{
+												width: 14,
+												height: 14,
+												borderWidth: 2,
+											}}
+										/>{" "}
+										儲存中...
+									</>
+								) : (
+									"確認修改"
 								)}
 							</button>
 						</div>
