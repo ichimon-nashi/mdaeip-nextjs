@@ -54,6 +54,10 @@ const NavigationDrawer = ({ isOpen, onClose, userDetails }) => {
 
 	// Get user object from userDetails for permission checks
 	const user = userDetails;
+	console.log("dispatch access check:", {
+		user,
+		result: hasAppAccess(user, "dispatch"),
+	});
 
 	const handleNavigation = (path, hasAccess) => {
 		if (!hasAccess) return;
@@ -201,7 +205,8 @@ const NavigationDrawer = ({ isOpen, onClose, userDetails }) => {
 										onError={(e) => {
 											e.target.style.display = "none";
 											if (e.target.nextSibling) {
-												e.target.nextSibling.style.display = "flex";
+												e.target.nextSibling.style.display =
+													"flex";
 											}
 										}}
 									/>
@@ -255,17 +260,33 @@ const NavigationDrawer = ({ isOpen, onClose, userDetails }) => {
 											{item.icon}
 										</div>
 										<div className={styles.menuItemContent}>
-											<div className={styles.menuItemTitleContainer}>
-												<div className={styles.menuItemTitle}>
+											<div
+												className={
+													styles.menuItemTitleContainer
+												}
+											>
+												<div
+													className={
+														styles.menuItemTitle
+													}
+												>
 													{item.title}
 												</div>
 											</div>
-											<div className={styles.menuItemDescription}>
+											<div
+												className={
+													styles.menuItemDescription
+												}
+											>
 												{item.description}
 											</div>
 										</div>
 										{isActive && (
-											<div className={styles.menuItemIndicator} />
+											<div
+												className={
+													styles.menuItemIndicator
+												}
+											/>
 										)}
 									</button>
 								);

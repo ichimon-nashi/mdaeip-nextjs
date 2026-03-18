@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import DispatchDashboard from "../../components/dispatch/DispatchDashboard";
 import DispatchMonthView from "../../components/dispatch/DispatchMonthView";
 import DispatchDutyBuilder from "../../components/dispatch/DispatchDutyBuilder";
+import { hasAppAccess } from "../../lib/permissionHelpers";
 
 // Views
 const VIEW = {
@@ -25,12 +26,12 @@ export default function DispatchPage() {
 
 	// Auth guard — same pattern as database-management
 	useEffect(() => {
-		if (!loading && (!user || user.access_level !== 99)) {
+		if (!loading && (!user || !hasAppAccess(user, "dispatch"))) {
 			router.replace("/schedule");
 		}
 	}, [user, loading, router]);
 
-	if (loading || !user || user.access_level !== 99) {
+	if (loading || !user || !hasAppAccess(user, "dispatch")) {
 		return null;
 	}
 
