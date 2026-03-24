@@ -6,13 +6,14 @@ import './globals.css';
 export const metadata = {
   title: '豪神APP',
   description: '豪神APP',
-  viewport: {
-    width: 'device-width',
-    initialScale: 1,
-    maximumScale: 1,
-    userScalable: false,
-    viewportFit: 'cover'
-  }
+};
+
+export const viewport = {
+  width: 'device-width',
+  initialScale: 1,
+  maximumScale: 1,
+  userScalable: false,
+  viewportFit: 'cover'
 };
 
 export default function RootLayout({ children }) {

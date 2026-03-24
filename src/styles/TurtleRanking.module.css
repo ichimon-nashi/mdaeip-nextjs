@@ -1,0 +1,1307 @@
+/* ── Layout ─────────────────────────────────────────────────── */
+.page {
+  max-width: 100%;
+  width: 100%;
+  margin: 0;
+  padding: 1rem 1rem 5rem;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+/* On desktop, use a two-column layout for the add form legs grid */
+@media (min-width: 1024px) {
+  .page {
+    padding: 1.5rem 1.5rem 5rem;
+  }
+}
+
+/* ── Header ─────────────────────────────────────────────────── */
+.header {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 1.25rem 1.5rem;
+  background: linear-gradient(135deg, #064e3b 0%, #065f46 100%);
+  border-radius: 16px;
+  color: white;
+  margin-bottom: 1.25rem;
+}
+
+.shell { font-size: 2.5rem; }
+
+.title {
+  font-size: 1.5rem;
+  font-weight: 800;
+  margin: 0;
+  color: white;
+  letter-spacing: -0.02em;
+}
+
+.subtitle {
+  font-size: 0.8rem;
+  margin: 0.2rem 0 0;
+  color: rgba(255, 255, 255, 0.7);
+}
+
+/* ── Tabs ───────────────────────────────────────────────────── */
+.tabs {
+  display: flex;
+  gap: 0.25rem;
+  background: none;
+  border-bottom: 1.5px solid rgba(255,255,255,0.25);
+  margin-bottom: 1.25rem;
+  padding: 0;
+}
+
+.tab {
+  padding: 0.625rem 1.25rem;
+  border: none;
+  background: none;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: #d1fae5;
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1.5px;
+  border-radius: 6px 6px 0 0;
+  transition: color 0.15s;
+}
+
+.tab:hover { color: #ffffff; }
+
+.tabActive {
+  color: #ffffff;
+  border-bottom-color: #ffffff;
+  background: none;
+}
+
+/* ── Section wrapper ────────────────────────────────────────── */
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  animation: fadeUp 0.2s ease;
+}
+
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0);   }
+}
+
+/* ── Loading / Empty ────────────────────────────────────────── */
+.loadState,
+.emptyState {
+  text-align: center;
+  padding: 3rem 1rem;
+  color: #9ca3af;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.shellSpin {
+  font-size: 2.5rem;
+  animation: wobble 1.2s ease-in-out infinite;
+}
+
+.emptyShell { font-size: 3.5rem; filter: grayscale(0.4); }
+.emptyHint  { font-size: 0.85rem; color: #d1d5db; }
+
+@keyframes wobble {
+  0%, 100% { transform: rotate(-8deg); }
+  50%       { transform: rotate(8deg);  }
+}
+
+/* ── Chart card ─────────────────────────────────────────────── */
+.chartCard {
+  background: white;
+  border: 1.5px solid #e5e7eb;
+  border-radius: 14px;
+  padding: 1.25rem 1.25rem 1rem;
+}
+
+.chartHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1rem;
+}
+
+.chartTitle {
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: #111827;
+}
+
+.chartHint {
+  font-size: 0.75rem;
+  color: #374151;
+}
+
+/* ── Section heading ────────────────────────────────────────── */
+.sectionHeading {
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: #ffffff;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin: 0.5rem 0 0;
+}
+
+/* ── Rank list ──────────────────────────────────────────────── */
+.rankList {
+  display: flex;
+  flex-direction: column;
+  gap: 0.625rem;
+}
+
+.rankCard {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.875rem;
+  padding: 1rem 1.25rem;
+  background: white;
+  border: 1.5px solid #e5e7eb;
+  border-radius: 14px;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.rankCard:hover {
+  border-color: #d1d5db;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
+}
+
+.rankFirst {
+  border-color: #d97706;
+  background: linear-gradient(135deg, #fffbeb 0%, #fff 55%);
+}
+
+.medal {
+  font-size: 1.4rem;
+  min-width: 2.25rem;
+  text-align: center;
+  padding-top: 2px;
+}
+
+.rankInfo { flex: 1; min-width: 0; }
+
+.pilotName {
+  font-size: 1rem;
+  font-weight: 700;
+  color: #111827;
+  margin-bottom: 4px;
+}
+
+.baseBadge {
+  display: inline-block;
+  font-size: 0.72rem;
+  font-weight: 600;
+  padding: 2px 10px;
+  border-radius: 999px;
+  margin-bottom: 5px;
+}
+
+.turtleTitle {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #111827;
+  margin-bottom: 6px;
+}
+
+.destList { display: flex; flex-wrap: wrap; gap: 4px; }
+
+.destChip {
+  font-size: 0.7rem;
+  padding: 2px 8px;
+  background: #f3f4f6;
+  border-radius: 999px;
+  color: #6b7280;
+  font-family: monospace;
+}
+
+.avgBox { text-align: right; flex-shrink: 0; }
+
+.avgTime {
+  font-size: 1.15rem;
+  font-weight: 800;
+  color: #065f46;
+  letter-spacing: -0.01em;
+}
+
+.avgLabel {
+  font-size: 0.7rem;
+  color: #374151;
+  margin-top: 2px;
+}
+
+/* ── Form card ──────────────────────────────────────────────── */
+.formCard {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+  padding: 1.25rem;
+  background: white;
+  border: 1.5px solid #e5e7eb;
+  border-radius: 14px;
+}
+
+.formGroup {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.label {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: #111827;
+}
+
+.input,
+.select {
+  width: 100%;
+  padding: 0.6rem 0.875rem;
+  border: 1.5px solid #e5e7eb;
+  border-radius: 10px;
+  font-size: 0.875rem;
+  color: #111827;
+  background: white;
+  box-sizing: border-box;
+  transition: border-color 0.15s;
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+.input:focus,
+.select:focus {
+  outline: none;
+  border-color: #059669;
+}
+
+/* ── Leg counter ────────────────────────────────────────────── */
+.counter {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.counterBtn {
+  width: 36px;
+  height: 36px;
+  border: 1.5px solid #d1d5db;
+  background: white;
+  border-radius: 8px;
+  font-size: 1.1rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s;
+  flex-shrink: 0;
+}
+
+.counterBtn:hover {
+  border-color: #059669;
+  color: #059669;
+}
+
+.counterVal {
+  font-size: 1.25rem;
+  font-weight: 800;
+  color: #111827;
+  min-width: 1.5rem;
+  text-align: center;
+}
+
+/* ── Legs grid ──────────────────────────────────────────────── */
+.legsGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 0.75rem;
+}
+
+@media (min-width: 1024px) {
+  .legsGrid {
+    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  }
+}
+
+.legCard {
+  background: #f9fafb;
+  border: 1.5px solid #e5e7eb;
+  border-radius: 12px;
+  padding: 0.875rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.legLabel {
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: #374151;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+/* ── Route row (origin → dest dropdowns) ────────────────────── */
+.routeRow {
+  display: flex;
+  align-items: flex-end;
+  gap: 6px;
+  margin-bottom: 2px;
+}
+
+.routeField {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.routeArrow {
+  font-size: 0.9rem;
+  color: #9ca3af;
+  padding-bottom: 0.6rem;
+  flex-shrink: 0;
+}
+
+.selectLocked {
+  background: #f3f4f6;
+  color: #6b7280;
+  cursor: not-allowed;
+  opacity: 0.85;
+}
+
+/* ── Time row (takeoff → landing inputs) ────────────────────── */
+.timeRow {
+  display: flex;
+  align-items: flex-end;
+  gap: 6px;
+}
+
+.timeField {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.timeLabel {
+  font-size: 0.7rem;
+  color: #374151;
+  font-weight: 500;
+}
+
+.arrow {
+  font-size: 0.875rem;
+  color: #9ca3af;
+  padding-bottom: 0.625rem;
+}
+
+.legDur {
+  font-size: 0.75rem;
+  color: #059669;
+  font-weight: 600;
+  text-align: right;
+}
+
+/* ── Preview banner ─────────────────────────────────────────── */
+.previewBanner {
+  background: linear-gradient(135deg, #064e3b, #065f46);
+  border-radius: 12px;
+  padding: 1.25rem;
+  text-align: center;
+  color: white;
+}
+
+.previewTime {
+  font-size: 2rem;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+}
+
+.previewSub {
+  font-size: 0.75rem;
+  opacity: 0.75;
+  margin-top: 3px;
+}
+
+.previewTitle {
+  display: inline-block;
+  margin-top: 0.625rem;
+  padding: 0.3rem 1rem;
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 999px;
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+
+/* ── Buttons ────────────────────────────────────────────────── */
+.btnPrimary {
+  padding: 0.7rem 1.5rem;
+  background: #065f46;
+  color: white;
+  border: none;
+  border-radius: 10px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s;
+  margin-top: 0.5rem;
+}
+
+.btnPrimary:hover { background: #047857; }
+
+.btnSubmit {
+  width: 100%;
+  padding: 0.875rem;
+  background: #065f46;
+  color: white;
+  border: none;
+  border-radius: 12px;
+  font-size: 1rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.15s;
+  letter-spacing: 0.01em;
+}
+
+.btnSubmit:hover:not(:disabled) { background: #047857; }
+.btnSubmit:disabled              { opacity: 0.6; cursor: not-allowed; }
+
+/* ── Mobile ─────────────────────────────────────────────────── */
+@media (max-width: 480px) {
+  .legsGrid { grid-template-columns: 1fr; }
+
+  .rankCard { flex-wrap: wrap; }
+
+  .avgBox {
+    width: 100%;
+    text-align: left;
+    border-top: 1px solid #f3f4f6;
+    padding-top: 0.5rem;
+    margin-top: 0.25rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+
+  .avgLabel { margin-top: 0; }
+}
+
+/* ── Base filter row (dashboard) ────────────────────────────── */
+.baseFilterRow {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  margin-bottom: 0.25rem;
+}
+
+.baseFilterBtn {
+  padding: 0.4rem 0.875rem;
+  border: 1.5px solid #e5e7eb;
+  background: white;
+  border-radius: 999px;
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: #6b7280;
+  cursor: pointer;
+  transition: all 0.15s;
+  white-space: nowrap;
+}
+
+.baseFilterBtn:hover { border-color: #9ca3af; color: #374151; }
+
+.baseFilterActive {
+  background: #f9fafb;
+  border-width: 2px;
+  font-weight: 700;
+}
+
+/* ── Leg error state ────────────────────────────────────────── */
+.legCardError {
+  border: 2px solid #dc2626 !important;
+  background: #fff5f5;
+}
+
+.inputError {
+  border: 2px solid #dc2626 !important;
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.15);
+}
+
+.legError {
+  font-size: 0.7rem;
+  color: #dc2626;
+  font-weight: 500;
+  margin-top: 2px;
+}
+
+/* ── Records tab ────────────────────────────────────────────── */
+.recordsHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.75rem;
+}
+
+.recordsTitle {
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: #ffffff;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.btnRefresh {
+  padding: 0.35rem 0.875rem;
+  border: 1.5px solid #e5e7eb;
+  background: white;
+  border-radius: 8px;
+  font-size: 0.8rem;
+  color: #6b7280;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.btnRefresh:hover { border-color: #059669; color: #059669; }
+
+.recordsList {
+  display: flex;
+  flex-direction: column;
+  gap: 0.625rem;
+}
+
+.recordCard {
+  background: white;
+  border: 1.5px solid #e5e7eb;
+  border-radius: 14px;
+  padding: 1rem 1.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  transition: border-color 0.15s;
+}
+
+.recordCard:hover { border-color: #d1d5db; }
+
+.recordRoute {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 1.1rem;
+  font-weight: 800;
+  color: #111827;
+  letter-spacing: 0.02em;
+}
+
+.recordAirport { font-family: monospace; font-size: 1rem; font-weight: 700; }
+
+.recordArrow { color: #9ca3af; font-size: 0.875rem; }
+
+.recordMeta {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.recordPilot {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: #374151;
+}
+
+.recordBase {
+  font-size: 0.7rem;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 999px;
+}
+
+.recordTimes {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.8rem;
+  color: #6b7280;
+  font-family: monospace;
+}
+
+.recordDur {
+  font-weight: 700;
+  color: #065f46;
+  font-family: inherit;
+}
+
+.recordFooter {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  border-top: 1px solid #f3f4f6;
+  padding-top: 0.5rem;
+}
+
+.recordDate {
+  font-size: 0.72rem;
+  color: #d1d5db;
+  flex: 1;
+}
+
+.recordSubmitter {
+  font-size: 0.72rem;
+  color: #9ca3af;
+  font-family: monospace;
+}
+
+.recordActions {
+  display: flex;
+  gap: 0.5rem;
+  margin-left: auto;
+}
+
+.btnEdit {
+  padding: 0.3rem 0.75rem;
+  border: 1.5px solid #d1d5db;
+  background: white;
+  border-radius: 7px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #374151;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.btnEdit:hover { border-color: #059669; color: #059669; }
+
+.btnDelete {
+  padding: 0.3rem 0.75rem;
+  border: 1.5px solid #fca5a5;
+  background: white;
+  border-radius: 7px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #dc2626;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.btnDelete:hover { background: #fee2e2; }
+
+/* ── Edit modal ─────────────────────────────────────────────── */
+.modalOverlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: 1rem;
+}
+
+.modalBox {
+  background: white;
+  border-radius: 16px;
+  width: 100%;
+  max-width: 520px;
+  max-height: 85vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.modalHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1rem 1.25rem;
+  border-bottom: 1.5px solid #e5e7eb;
+  flex-shrink: 0;
+}
+
+.modalTitle {
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: #111827;
+}
+
+.modalClose {
+  border: none;
+  background: none;
+  font-size: 1rem;
+  color: #9ca3af;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 6px;
+  transition: all 0.15s;
+}
+
+.modalClose:hover { background: #f3f4f6; color: #374151; }
+
+.modalBody {
+  padding: 1.25rem;
+  overflow-y: auto;
+  flex: 1;
+}
+
+.modalFooter {
+  display: flex;
+  gap: 0.75rem;
+  padding: 1rem 1.25rem;
+  border-top: 1.5px solid #e5e7eb;
+  flex-shrink: 0;
+}
+
+.btnCancel {
+  flex: 1;
+  padding: 0.75rem;
+  border: 1.5px solid #e5e7eb;
+  background: white;
+  border-radius: 10px;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: #6b7280;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.btnCancel:hover:not(:disabled) { border-color: #d1d5db; color: #374151; }
+.btnCancel:disabled              { opacity: 0.6; cursor: not-allowed; }
+
+/* ── Sector standard hint inside leg card ───────────────────── */
+.stdHint {
+  font-size: 0.7rem;
+  color: #6b7280;
+  background: #f3f4f6;
+  border-radius: 6px;
+  padding: 2px 8px;
+  display: inline-block;
+}
+
+/* ── Excess indicators ──────────────────────────────────────── */
+.excessBad  { color: #dc2626; font-weight: 700; font-size: 0.75rem; }
+.excessOk   { color: #059669; font-weight: 600; font-size: 0.75rem; }
+
+.chipExcessBad { color: #dc2626; font-size: 0.65rem; font-weight: 700; margin-left: 2px; }
+.chipExcessOk  { color: #059669; font-size: 0.65rem; font-weight: 600; margin-left: 2px; }
+
+.avgExcessBad {
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: #dc2626;
+  margin-top: 2px;
+}
+.avgExcessOk {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #059669;
+  margin-top: 2px;
+}
+
+/* ── Preview excess line ────────────────────────────────────── */
+.previewExcess {
+  font-size: 0.85rem;
+  opacity: 0.85;
+  margin-top: 4px;
+  font-weight: 600;
+}
+
+/* ── Record: standard badge + flight date ───────────────────── */
+.recordStd {
+  font-size: 0.7rem;
+  color: #9ca3af;
+  margin-left: auto;
+  font-family: monospace;
+}
+
+.recordFlightDate {
+  font-size: 0.78rem;
+  color: #6b7280;
+  font-weight: 500;
+}
+
+/* ── Route selector ─────────────────────────────────────────── */
+.routeSelectorRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
+}
+
+.routeBtn {
+  padding: 0.4rem 0.875rem;
+  border: 1.5px solid #e5e7eb;
+  background: white;
+  border-radius: 10px;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: #374151;
+  cursor: pointer;
+  font-family: monospace;
+  letter-spacing: 0.03em;
+  transition: all 0.15s;
+  white-space: nowrap;
+}
+
+.routeBtn:hover {
+  border-color: #065f46;
+  color: #065f46;
+}
+
+.routeBtnActive {
+  background: #065f46;
+  border-color: #065f46;
+  color: white;
+}
+
+/* ── Route standard badge inside chart header ───────────────── */
+.routeStdBadge {
+  display: inline-block;
+  margin-left: 0.75rem;
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: #374151;
+  background: #f3f4f6;
+  border-radius: 999px;
+  padding: 2px 10px;
+}
+
+/* ── Entry count on rank card ───────────────────────────────── */
+.rankEntries {
+  font-size: 0.72rem;
+  color: #374151;
+  margin-top: 2px;
+}
+
+/* ── Segment block (add form) ───────────────────────────────── */
+.segmentBlock {
+  display: flex;
+  flex-direction: column;
+  gap: 0.875rem;
+  padding: 1rem 1.25rem;
+  background: #f9fafb;
+  border: 1.5px solid #e5e7eb;
+  border-radius: 12px;
+}
+
+.segmentHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.segmentLabel {
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: #111827;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.btnRemoveSegment {
+  padding: 0.2rem 0.6rem;
+  border: 1.5px solid #fca5a5;
+  background: white;
+  border-radius: 6px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: #dc2626;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.btnRemoveSegment:hover { background: #fee2e2; }
+
+/* Leg with remove button overlay */
+.legWithRemove {
+  position: relative;
+}
+
+.btnRemoveLeg {
+  position: absolute;
+  top: 0.5rem;
+  right: 0.5rem;
+  background: white;
+  border: 1.5px solid #e5e7eb;
+  border-radius: 50%;
+  width: 20px;
+  height: 20px;
+  font-size: 0.6rem;
+  color: #9ca3af;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  line-height: 1;
+  transition: all 0.15s;
+  z-index: 1;
+}
+
+.btnRemoveLeg:hover {
+  border-color: #dc2626;
+  color: #dc2626;
+  background: #fee2e2;
+}
+
+/* Add leg button */
+.btnAddLeg {
+  align-self: flex-start;
+  padding: 0.4rem 0.875rem;
+  border: 1.5px dashed #d1d5db;
+  background: white;
+  border-radius: 8px;
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: #6b7280;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.btnAddLeg:hover {
+  border-color: #065f46;
+  color: #065f46;
+  border-style: solid;
+}
+
+/* Per-segment preview strip */
+.segmentPreview {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.625rem 0.875rem;
+  background: linear-gradient(135deg, #064e3b, #065f46);
+  border-radius: 10px;
+  color: white;
+  flex-wrap: wrap;
+}
+
+.segPreviewName {
+  font-size: 0.85rem;
+  font-weight: 700;
+}
+
+.segPreviewTime {
+  font-size: 1rem;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+}
+
+.segPreviewTitle {
+  font-size: 0.78rem;
+  opacity: 0.85;
+  margin-left: auto;
+}
+
+/* Add segment button */
+.btnAddSegment {
+  width: 100%;
+  padding: 0.75rem;
+  border: 2px dashed #059669;
+  background: white;
+  border-radius: 12px;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: #059669;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.btnAddSegment:hover {
+  background: #d1fae5;
+  border-style: solid;
+}
+
+/* ── Turtle species on rank card ────────────────────────────── */
+.turtleSpecies {
+  font-size: 0.72rem;
+  color: #374151;
+  font-style: italic;
+  margin-bottom: 4px;
+}
+
+/* ── Pilot grid picker ──────────────────────────────────────── */
+.pilotPickerWrap {
+  position: relative;
+  width: 100%;
+}
+
+.pilotPickerTrigger {
+  width: 100%;
+  padding: 0.6rem 0.875rem;
+  border: 1.5px solid #e5e7eb;
+  border-radius: 10px;
+  background: white;
+  font-size: 0.875rem;
+  color: #111827;
+  cursor: pointer;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  transition: border-color 0.15s;
+  text-align: left;
+}
+
+.pilotPickerTrigger:hover { border-color: #059669; }
+
+.pilotPickerCaret {
+  font-size: 0.65rem;
+  color: #9ca3af;
+  margin-left: 0.5rem;
+  flex-shrink: 0;
+}
+
+.pilotPickerPanel {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  background: white;
+  border: 1.5px solid #e5e7eb;
+  border-radius: 12px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.12);
+  z-index: 200;
+  overflow: hidden;
+  max-height: 360px;
+  overflow-y: auto;
+}
+
+.pilotPickerGroup {
+  padding: 0.75rem 0.875rem 0.625rem;
+}
+
+.pilotPickerGroup + .pilotPickerGroup {
+  border-top: 1px solid #f3f4f6;
+}
+
+.pilotPickerGroupLabel {
+  font-size: 0.72rem;
+  font-weight: 700;
+  margin-bottom: 0.5rem;
+  padding-bottom: 0.375rem;
+  border-bottom: 1px solid;
+  letter-spacing: 0.03em;
+}
+
+.pilotPickerGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(72px, 1fr));
+  gap: 6px;
+}
+
+.pilotPickerName {
+  padding: 0.35rem 0.5rem;
+  border: 1.5px solid #e5e7eb;
+  background: white;
+  border-radius: 8px;
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: #374151;
+  cursor: pointer;
+  transition: all 0.12s;
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.pilotPickerName:hover {
+  border-color: #059669;
+  color: #065f46;
+  background: #f0fdf4;
+}
+
+.pilotPickerSelected {
+  font-weight: 700;
+  border-width: 2px;
+}
+
+/* ── Leg table (replaces leg card grid in add form) ─────────── */
+.legTable {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 100%;
+}
+
+.legTableHead {
+  display: grid;
+  grid-template-columns: 1fr 1rem 1fr 4.5rem 4.5rem 1fr 1.5rem;
+  gap: 6px;
+  padding: 0 0.25rem;
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: #374151;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.legTableRow {
+  display: grid;
+  grid-template-columns: 1fr 1rem 1fr 4.5rem 4.5rem 1fr 1.5rem;
+  gap: 6px;
+  align-items: center;
+  padding: 0.375rem 0.25rem;
+  border-radius: 8px;
+  transition: background 0.1s;
+}
+
+.legTableRow:hover { background: #f9fafb; }
+
+.legTableRowError {
+  background: #fff5f5 !important;
+}
+
+.legTableSelect {
+  width: 100%;
+  padding: 0.4rem 0.5rem;
+  border: 1.5px solid #e5e7eb;
+  border-radius: 8px;
+  font-size: 0.8rem;
+  color: #111827;
+  background: white;
+  -webkit-appearance: none;
+  appearance: none;
+  cursor: pointer;
+  transition: border-color 0.15s;
+}
+
+.legTableSelect:focus { outline: none; border-color: #059669; }
+
+.legTableArrow {
+  text-align: center;
+  font-size: 0.75rem;
+  color: #9ca3af;
+}
+
+.legTableInput {
+  width: 100%;
+  padding: 0.4rem 0.5rem;
+  border: 1.5px solid #e5e7eb;
+  border-radius: 8px;
+  font-size: 0.82rem;
+  color: #111827;
+  background: white;
+  box-sizing: border-box;
+  font-family: monospace;
+  transition: border-color 0.15s;
+}
+
+.legTableInput:focus { outline: none; border-color: #059669; }
+
+.legTableDur {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: #065f46;
+  white-space: nowrap;
+}
+
+.legTableStd {
+  font-size: 0.65rem;
+  color: #9ca3af;
+  font-weight: 400;
+}
+
+.legTableErrIcon {
+  color: #dc2626;
+  font-size: 0.85rem;
+}
+
+@media (max-width: 600px) {
+  .legTableHead { display: none; }
+  .legTableRow {
+    grid-template-columns: 1fr 0.6rem 1fr 3.5rem 3.5rem 1fr 1.2rem;
+    gap: 4px;
+  }
+  .legTableSelect,
+  .legTableInput { font-size: 0.75rem; padding: 0.35rem 0.4rem; }
+}
+
+/* ── Grouped records ────────────────────────────────────────── */
+.recordGroup {
+  background: white;
+  border: 1.5px solid #e5e7eb;
+  border-radius: 14px;
+  overflow: hidden;
+  transition: border-color 0.15s;
+}
+
+.recordGroup:hover { border-color: #d1d5db; }
+
+.recordGroupHeader {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  padding: 0.75rem 1rem;
+  background: #f9fafb;
+  border-bottom: 1px solid #f3f4f6;
+  flex-wrap: wrap;
+}
+
+.recordGroupName {
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: #111827;
+}
+
+.recordGroupCount {
+  font-size: 0.72rem;
+  color: #374151;
+  margin-left: auto;
+}
+
+.recordRow {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.5rem 1rem;
+  border-bottom: 1px solid #f9fafb;
+  flex-wrap: wrap;
+  font-size: 0.82rem;
+}
+
+.recordRow:last-child { border-bottom: none; }
+.recordRow:hover { background: #f9fafb; }
+
+.recordRowRoute {
+  font-family: monospace;
+  font-weight: 700;
+  color: #111827;
+  font-size: 0.85rem;
+  min-width: 5rem;
+}
+
+.recordRowTimes {
+  font-family: monospace;
+  color: #374151;
+  font-size: 0.78rem;
+}
+
+.recordRowDur {
+  font-weight: 700;
+  color: #065f46;
+  min-width: 5rem;
+}
+
+.recordRowDate {
+  font-size: 0.72rem;
+  color: #9ca3af;
+}
+
+.recordRowStd {
+  font-size: 0.7rem;
+  color: #9ca3af;
+  background: #f3f4f6;
+  padding: 1px 6px;
+  border-radius: 4px;
+}
+
+.recordRowActions {
+  display: flex;
+  gap: 0.375rem;
+  margin-left: auto;
+}

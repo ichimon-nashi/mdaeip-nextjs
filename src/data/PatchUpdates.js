@@ -142,4 +142,9 @@ export const patchUpdates = [
 		appName: "派遣表系統",
 		updateInfo: ["建立初版電子派遣表"],
 	},
+		{
+		date: "2026-03-24",
+		appName: "烏龜排行榜",
+		updateInfo: ["建立初版烏龜排行榜"],
+	},
 ];

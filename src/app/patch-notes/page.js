@@ -1,261 +1,208 @@
-// src/app/patch-notes/page.js - Version WITHOUT navbar
-'use client'
+"use client";
 
-import React, { useState } from 'react'
-import Head from 'next/head'
-import { Calendar, Clock, Code, ChevronDown, ChevronUp, Wrench, FilePlus } from 'lucide-react'
-import { patchUpdates } from '../../data/PatchUpdates' // Adjust path to your data file
-import styles from '../../styles/patch-notes.module.css'
+import { useState, useMemo } from "react";
+import { patchUpdates } from "../../data/PatchUpdates";
+import styles from "../../styles/patch-notes.module.css";
 
-// If you have an auth context, import it here
-// import { useAuth } from '../../contexts/AuthContext'
-
-const PatchNotes = () => {
-    const [expandedItems, setExpandedItems] = useState({})
-    const [selectedApp, setSelectedApp] = useState('all')
-
-    // Replace this with your actual auth system
-    // const { user } = useAuth()
-    const userDetails = { 
-        name: '使用者' // Replace with: user?.name || '使用者'
-    }
-
-    // Get unique app names for filter
-    const appNames = ['all', ...new Set(patchUpdates.map(update => update.appName.trim()))]
-
-    // Filter updates based on selected app
-    const filteredUpdates = selectedApp === 'all' 
-        ? patchUpdates 
-        : patchUpdates.filter(update => update.appName.trim() === selectedApp)
-
-    // Sort updates by date (newest first)
-    const sortedUpdates = [...filteredUpdates].sort((a, b) => new Date(b.date) - new Date(a.date))
-
-    // Group updates by date
-    const groupedUpdates = sortedUpdates.reduce((acc, update) => {
-        const date = update.date
-        if (!acc[date]) {
-            acc[date] = []
-        }
-        acc[date].push(update)
-        return acc
-    }, {})
-
-    const toggleExpanded = (key) => {
-        setExpandedItems(prev => ({
-            ...prev,
-            [key]: !prev[key]
-        }))
-    }
-
-    const formatDate = (dateString) => {
-        const date = new Date(dateString)
-        const year = date.getFullYear()
-        const month = date.getMonth() + 1
-        const day = date.getDate()
-        return `${year}年${month}月${day}日`
-    }
-
-    const getAppColor = (appName) => {
-        const colors = {         
-            '任務互換系統': '#F59E0B',
-            'GDay劃假系統': '#10B981',
-            'BC擺盤訓練': '#8B5CF6',
-            'eTR產生器': '#3B82F6',
-            'EIP系統': '#EF4444',
-            '休時檢視器': '#8338ec'
-        }
-        return colors[appName.trim()] || '#6B7280'
-    }
-
-    const getUpdateTypeIcon = (updateText) => {
-        if (updateText.includes('初稿') || updateText.includes('編輯出')) {
-            return <Code size={14} className={styles.updateIcon} />
-        }
-        if (updateText.includes('調整') || updateText.includes('修改')) {
-            return <Wrench size={14} className={styles.updateIcon} />
-        }
-        if (updateText.includes('增加') || updateText.includes('新增')) {
-            return <FilePlus size={14} className={styles.updateIcon} />
-        }
-        return <Clock size={14} className={styles.updateIcon} />
-    }
-
-    return (
-        <>
-            <Head>
-                <title>系統更新紀錄 - 應用程式更新歷史</title>
-                <meta name="description" content="查看所有應用程式的更新歷史和版本資訊" />
-                <meta name="viewport" content="width=device-width, initial-scale=1" />
-            </Head>
-
-            <div className={styles.container}>
-                {/* NO NAVBAR - assumes your layout already has one */}
-                
-                <div className={styles.patchNotesContainer}>
-                    <div className={styles.mainPanel}>
-                        <div className={styles.panelHeader}>
-                            <h2 className={styles.panelTitle}>
-                                應用程式更新紀錄 
-                                <span className={styles.updateCount}>
-                                    ({sortedUpdates.length} 個更新)
-                                </span>
-                            </h2>
-                            
-                            <div className={styles.filterSection}>
-                                <label className={styles.filterLabel}>篩選:</label>
-                                <select 
-                                    value={selectedApp}
-                                    onChange={(e) => setSelectedApp(e.target.value)}
-                                    className={styles.filterSelect}
-                                >
-                                    {appNames.map(app => (
-                                        <option key={app} value={app}>
-                                            {app === 'all' ? '全部應用' : app}
-                                        </option>
-                                    ))}
-                                </select>
-                            </div>
-                        </div>
-
-                        <div className={styles.timelineContainer}>
-                            {Object.entries(groupedUpdates).map(([date, updates]) => (
-                                <div key={date} className={styles.dateGroup}>
-                                    <div className={styles.dateHeader}>
-                                        <div className={styles.dateBadge}>
-                                            <Calendar size={16} />
-                                            {formatDate(date)}
-                                        </div>
-                                        <div className={styles.updateCountBadge}>
-                                            {updates.length} 個更新
-                                        </div>
-                                    </div>
-
-                                    <div className={styles.updatesGrid}>
-                                        {updates.map((update, index) => {
-                                            const updateKey = `${date}-${index}`
-                                            const isExpanded = expandedItems[updateKey]
-                                            
-                                            return (
-                                                <div key={updateKey} className={styles.updateCard}>
-                                                    <div className={styles.updateHeader}>
-                                                        <div className={styles.appInfo}>
-                                                            <div 
-                                                                className={styles.appBadge}
-                                                                style={{ backgroundColor: getAppColor(update.appName) }}
-                                                            >
-                                                                {update.appName.trim()}
-                                                            </div>
-                                                            <div className={styles.updateMeta}>
-                                                                {update.updateInfo.length} 項更新
-                                                            </div>
-                                                        </div>
-                                                        
-                                                        <button
-                                                            onClick={() => toggleExpanded(updateKey)}
-                                                            className={styles.expandButton}
-                                                            title={isExpanded ? "隱藏詳情" : "展開詳情"}
-                                                        >
-                                                            {isExpanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
-                                                        </button>
-                                                    </div>
-
-                                                    <div className={`${styles.updateContent} ${isExpanded ? styles.expanded : ''}`}>
-                                                        {isExpanded && (
-                                                            <div className={styles.updateList}>
-                                                                {update.updateInfo.map((info, infoIndex) => (
-                                                                    <div key={infoIndex} className={styles.updateItem}>
-                                                                        {getUpdateTypeIcon(info)}
-                                                                        <span className={styles.updateText}>{info}</span>
-                                                                    </div>
-                                                                ))}
-                                                            </div>
-                                                        )}
-                                                        
-                                                        {!isExpanded && (
-                                                            <div className={styles.updatePreview}>
-                                                                <div className={styles.updateItem}>
-                                                                    {getUpdateTypeIcon(update.updateInfo[0])}
-                                                                    <span className={styles.updateText}>
-                                                                        {update.updateInfo[0]}
-                                                                        {update.updateInfo.length > 1 && (
-                                                                            <span className={styles.moreIndicator}>
-                                                                                ...還有 {update.updateInfo.length - 1} 項
-                                                                            </span>
-                                                                        )}
-                                                                    </span>
-                                                                </div>
-                                                            </div>
-                                                        )}
-                                                    </div>
-                                                </div>
-                                            )
-                                        })}
-                                    </div>
-                                </div>
-                            ))}
-                        </div>
-
-                        {filteredUpdates.length === 0 && (
-                            <div className={styles.emptyState}>
-                                <Code size={48} className={styles.emptyIcon} />
-                                <h3 className={styles.emptyTitle}>沒有找到更新紀錄</h3>
-                                <p className={styles.emptyText}>
-                                    選擇的應用程式目前沒有更新紀錄
-                                </p>
-                            </div>
-                        )}
-                    </div>
-
-                    <div className={styles.statsSection}>
-                        <div className={styles.statsCard}>
-                            <h3 className={styles.statsTitle}>更新統計</h3>
-                            
-                            <div className={styles.statsList}>
-                                <div className={styles.statItem}>
-                                    <span className={styles.statLabel}>總更新數:</span>
-                                    <span className={styles.statValue}>{patchUpdates.length}</span>
-                                </div>
-                                <div className={styles.statItem}>
-                                    <span className={styles.statLabel}>應用程式數:</span>
-                                    <span className={styles.statValue}>{appNames.length - 1}</span>
-                                </div>
-                                <div className={styles.statItem}>
-                                    <span className={styles.statLabel}>最新更新:</span>
-                                    <span className={styles.statValue}>
-                                        {formatDate(sortedUpdates[0]?.date || '2025-06-08')}
-                                    </span>
-                                </div>
-                            </div>
-                        </div>
-
-                        <div className={styles.appsOverview}>
-                            <h4 className={styles.overviewTitle}>應用程式一覽</h4>
-                            <div className={styles.appsList}>
-                                {appNames.slice(1).map(app => {
-                                    const appUpdates = patchUpdates.filter(update => update.appName.trim() === app)
-                                    return (
-                                        <div key={app} className={styles.appOverviewItem}>
-                                            <div 
-                                                className={styles.appColorDot}
-                                                style={{ backgroundColor: getAppColor(app) }}
-                                            ></div>
-                                            <div className={styles.appOverviewText}>
-                                                <div className={styles.appOverviewName}>{app}</div>
-                                                <div className={styles.appOverviewCount}>
-                                                    {appUpdates.length} 次更新
-                                                </div>
-                                            </div>
-                                        </div>
-                                    )
-                                })}
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </>
-    )
+// ── Deterministic color from app name (no hardcoded map) ─────────────────
+// Returns one of 10 distinct hues based on a simple hash so new apps
+// automatically get a consistent color without any code changes.
+function appColor(name) {
+  const PALETTE = [
+    { bg: "#dbeafe", text: "#1d4ed8" }, // blue
+    { bg: "#d1fae5", text: "#065f46" }, // green
+    { bg: "#ede9fe", text: "#6d28d9" }, // purple
+    { bg: "#fee2e2", text: "#991b1b" }, // red
+    { bg: "#fef3c7", text: "#92400e" }, // amber
+    { bg: "#fce7f3", text: "#9d174d" }, // pink
+    { bg: "#e0f2fe", text: "#0369a1" }, // sky
+    { bg: "#f0fdf4", text: "#166534" }, // lime
+    { bg: "#fdf4ff", text: "#7e22ce" }, // fuchsia
+    { bg: "#fff7ed", text: "#9a3412" }, // orange
+  ];
+  let hash = 0;
+  for (let i = 0; i < name.length; i++) hash = (hash * 31 + name.charCodeAt(i)) & 0xffff;
+  return PALETTE[hash % PALETTE.length];
 }
 
-export default PatchNotes
+// ── Group entries by date, newest first ──────────────────────────────────
+function groupByDate(updates) {
+  const map = {};
+  for (const u of updates) {
+    if (!map[u.date]) map[u.date] = [];
+    map[u.date].push(u);
+  }
+  return Object.entries(map).sort(([a], [b]) => b.localeCompare(a));
+}
+
+// ── Format date nicely ────────────────────────────────────────────────────
+function formatDate(iso) {
+  const [y, m, d] = iso.split("-");
+  return `${y}年${parseInt(m)}月${parseInt(d)}日`;
+}
+
+// ── App summary: unique apps with total update counts ────────────────────
+function buildAppSummary(updates) {
+  const map = {};
+  for (const u of updates) {
+    if (!map[u.appName]) map[u.appName] = 0;
+    map[u.appName] += u.updateInfo.length;
+  }
+  return Object.entries(map).sort(([, a], [, b]) => b - a);
+}
+
+export default function PatchNotes() {
+  const [filterApp,    setFilterApp]    = useState("ALL");
+  const [expandedDates, setExpandedDates] = useState({});
+
+  const appSummary = useMemo(() => buildAppSummary(patchUpdates), []);
+
+  const filtered = useMemo(() =>
+    filterApp === "ALL"
+      ? patchUpdates
+      : patchUpdates.filter((u) => u.appName === filterApp),
+    [filterApp]
+  );
+
+  const grouped = useMemo(() => groupByDate(filtered), [filtered]);
+
+  const toggleDate = (date) =>
+    setExpandedDates((prev) => ({ ...prev, [date]: !prev[date] }));
+
+  // Default: expand the most recent date only
+  const isExpanded = (date, idx) =>
+    expandedDates[date] !== undefined ? expandedDates[date] : idx === 0;
+
+  const totalUpdates = patchUpdates.reduce((n, u) => n + u.updateInfo.length, 0);
+
+  return (
+    <div className={styles.page}>
+
+      {/* ── Header ── */}
+      <div className={styles.header}>
+        <div>
+          <h1 className={styles.title}>Patch Notes</h1>
+          <p className={styles.subtitle}>更新紀錄 — {totalUpdates} 項更新 · {appSummary.length} 個應用程式</p>
+        </div>
+      </div>
+
+      <div className={styles.layout}>
+
+        {/* ── Sidebar: app filter ── */}
+        <aside className={styles.sidebar}>
+          <div className={styles.sidebarCard}>
+            <div className={styles.sidebarTitle}>應用程式</div>
+
+            <button
+              className={`${styles.appFilterBtn} ${filterApp === "ALL" ? styles.appFilterActive : ""}`}
+              onClick={() => setFilterApp("ALL")}
+            >
+              <span className={styles.appFilterName}>全部</span>
+              <span className={styles.appFilterCount}>{totalUpdates}</span>
+            </button>
+
+            {appSummary.map(([name, count]) => {
+              const col = appColor(name);
+              const active = filterApp === name;
+              return (
+                <button
+                  key={name}
+                  className={`${styles.appFilterBtn} ${active ? styles.appFilterActive : ""}`}
+                  style={active ? { background: col.bg, borderColor: col.text + "66" } : {}}
+                  onClick={() => setFilterApp(name)}
+                >
+                  <span
+                    className={styles.appDot}
+                    style={{ background: col.text }}
+                  />
+                  <span className={styles.appFilterName}>{name}</span>
+                  <span
+                    className={styles.appFilterCount}
+                    style={active ? { background: col.text, color: "#fff" } : {}}
+                  >
+                    {count}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </aside>
+
+        {/* ── Timeline ── */}
+        <main className={styles.timeline}>
+          {grouped.length === 0 ? (
+            <div className={styles.empty}>沒有符合的更新記錄</div>
+          ) : (
+            grouped.map(([date, entries], idx) => {
+              const open = isExpanded(date, idx);
+              // collect all unique apps for this date group
+              const appsOnDate = [...new Set(entries.map((e) => e.appName))];
+
+              return (
+                <div key={date} className={styles.dateGroup}>
+
+                  {/* Date header — always visible, click to toggle */}
+                  <button
+                    className={styles.dateHeader}
+                    onClick={() => toggleDate(date)}
+                  >
+                    <div className={styles.dateHeaderLeft}>
+                      <span className={styles.dateDot} />
+                      <span className={styles.dateText}>{formatDate(date)}</span>
+                      <div className={styles.dateTags}>
+                        {appsOnDate.map((a) => {
+                          const col = appColor(a);
+                          return (
+                            <span
+                              key={a}
+                              className={styles.dateTag}
+                              style={{ background: col.bg, color: col.text }}
+                            >
+                              {a}
+                            </span>
+                          );
+                        })}
+                      </div>
+                    </div>
+                    <span className={styles.dateChevron}>{open ? "▲" : "▼"}</span>
+                  </button>
+
+                  {/* Entries — hidden when collapsed */}
+                  {open && (
+                    <div className={styles.dateEntries}>
+                      {entries.map((entry, ei) => {
+                        const col = appColor(entry.appName);
+                        return (
+                          <div key={ei} className={styles.entryCard}>
+                            <span
+                              className={styles.entryAppBadge}
+                              style={{ background: col.bg, color: col.text }}
+                            >
+                              {entry.appName}
+                            </span>
+                            <ul className={styles.entryList}>
+                              {entry.updateInfo.map((info, ii) => (
+                                <li key={ii} className={styles.entryItem}>
+                                  <span className={styles.entryBullet} style={{ background: col.text }} />
+                                  {info}
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+
+                  {/* Timeline connector line */}
+                  <div className={styles.timelineLine} />
+                </div>
+              );
+            })
+          )}
+        </main>
+
+      </div>
+    </div>
+  );
+}

@@ -1,461 +1,297 @@
-/* Main container */
-.container {
-    min-height: 100vh;
-    background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
+/* ── Layout ─────────────────────────────────────────────────── */
+.page {
+	max-width: 100%;
+	width: 100%;
+	margin: 0;
+	padding: 1rem 1.5rem 4rem;
+	font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 }
 
-.patchNotesContainer {
-    padding: 20px;
-    max-width: 1400px;
-    margin: 0 auto;
-    display: grid;
-    grid-template-columns: 1fr 300px;
-    gap: 24px;
+@media (min-width: 1024px) {
+	.page {
+		padding: 1.5rem 2rem 4rem;
+	}
 }
 
-/* Main panel */
-.mainPanel {
-    background: white;
-    border-radius: 16px;
-    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
-    padding: 24px;
-    min-height: 600px;
+/* ── Header ─────────────────────────────────────────────────── */
+.header {
+	padding: 1.25rem 1.5rem;
+	background: linear-gradient(135deg, #1e1b4b 0%, #312e81 100%);
+	border-radius: 16px;
+	margin-bottom: 1.5rem;
+	color: white;
 }
 
-.panelHeader {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 32px;
-    padding-bottom: 16px;
-    border-bottom: 2px solid #e2e8f0;
+.title {
+	font-size: 1.5rem;
+	font-weight: 800;
+	margin: 0;
+	letter-spacing: -0.02em;
 }
 
-.panelTitle {
-    font-size: 1.75rem;
-    font-weight: 700;
-    color: #1e293b;
-    margin: 0;
-    display: flex;
-    align-items: center;
-    gap: 12px;
+.subtitle {
+	font-size: 0.82rem;
+	margin: 0.25rem 0 0;
+	color: rgba(255, 255, 255, 0.7);
 }
 
-.updateCount {
-    font-size: 1rem;
-    font-weight: 500;
-    color: #64748b;
-    background: #f1f5f9;
-    padding: 4px 12px;
-    border-radius: 20px;
+/* ── Two-column layout ──────────────────────────────────────── */
+.layout {
+	display: grid;
+	grid-template-columns: 200px 1fr;
+	gap: 1.25rem;
+	align-items: start;
 }
 
-/* Filter section */
-.filterSection {
-    display: flex;
-    align-items: center;
-    gap: 12px;
+@media (max-width: 640px) {
+	.layout {
+		grid-template-columns: 1fr;
+	}
+	.sidebar {
+		position: static !important;
+	}
 }
 
-.filterLabel {
-    font-weight: 600;
-    color: #475569;
-    font-size: 0.9rem;
+/* ── Sidebar ────────────────────────────────────────────────── */
+.sidebar {
+	position: sticky;
+	top: 1rem;
 }
 
-.filterSelect {
-    padding: 8px 16px;
-    border: 2px solid #e2e8f0;
-    border-radius: 8px;
-    background: white;
-    color: #374151;
-    font-size: 0.9rem;
-    cursor: pointer;
-    transition: all 0.2s ease;
+.sidebarCard {
+	background: white;
+	border: 1.5px solid #e5e7eb;
+	border-radius: 14px;
+	padding: 0.875rem;
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
 }
 
-.filterSelect:hover {
-    border-color: #cbd5e1;
+.sidebarTitle {
+	font-size: 0.72rem;
+	font-weight: 700;
+	color: #374151;
+	text-transform: uppercase;
+	letter-spacing: 0.06em;
+	padding: 0 0.25rem;
+	margin-bottom: 4px;
 }
 
-.filterSelect:focus {
-    outline: none;
-    border-color: #3b82f6;
-    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+.appFilterBtn {
+	display: flex;
+	align-items: center;
+	gap: 0.5rem;
+	width: 100%;
+	padding: 0.4rem 0.625rem;
+	border: 1.5px solid transparent;
+	background: none;
+	border-radius: 8px;
+	font-size: 0.82rem;
+	color: #374151;
+	cursor: pointer;
+	text-align: left;
+	transition: all 0.12s;
 }
 
-/* Timeline container */
-.timelineContainer {
-    display: flex;
-    flex-direction: column;
-    gap: 32px;
+.appFilterBtn:hover {
+	background: #f3f4f6;
 }
 
-/* Date groups */
+.appFilterActive {
+	background: #f3f4f6;
+	border-color: #e5e7eb;
+	font-weight: 600;
+}
+
+.appDot {
+	width: 8px;
+	height: 8px;
+	border-radius: 50%;
+	flex-shrink: 0;
+}
+
+.appFilterName {
+	flex: 1;
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	font-size: 0.8rem;
+}
+
+.appFilterCount {
+	font-size: 0.72rem;
+	font-weight: 600;
+	background: #f3f4f6;
+	color: #6b7280;
+	padding: 1px 6px;
+	border-radius: 999px;
+	flex-shrink: 0;
+	transition: all 0.12s;
+}
+
+/* ── Timeline ───────────────────────────────────────────────── */
+.timeline {
+	display: flex;
+	flex-direction: column;
+	gap: 0;
+	background: white;
+	border: 1.5px solid #e5e7eb;
+	border-radius: 14px;
+	padding: 1.25rem 1.25rem 0.5rem;
+}
+
+.empty {
+	padding: 3rem;
+	text-align: center;
+	color: #9ca3af;
+	background: white;
+	border: 1.5px solid #e5e7eb;
+	border-radius: 14px;
+}
+
+/* ── Date group ─────────────────────────────────────────────── */
 .dateGroup {
-    position: relative;
+	position: relative;
+	padding-left: 1.5rem;
+	padding-bottom: 0.75rem;
 }
 
+/* Vertical timeline line */
+.timelineLine {
+	position: absolute;
+	left: 7px;
+	top: 0;
+	bottom: 0;
+	width: 2px;
+	background: #e5e7eb;
+	z-index: 0;
+}
+
+.dateGroup:last-child .timelineLine {
+	display: none;
+}
+
+/* ── Date header (toggle button) ────────────────────────────── */
 .dateHeader {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    margin-bottom: 16px;
-    padding: 12px 0;
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	width: 100%;
+	background: none;
+	border: none;
+	cursor: pointer;
+	padding: 0.25rem 0.5rem 0.5rem 0;
+	gap: 0.5rem;
+	position: relative;
+	z-index: 1;
 }
 
-.dateBadge {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    background: linear-gradient(135deg, #3b82f6, #1d4ed8);
-    color: white;
-    padding: 8px 16px;
-    border-radius: 12px;
-    font-weight: 600;
-    font-size: 0.95rem;
-    box-shadow: 0 2px 4px rgba(59, 130, 246, 0.2);
+.dateHeaderLeft {
+	display: flex;
+	align-items: center;
+	gap: 0.625rem;
+	flex-wrap: wrap;
+	min-width: 0;
 }
 
-.updateCountBadge {
-    background: #f1f5f9;
-    color: #64748b;
-    padding: 4px 12px;
-    border-radius: 20px;
-    font-size: 0.85rem;
-    font-weight: 500;
+.dateDot {
+	width: 14px;
+	height: 14px;
+	border-radius: 50%;
+	background: #312e81;
+	border: 2px solid white;
+	box-shadow: 0 0 0 2px #312e81;
+	flex-shrink: 0;
+	margin-left: -1.725rem; /* pull onto timeline */
 }
 
-/* Updates grid */
-.updatesGrid {
-    display: grid;
-    gap: 16px;
+.dateText {
+	font-size: 0.875rem;
+	font-weight: 700;
+	color: #111827;
+	white-space: nowrap;
 }
 
-.updateCard {
-    background: #fafafa;
-    border: 1px solid #e5e7eb;
-    border-radius: 12px;
-    overflow: hidden;
-    transition: all 0.3s ease;
-    position: relative;
+.dateTags {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 4px;
 }
 
-.updateCard:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 8px 25px -5px rgba(0, 0, 0, 0.1);
-    border-color: #d1d5db;
+.dateTag {
+	font-size: 0.68rem;
+	font-weight: 600;
+	padding: 1px 7px;
+	border-radius: 999px;
 }
 
-.updateHeader {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 16px 20px;
-    background: white;
-    border-bottom: 1px solid #f3f4f6;
+.dateChevron {
+	font-size: 0.6rem;
+	color: #9ca3af;
+	flex-shrink: 0;
+	margin-left: auto;
 }
 
-.appInfo {
-    display: flex;
-    align-items: center;
-    gap: 12px;
+/* ── Entries ────────────────────────────────────────────────── */
+.dateEntries {
+	display: flex;
+	flex-direction: column;
+	gap: 0.5rem;
+	padding-bottom: 0.5rem;
+	animation: slideDown 0.15s ease;
 }
 
-.appBadge {
-    padding: 6px 12px;
-    border-radius: 8px;
-    color: white;
-    font-weight: 600;
-    font-size: 0.85rem;
-    min-width: max-content;
-    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+@keyframes slideDown {
+	from {
+		opacity: 0;
+		transform: translateY(-4px);
+	}
+	to {
+		opacity: 1;
+		transform: translateY(0);
+	}
 }
 
-.updateMeta {
-    color: #6b7280;
-    font-size: 0.85rem;
-    font-weight: 500;
-    min-width: max-content;
+.entryCard {
+	background: white;
+	border: 1.5px solid #e5e7eb;
+	border-radius: 12px;
+	padding: 0.75rem 1rem;
 }
 
-.expandButton {
-    background: none;
-    border: none;
-    cursor: pointer;
-    padding: 8px;
-    border-radius: 6px;
-    color: #6b7280;
-    transition: all 0.2s ease;
-    display: flex;
-    align-items: center;
-    justify-content: center;
+.entryAppBadge {
+	display: inline-block;
+	font-size: 0.72rem;
+	font-weight: 700;
+	padding: 2px 10px;
+	border-radius: 999px;
+	margin-bottom: 0.5rem;
 }
 
-.expandButton:hover {
-    background: #f3f4f6;
-    color: #374151;
+.entryList {
+	margin: 0;
+	padding: 0;
+	list-style: none;
+	display: flex;
+	flex-direction: column;
+	gap: 0.375rem;
 }
 
-/* Update content */
-.updateContent {
-    overflow: hidden;
-    transition: all 0.3s ease;
+.entryItem {
+	display: flex;
+	align-items: flex-start;
+	gap: 0.5rem;
+	font-size: 0.875rem;
+	color: #374151;
+	line-height: 1.5;
 }
 
-.expanded {
-    background: white;
+.entryBullet {
+	width: 6px;
+	height: 6px;
+	border-radius: 50%;
+	flex-shrink: 0;
+	margin-top: 0.45rem;
 }
-
-.updateList {
-    padding: 20px;
-}
-
-.updatePreview {
-    padding: 16px 20px;
-    background: #f9fafb;
-}
-
-.updateItem {
-    display: flex;
-    align-items: flex-start;
-    gap: 10px;
-    margin-bottom: 12px;
-    line-height: 1.5;
-}
-
-.updateItem:last-child {
-    margin-bottom: 0;
-}
-
-.updateIcon {
-    color: #6b7280;
-    margin-top: 2px;
-    flex-shrink: 0;
-}
-
-.updateText {
-    color: #374151;
-    font-size: 0.9rem;
-    flex: 1;
-}
-
-.moreIndicator {
-    color: #9ca3af;
-    font-style: italic;
-    margin-left: 8px;
-}
-
-/* Empty state */
-.emptyState {
-    text-align: center;
-    padding: 64px 20px;
-    color: #6b7280;
-}
-
-.emptyIcon {
-    margin: 0 auto 16px;
-    color: #d1d5db;
-}
-
-.emptyTitle {
-    font-size: 1.25rem;
-    font-weight: 600;
-    color: #374151;
-    margin-bottom: 8px;
-}
-
-.emptyText {
-    font-size: 0.9rem;
-    line-height: 1.5;
-}
-
-/* Stats section */
-.statsSection {
-    display: flex;
-    flex-direction: column;
-    gap: 24px;
-}
-
-.statsCard {
-    background: white;
-    border-radius: 16px;
-    padding: 24px;
-    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
-}
-
-.statsTitle {
-    font-size: 1.25rem;
-    font-weight: 700;
-    color: #1e293b;
-    margin-bottom: 16px;
-    border-bottom: 2px solid #e2e8f0;
-    padding-bottom: 8px;
-}
-
-.statsList {
-    display: flex;
-    flex-direction: column;
-    gap: 12px;
-}
-
-.statItem {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 8px 0;
-}
-
-.statLabel {
-    color: #64748b;
-    font-weight: 500;
-    font-size: 0.9rem;
-}
-
-.statValue {
-    color: #1e293b;
-    font-weight: 700;
-    font-size: 1rem;
-}
-
-/* Apps overview */
-.appsOverview {
-    background: white;
-    border-radius: 16px;
-    padding: 24px;
-    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
-}
-
-.overviewTitle {
-    font-size: 1.1rem;
-    font-weight: 600;
-    color: #1e293b;
-    margin-bottom: 16px;
-    border-bottom: 2px solid #e2e8f0;
-    padding-bottom: 8px;
-}
-
-.appsList {
-    display: flex;
-    flex-direction: column;
-    gap: 12px;
-}
-
-.appOverviewItem {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    padding: 8px 0;
-}
-
-.appColorDot {
-    width: 12px;
-    height: 12px;
-    border-radius: 50%;
-    flex-shrink: 0;
-}
-
-.appOverviewText {
-    flex: 1;
-}
-
-.appOverviewName {
-    font-weight: 600;
-    color: #374151;
-    font-size: 0.9rem;
-    line-height: 1.2;
-}
-
-.appOverviewCount {
-    color: #6b7280;
-    font-size: 0.8rem;
-    font-weight: 500;
-}
-
-/* Responsive design */
-@media (max-width: 1024px) {
-    .patchNotesContainer {
-        grid-template-columns: 1fr;
-        gap: 16px;
-    }
-    
-    .statsSection {
-        grid-column: 1;
-        flex-direction: row;
-    }
-    
-    .statsCard,
-    .appsOverview {
-        flex: 1;
-    }
-}
-
-@media (max-width: 768px) {
-    .patchNotesContainer {
-        padding: 16px;
-    }
-    
-    .mainPanel {
-        padding: 16px;
-    }
-    
-    .panelHeader {
-        flex-direction: column;
-        align-items: flex-start;
-        gap: 16px;
-    }
-    
-    .panelTitle {
-        font-size: 1.5rem;
-    }
-    
-    .filterSection {
-        width: 100%;
-        justify-content: space-between;
-    }
-    
-    .filterSelect {
-        flex: 1;
-        max-width: 200px;
-    }
-    
-    .statsSection {
-        flex-direction: column;
-    }
-    
-    .updateHeader {
-        padding: 12px 16px;
-    }
-    
-    .updateList,
-    .updatePreview {
-        padding: 16px;
-    }
-    
-    .dateHeader {
-        flex-direction: column;
-        align-items: flex-start;
-        gap: 8px;
-    }
-}
-
-@media (max-width: 480px) {
-    .appInfo {
-        flex-direction: column;
-        align-items: flex-start;
-        gap: 4px;
-    }
-    
-    .updateMeta {
-        font-size: 0.8rem;
-    }
-    
-    .updateText {
-        font-size: 0.85rem;
-    }
-    
-    .statsCard,
-    .appsOverview {
-        padding: 16px;
-    }
-} 

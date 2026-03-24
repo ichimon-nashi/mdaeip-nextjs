@@ -56,6 +56,7 @@ const DatabaseManagement = () => {
 			etr_generator: { access: false },
 			dispatch: { access: false },
 			database_management: { access: false },
+			turtle_ranking: { access: false },
 		},
 	});
 	const [isLookingUp, setIsLookingUp] = useState(false);
@@ -322,6 +323,7 @@ const DatabaseManagement = () => {
 				etr_generator: { access: false },
 				dispatch: { access: false },
 				database_management: { access: false },
+				turtle_ranking: { access: false },
 			},
 		});
 		setShowUserModal(true);
@@ -344,6 +346,7 @@ const DatabaseManagement = () => {
 				etr_generator: { access: false },
 				dispatch: { access: false },
 				database_management: { access: false },
+				turtle_ranking: { access: false },
 			},
 		});
 		setShowUserModal(true);
@@ -973,6 +976,7 @@ const DatabaseManagement = () => {
 											{ key: "gday", label: "GDay劃假" },
 											{ key: "etr_generator", label: "eTR產生器" },
 											{ key: "dispatch", label: "派遣表系統" },
+											{ key: "turtle_ranking", label: "烏龜排行榜 🐢" },
 											{ key: "database_management", label: "資料庫管理" },
 										].map(({ key, label }) => (
 											<label key={key} className={styles.permissionToggle}>

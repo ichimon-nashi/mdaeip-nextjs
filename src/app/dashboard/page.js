@@ -206,7 +206,7 @@ export default function DashboardPage() {
 						try {
 							const { year: yr, month: mo } = parseDateStr(date);
 							const ms = `${yr}年${String(mo + 1).padStart(2, '0')}月`;
-							const flightDetails = await flightDutyHelpers.getFlightDutyDetails(dutyCode, date, ms);
+							const flightDetails = await flightDutyHelpers.getFlightDutyDetails(dutyCode.split('\\')[0], date, ms);
 							if (flightDetails?.data) {
 								const det = flightDetails.data;
 								if (det.reporting_time) reportingTime = det.reporting_time.substring(0, 5);
@@ -221,13 +221,14 @@ export default function DashboardPage() {
 
 				const monthSchedules = allSchedulesByMonth[dateMonthString] || [];
 				const isEmptyDuty = dutyCode === '空';
+				const dutyPrefix = dutyStr.split('\\')[0];
 				const crewmates = (isDutyOff || dutyCode === 'N/A') ? [] : monthSchedules
 					.filter(s => {
 						if (s.employeeID === user.id) return false;
 						const cd = s.days[date];
 						const cs = cd?.toString() || '';
 						if (isEmptyDuty) return !cd || cs === '';
-						return cd && cs === dutyStr;
+						return cd && cs.split('\\')[0] === dutyPrefix;
 					})
 					.map(s => ({ name: s.name, base: s.base }));
 
