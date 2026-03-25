@@ -1305,3 +1305,51 @@
   gap: 0.375rem;
   margin-left: auto;
 }
+
+/* ── Dashboard sub-tabs (航線排行 / 綜合排行) ───────────────── */
+.dashSubTabs {
+  display: flex;
+  gap: 0.375rem;
+  background: rgba(255,255,255,0.08);
+  border: 1.5px solid rgba(255,255,255,0.15);
+  border-radius: 10px;
+  padding: 3px;
+  align-self: flex-start;
+}
+
+.dashSubTab {
+  padding: 0.4rem 1rem;
+  border: none;
+  background: none;
+  border-radius: 7px;
+  font-size: 0.82rem;
+  font-weight: 500;
+  color: rgba(255,255,255,0.65);
+  cursor: pointer;
+  transition: all 0.15s;
+  white-space: nowrap;
+}
+
+.dashSubTab:hover { color: white; }
+
+.dashSubTabActive {
+  background: white;
+  color: #065f46;
+  font-weight: 700;
+}
+
+/* ── 總排名 button variant + divider ────────────────────────── */
+.routeBtnOverall {
+  font-family: inherit;
+  letter-spacing: 0;
+  font-weight: 700;
+}
+
+.routeSelectorDivider {
+  width: 1.5px;
+  height: 24px;
+  background: rgba(255,255,255,0.2);
+  border-radius: 1px;
+  align-self: center;
+  flex-shrink: 0;
+}

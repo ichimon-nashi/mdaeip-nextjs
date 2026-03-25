@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { useAuth } from "../../contexts/AuthContext";
 import { useRouter } from "next/navigation";
 import { hasAppAccess } from "../../lib/permissionHelpers";
@@ -17,9 +17,9 @@ const BASE_CONFIG = {
 
 // Turtle species shown on rank cards
 const TURTLE_SPECIES = {
-  TSA: "流星澤龜🐢",
-  RMQ: "錦龜🐢",
-  KHH: "革龜🐢",
+  TSA: "流星澤龜",
+  RMQ: "錦龜",
+  KHH: "革龜",
 };
 
 // Airport display labels with Chinese
@@ -74,6 +74,40 @@ function getRouteStandard(key) {
   const vals = [s1, s2].filter((v) => v !== null);
   if (vals.length === 0) return null;
   return Math.round(vals.reduce((x, y) => x + y, 0) / vals.length);
+}
+
+// ── Overall ranking: compute avg excess per pilot across all routes ────────
+// Takes the full routeData map and returns pilots sorted by most stolen time.
+// Only routes with a defined standard are included in each pilot's average.
+function computeOverallRanking(routeData) {
+  const pilotMap = {}; // pilotId → { pilot_name, base, totalExcess, routeCount }
+
+  for (const [key, pilots] of Object.entries(routeData)) {
+    const std = getRouteStandard(key);
+    if (std === null || std <= 0) continue; // skip routes with no standard
+
+    for (const p of pilots) {
+      const excess = p.avg_minutes - std;
+      if (!pilotMap[p.pilot_id]) {
+        pilotMap[p.pilot_id] = {
+          pilot_id:    p.pilot_id,
+          pilot_name:  p.pilot_name,
+          base:        p.base,
+          totalExcess: 0,
+          routeCount:  0,
+        };
+      }
+      pilotMap[p.pilot_id].totalExcess += excess;
+      pilotMap[p.pilot_id].routeCount  += 1;
+    }
+  }
+
+  return Object.values(pilotMap)
+    .map((p) => ({
+      ...p,
+      avg_excess: Math.round(p.totalExcess / p.routeCount),
+    }))
+    .sort((a, b) => b.avg_excess - a.avg_excess);
 }
 
 // ── Turtle titles — based on excess over route standard ───────────────────
@@ -144,24 +178,27 @@ function RouteChart({ pilots, routeStd }) {
   useEffect(() => {
     if (!pilots?.length || !canvasRef.current) return;
 
-    // If no standard, fall back to raw avg_minutes
-    const hasStd = routeStd !== null && routeStd > 0;
+    // Always show excess — never fall back to raw flight time.
+    // routeStd must be a positive number; null/0/undefined = no standard defined.
+    const hasStd = typeof routeStd === "number" && routeStd > 0;
     const excessData = pilots.map((p) =>
-      hasStd ? Math.max(0, p.avg_minutes - routeStd) : p.avg_minutes
+      hasStd ? Math.max(0, p.avg_minutes - routeStd) : 0
     );
 
-    // Color each bar: red-ish if over standard, green if on time
-    const barColors = excessData.map((v) =>
-      !hasStd ? "#0369a1bb" : v > 0 ? "#dc2626bb" : "#059669bb"
-    );
-    const borderColors = excessData.map((v) =>
-      !hasStd ? "#0369a1" : v > 0 ? "#dc2626" : "#059669"
-    );
+    // 4-tier color by excess: green=ok, yellow=mild, orange=slow, red=very slow
+    const excessColor = (v) => {
+      if (v <= 5)  return { bg: "#059669bb", border: "#059669" }; // green  — 可接受
+      if (v <= 10) return { bg: "#d97706bb", border: "#d97706" }; // amber  — 慢吞吞
+      if (v <= 15) return { bg: "#ea580cbb", border: "#ea580c" }; // orange — 龜速
+      return             { bg: "#dc2626bb", border: "#dc2626" }; // red    — 龜縮
+    };
+    const barColors    = excessData.map((v) => excessColor(v).bg);
+    const borderColors = excessData.map((v) => excessColor(v).border);
 
     const datasets = [
       {
         type: "bar",
-        label: hasStd ? "超出標準 (分鐘)" : "平均飛行時間",
+        label: "超出標準 (分鐘)",
         data: excessData,
         backgroundColor: barColors,
         borderColor:     borderColors,
@@ -193,7 +230,7 @@ function RouteChart({ pilots, routeStd }) {
                       ? ` 超出標準 +${ex}min (平均 ${formatMinutes(pilot.avg_minutes)})`
                       : ` 準時 (平均 ${formatMinutes(pilot.avg_minutes)})`;
                   }
-                  return ` 平均 ${formatMinutes(ctx.parsed.x)}`;
+                  return ` 無標準資料`;
                 },
               },
             },
@@ -204,7 +241,7 @@ function RouteChart({ pilots, routeStd }) {
               beginAtZero: true,
               title: {
                 display: true,
-                text: hasStd ? "超出標準時間 (分鐘)" : "飛行時間 (分鐘)",
+                text: "超出標準時間 (分鐘)",
                 font: { size: 11 },
               },
               ticks: {
@@ -386,6 +423,7 @@ export default function TurtleRanking() {
 
   // ── dashboard state ───────────────────────────────────────────────────
   const [activeTab,     setActiveTab]     = useState("dashboard");
+  const [dashTab,       setDashTab]       = useState("routes");  // "routes" | "overall"
   const [routeData,     setRouteData]     = useState({});  // { "KHH↔MZG": [...pilots] }
   const [selectedRoute, setSelectedRoute] = useState("");  // currently viewed route
   const [baseFilter,    setBaseFilter]    = useState("ALL");
@@ -474,6 +512,15 @@ export default function TurtleRanking() {
   })();
 
   const routeStd = selectedRoute ? getRouteStandard(selectedRoute) : null;
+
+  // Overall ranking — all pilots sorted by avg excess across all routes with a standard
+  const overallRanking = useMemo(
+    () => computeOverallRanking(routeData),
+    [routeData]
+  );
+  const filteredOverall = baseFilter === "ALL"
+    ? overallRanking
+    : overallRanking.filter((p) => p.base === baseFilter);
 
   // ── segment / leg helpers ─────────────────────────────────────────────
   const emptyLeg = () => ({ origin: "", dest: "", takeoff: "", landing: "" });
@@ -743,7 +790,29 @@ export default function TurtleRanking() {
             ))}
           </div>
 
-          {isLoading ? (
+          {/* Route selector — always visible ─────────────────────────────── */}
+          {!isLoading && filteredRoutes.length > 0 && (
+            <div className={styles.routeSelectorRow}>
+              <button
+                className={`${styles.routeBtn} ${styles.routeBtnOverall} ${dashTab === "overall" ? styles.routeBtnActive : ""}`}
+                onClick={() => setDashTab("overall")}
+              >
+                🐢 總排名
+              </button>
+              <span className={styles.routeSelectorDivider} />
+              {filteredRoutes.map((key) => (
+                <button
+                  key={key}
+                  className={`${styles.routeBtn} ${selectedRoute === key && dashTab === "routes" ? styles.routeBtnActive : ""}`}
+                  onClick={() => { setDashTab("routes"); setSelectedRoute(key); }}
+                >
+                  {key}
+                </button>
+              ))}
+            </div>
+          )}
+
+          {dashTab === "routes" && (isLoading ? (
             <div className={styles.loadState}>
               <span className={styles.shellSpin}>🐢</span>
               <p>排行榜載入中...</p>
@@ -759,19 +828,6 @@ export default function TurtleRanking() {
             </div>
           ) : (
             <>
-              {/* Route selector */}
-              <div className={styles.routeSelectorRow}>
-                {filteredRoutes.map((key) => (
-                  <button
-                    key={key}
-                    className={`${styles.routeBtn} ${selectedRoute === key ? styles.routeBtnActive : ""}`}
-                    onClick={() => setSelectedRoute(key)}
-                  >
-                    {key}
-                  </button>
-                ))}
-              </div>
-
               {/* Chart + rankings for selected route */}
               {selectedRoute && currentPilots.length > 0 && (
                 <>
@@ -826,6 +882,54 @@ export default function TurtleRanking() {
                                 {excess > 0 ? `+${excess}min` : "準時"}
                               </div>
                             )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </>
+              )}
+            </>
+          ))}
+
+          {/* ══ OVERALL RANKING ══ */}
+          {dashTab === "overall" && (
+            <>
+              {filteredOverall.length === 0 ? (
+                <div className={styles.emptyState}>
+                  <div className={styles.emptyShell}>🐢</div>
+                  <p>尚無足夠資料計算綜合排行</p>
+                </div>
+              ) : (
+                <>
+                  <h3 className={styles.sectionHeading}>綜合龜員排名 — 平均超標時間</h3>
+                  <div className={styles.rankList}>
+                    {filteredOverall.map((pilot, idx) => {
+                      const cfg   = BASE_CONFIG[pilot.base] || {};
+                      const medal = ["🏆", "🥈", "🥉"][idx] ?? `#${idx + 1}`;
+                      const title = getTurtleTitle(pilot.avg_excess);
+                      return (
+                        <div
+                          key={pilot.pilot_id}
+                          className={`${styles.rankCard} ${idx === 0 ? styles.rankFirst : ""}`}
+                        >
+                          <div className={styles.medal}>{medal}</div>
+                          <div className={styles.rankInfo}>
+                            <div className={styles.pilotName}>{pilot.pilot_name}</div>
+                            <span className={styles.baseBadge} style={{ color: cfg.color, background: cfg.light }}>
+                              {cfg.label}{cfg.labelZh ? ` · ${cfg.labelZh}` : ""}
+                            </span>
+                            <div className={styles.turtleTitle}>{title}</div>
+                            {TURTLE_SPECIES[pilot.base] && (
+                              <div className={styles.turtleSpecies}>{TURTLE_SPECIES[pilot.base]}</div>
+                            )}
+                            <div className={styles.rankEntries}>{pilot.routeCount} 條航線</div>
+                          </div>
+                          <div className={styles.avgBox}>
+                            <div className={pilot.avg_excess > 0 ? styles.avgExcessBad : styles.avgExcessOk}>
+                              {pilot.avg_excess > 0 ? `+${pilot.avg_excess}min` : "準時"}
+                            </div>
+                            <div className={styles.avgLabel}>平均超標</div>
                           </div>
                         </div>
                       );
@@ -959,6 +1063,7 @@ export default function TurtleRanking() {
             const grouped = myRecords.reduce((acc, rec) => {
               if (!acc[rec.pilot_name]) acc[rec.pilot_name] = { base: rec.base, entries: [] };
               acc[rec.pilot_name].entries.push(rec);
+              acc[rec.pilot_name].entries.sort((a, b) => a.takeoff_time.localeCompare(b.takeoff_time));
               return acc;
             }, {});
 

@@ -22,9 +22,10 @@ export async function GET(request) {
 		let query = supabase
 			.from("turtle_flights")
 			.select(
-				"id, submitted_by, pilot_id, pilot_name, base, origin, destination, takeoff_time, landing_time, flight_minutes, created_at",
+				"id, submitted_by, pilot_id, pilot_name, base, origin, destination, takeoff_time, landing_time, flight_minutes, created_at, flight_date",
 			)
-			.order("created_at", { ascending: false });
+			.order("flight_date", { ascending: false, nullsFirst: false })
+			.order("takeoff_time", { ascending: true });
 
 		if (submittedBy) {
 			query = query.eq("submitted_by", submittedBy);
