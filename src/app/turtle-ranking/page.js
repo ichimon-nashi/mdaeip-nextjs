@@ -17,9 +17,9 @@ const BASE_CONFIG = {
 
 // Turtle species shown on rank cards
 const TURTLE_SPECIES = {
-  TSA: "Blanding's Turtle",
-  RMQ: "Painted Turtle",
-  KHH: "Leatherback Sea Turtle",
+  TSA: "流星澤龜🐢",
+  RMQ: "錦龜🐢",
+  KHH: "革龜🐢",
 };
 
 // Airport display labels with Chinese
