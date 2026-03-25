@@ -37,6 +37,10 @@ export const PILOTS = [
 	{ name: "颱🐢洋", base: "TSA" }, //楊湘台
 	{ name: "崗🐢羊", base: "TSA" }, //楊繼剛
 	{ name: "鳴🐢蟹", base: "TSA" }, //謝黎明
+	{ name: "委🐢毆", base: "TSA" }, //歐家瑋
+	{ name: "姚🐢審", base: "TSA" }, //沈耿堯
+	{ name: "還🐢王", base: "TSA" }, //王士桓
+	{ name: "叢🐢菜", base: "TSA" }, //蔡惠琮
 
 	// ── RMQ ─────────────────────────────────────────────────────────────────
 	{ name: "紅🐢亡", base: "RMQ" }, //王文鴻

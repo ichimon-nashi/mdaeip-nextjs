@@ -1063,7 +1063,10 @@ export default function TurtleRanking() {
             const grouped = myRecords.reduce((acc, rec) => {
               if (!acc[rec.pilot_name]) acc[rec.pilot_name] = { base: rec.base, entries: [] };
               acc[rec.pilot_name].entries.push(rec);
-              acc[rec.pilot_name].entries.sort((a, b) => a.takeoff_time.localeCompare(b.takeoff_time));
+              acc[rec.pilot_name].entries.sort((a, b) => {
+                const dateCmp = (a.flight_date || "").localeCompare(b.flight_date || "");
+                return dateCmp !== 0 ? dateCmp : a.takeoff_time.localeCompare(b.takeoff_time);
+              });
               return acc;
             }, {});
 

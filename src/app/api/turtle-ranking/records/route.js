@@ -24,7 +24,7 @@ export async function GET(request) {
 			.select(
 				"id, submitted_by, pilot_id, pilot_name, base, origin, destination, takeoff_time, landing_time, flight_minutes, created_at, flight_date",
 			)
-			.order("flight_date", { ascending: false, nullsFirst: false })
+			.order("flight_date", { ascending: true, nullsFirst: true })
 			.order("takeoff_time", { ascending: true });
 
 		if (submittedBy) {
