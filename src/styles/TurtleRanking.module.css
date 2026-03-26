@@ -1268,14 +1268,19 @@
   display: flex;
   align-items: center;
   gap: 0.75rem;
-  padding: 0.5rem 1rem;
-  border-bottom: 1px solid #f9fafb;
+  padding: 0.625rem 0.875rem;
   flex-wrap: wrap;
   font-size: 0.82rem;
+  background: white;
+  border: 1.5px solid #e5e7eb;
+  border-radius: 10px;
+  transition: border-color 0.12s, box-shadow 0.12s;
 }
 
-.recordRow:last-child { border-bottom: none; }
-.recordRow:hover { background: #f9fafb; }
+.recordRow:hover {
+  border-color: #d1d5db;
+  box-shadow: 0 1px 6px rgba(0,0,0,0.06);
+}
 
 .recordRowRoute {
   font-family: monospace;
@@ -1415,4 +1420,132 @@
   color: #065f46;
   white-space: nowrap;
   font-style: italic;
+}
+
+/* ── Base accordion (records tab) ───────────────────────────── */
+.baseAccordion {
+  border-radius: 14px;
+  overflow: hidden;
+  border: 1.5px solid #e5e7eb;
+}
+
+.baseAccordionHeader {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  width: 100%;
+  padding: 0.875rem 1.125rem;
+  background: white;
+  border: none;
+  border-left: 4px solid;
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.15s;
+}
+
+.baseAccordionHeader:hover { background: #f9fafb; }
+
+.baseAccordionDot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.baseAccordionName {
+  font-size: 0.9rem;
+  font-weight: 700;
+}
+
+.baseAccordionMeta {
+  font-size: 0.75rem;
+  color: #9ca3af;
+  margin-left: 0.25rem;
+}
+
+.baseAccordionChevron {
+  font-size: 0.6rem;
+  margin-left: auto;
+  flex-shrink: 0;
+}
+
+.baseAccordionBody {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 0.75rem;
+  background: rgba(0, 0, 0, 0.04);
+  border-top: 1px solid rgba(0, 0, 0, 0.06);
+  animation: fadeUp 0.15s ease;
+}
+
+/* Pilot groups inside accordion */
+.baseAccordionBody .recordGroup {
+  border: none;
+  border-radius: 0;
+  border-bottom: 1px solid #f3f4f6;
+  background: white;
+}
+
+.baseAccordionBody .recordGroup:last-child {
+  border-bottom: none;
+}
+
+.baseAccordionBody .recordGroupHeader {
+  background: #fafafa;
+  border-bottom: 1px solid #f3f4f6;
+}
+
+/* ── Pilot accordion (inside base accordion) ────────────────── */
+.pilotAccordion {
+  background: white;
+  border: 1.5px solid #e5e7eb;
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.pilotAccordionHeader {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  width: 100%;
+  padding: 0.625rem 1.25rem;
+  background: white;
+  border: none;
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.12s;
+}
+
+.pilotAccordionHeader:hover { background: #f9fafb; }
+
+.pilotAccordionChevron {
+  font-size: 0.55rem;
+  color: #9ca3af;
+  margin-left: auto;
+  flex-shrink: 0;
+}
+
+/* Entry rows inside an open pilot accordion */
+/* Entry cards inside a pilot accordion — add spacing and container padding */
+.pilotAccordion .recordRow {
+  margin: 0 0.875rem;
+}
+
+.pilotAccordion .recordRow:first-of-type {
+  margin-top: 0.625rem;
+}
+
+.pilotAccordion .recordRow:last-of-type {
+  margin-bottom: 0.625rem;
+}
+
+/* ── Entry cards container — gap between cards ──────────────── */
+.pilotEntriesBody {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 0.625rem 0.875rem;
+  background: #f9fafb;
+  animation: fadeUp 0.15s ease;
 }

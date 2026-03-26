@@ -12,14 +12,10 @@ function isPrivileged(userId, accessLevel) {
 }
 
 // ── GET /api/turtle-ranking/records ─────────────────────────────────────
-// ?submitted_by=xxx  → filter to that user's rows only
-// no param           → return all rows (privileged users only)
-export async function GET(request) {
+// Returns all records — everyone can view, but edit/delete enforced per-row.
+export async function GET() {
 	try {
-		const { searchParams } = new URL(request.url);
-		const submittedBy = searchParams.get("submitted_by");
-
-		let query = supabase
+		const { data, error } = await supabase
 			.from("turtle_flights")
 			.select(
 				"id, submitted_by, pilot_id, pilot_name, base, origin, destination, takeoff_time, landing_time, flight_minutes, created_at, flight_date",
@@ -27,11 +23,6 @@ export async function GET(request) {
 			.order("flight_date", { ascending: true, nullsFirst: true })
 			.order("takeoff_time", { ascending: true });
 
-		if (submittedBy) {
-			query = query.eq("submitted_by", submittedBy);
-		}
-
-		const { data, error } = await query;
 		if (error) throw error;
 
 		return Response.json({ success: true, data });

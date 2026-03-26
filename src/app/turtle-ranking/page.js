@@ -445,6 +445,8 @@ export default function TurtleRanking() {
   const [editingRecord, setEditingRecord] = useState(null);
   const [editLegs,      setEditLegs]      = useState([]);
   const [isSavingEdit,  setIsSavingEdit]  = useState(false);
+  const [expandedBases,  setExpandedBases]  = useState({});  // base → bool
+  const [expandedPilots, setExpandedPilots] = useState({});  // "BASE:pilotName" → bool
 
   // ── auth guard ────────────────────────────────────────────────────────
   useEffect(() => {
@@ -481,8 +483,7 @@ export default function TurtleRanking() {
     if (!user) return;
     setIsLoadingRec(true);
     try {
-      const params = isPrivileged ? "" : `?submitted_by=${user.id}`;
-      const res = await fetch(`/api/turtle-ranking/records${params}`);
+      const res = await fetch("/api/turtle-ranking/records");
       const result = await res.json();
       if (result.success) setMyRecords(result.data);
       else toast.error("載入記錄失敗: " + result.error);
@@ -491,7 +492,7 @@ export default function TurtleRanking() {
     } finally {
       setIsLoadingRec(false);
     }
-  }, [user, isPrivileged]);
+  }, [user]);
 
   useEffect(() => {
     if (activeTab === "records") loadMyRecords();
@@ -1053,9 +1054,7 @@ export default function TurtleRanking() {
       {activeTab === "records" && (
         <div className={styles.section}>
           <div className={styles.recordsHeader}>
-            <span className={styles.recordsTitle}>
-              {isPrivileged ? "所有提交記錄" : "我的提交記錄"}
-            </span>
+            <span className={styles.recordsTitle}>飛行記錄</span>
             <button className={styles.btnRefresh} onClick={loadMyRecords}>↻ 重新整理</button>
           </div>
 
@@ -1070,68 +1069,123 @@ export default function TurtleRanking() {
               <p>尚無記錄</p>
             </div>
           ) : (() => {
-            // Group records by pilot_name
-            const grouped = myRecords.reduce((acc, rec) => {
-              if (!acc[rec.pilot_name]) acc[rec.pilot_name] = { base: rec.base, entries: [] };
-              acc[rec.pilot_name].entries.push(rec);
-              acc[rec.pilot_name].entries.sort((a, b) => {
-                const dateCmp = (a.flight_date || "").localeCompare(b.flight_date || "");
-                return dateCmp !== 0 ? dateCmp : a.takeoff_time.localeCompare(b.takeoff_time);
-              });
-              return acc;
-            }, {});
+            // ── Group: base → pilot → entries ────────────────────────────
+            const byBase = {};
+            for (const rec of myRecords) {
+              const b = rec.base || "??";
+              if (!byBase[b]) byBase[b] = {};
+              if (!byBase[b][rec.pilot_name]) byBase[b][rec.pilot_name] = [];
+              byBase[b][rec.pilot_name].push(rec);
+            }
+            // Sort entries within each pilot: date asc, takeoff asc
+            for (const b of Object.keys(byBase)) {
+              for (const pilot of Object.keys(byBase[b])) {
+                byBase[b][pilot].sort((a, z) => {
+                  const d = (a.flight_date || "").localeCompare(z.flight_date || "");
+                  return d !== 0 ? d : a.takeoff_time.localeCompare(z.takeoff_time);
+                });
+              }
+            }
+            const baseOrder = ["TSA", "RMQ", "KHH"].filter((b) => byBase[b]);
+
+            const toggleBase  = (b) =>
+              setExpandedBases((prev) => ({ ...prev, [b]: !prev[b] }));
+            const togglePilot = (key) =>
+              setExpandedPilots((prev) => ({ ...prev, [key]: !prev[key] }));
 
             return (
               <div className={styles.recordsList}>
-                {Object.entries(grouped).map(([pilotName, { base, entries }]) => {
-                  const cfg = BASE_CONFIG[base] || {};
-                  const canEdit = isPrivileged || entries.some((r) => r.submitted_by === user.id);
+                {baseOrder.map((base) => {
+                  const cfg    = BASE_CONFIG[base] || {};
+                  const pilots = byBase[base];
+                  const isOpen = !!expandedBases[base];
+                  const total  = Object.values(pilots).reduce((n, arr) => n + arr.length, 0);
+
                   return (
-                    <div key={pilotName} className={styles.recordGroup}>
-                      {/* Pilot header */}
-                      <div className={styles.recordGroupHeader}>
-                        <span className={styles.recordGroupName}>{pilotName}</span>
-                        <span className={styles.recordBase} style={{ color: cfg.color, background: cfg.light }}>
-                          {cfg.label}{cfg.labelZh ? ` · ${cfg.labelZh}` : ""}
+                    <div key={base} className={styles.baseAccordion}>
+                      {/* ── Base header ── */}
+                      <button
+                        className={styles.baseAccordionHeader}
+                        onClick={() => toggleBase(base)}
+                        style={{ borderColor: cfg.color + "44" }}
+                      >
+                        <span className={styles.baseAccordionDot} style={{ background: cfg.color }} />
+                        <span className={styles.baseAccordionName} style={{ color: cfg.color }}>
+                          {cfg.label} · {cfg.labelZh} ({base})
                         </span>
-                        <span className={styles.recordGroupCount}>{entries.length} 次記錄</span>
-                      </div>
-                      {/* Individual entries */}
-                      {entries.map((rec) => {
-                        const std    = getSectorStandard(rec.origin, rec.destination);
-                        const excess = std !== null ? rec.flight_minutes - std : null;
-                        const canEditThis = isPrivileged || rec.submitted_by === user.id;
-                        return (
-                          <div key={rec.id} className={styles.recordRow}>
-                            <span className={styles.recordRowRoute}>
-                              {rec.origin}→{rec.destination}
-                            </span>
-                            <span className={styles.recordRowTimes}>
-                              {rec.takeoff_time}–{rec.landing_time}
-                            </span>
-                            <span className={styles.recordRowDur}>
-                              {formatMinutes(rec.flight_minutes)}
-                              {excess !== null && (
-                                <span className={excess > 0 ? styles.excessBad : styles.excessOk}>
-                                  {excess > 0 ? ` +${excess}` : " ✓"}
-                                </span>
-                              )}
-                            </span>
-                            {rec.flight_date && (
-                              <span className={styles.recordRowDate}>{rec.flight_date}</span>
-                            )}
-                            {std !== null && (
-                              <span className={styles.recordRowStd}>標準{formatMinutes(std)}</span>
-                            )}
-                            {canEditThis && (
-                              <span className={styles.recordRowActions}>
-                                <button className={styles.btnEdit} onClick={() => handleEditRecord(rec)}>編輯</button>
-                                <button className={styles.btnDelete} onClick={() => handleDeleteRecord(rec)}>刪除</button>
-                              </span>
-                            )}
-                          </div>
-                        );
-                      })}
+                        <span className={styles.baseAccordionMeta}>
+                          {Object.keys(pilots).length} 名飛行員 · {total} 筆記錄
+                        </span>
+                        <span className={styles.baseAccordionChevron} style={{ color: cfg.color }}>
+                          {isOpen ? "▲" : "▼"}
+                        </span>
+                      </button>
+
+                      {/* ── Pilot accordions inside base ── */}
+                      {isOpen && (
+                        <div className={styles.baseAccordionBody}>
+                          {Object.entries(pilots).map(([pilotName, entries]) => {
+                            const pilotKey    = `${base}:${pilotName}`;
+                            const pilotOpen   = !!expandedPilots[pilotKey];
+                            return (
+                              <div key={pilotName} className={styles.pilotAccordion}>
+                                {/* Pilot header toggle */}
+                                <button
+                                  className={styles.pilotAccordionHeader}
+                                  onClick={() => togglePilot(pilotKey)}
+                                >
+                                  <span className={styles.recordGroupName}>{pilotName}</span>
+                                  <span className={styles.recordGroupCount}>{entries.length} 筆記錄</span>
+                                  <span className={styles.pilotAccordionChevron}>
+                                    {pilotOpen ? "▲" : "▼"}
+                                  </span>
+                                </button>
+
+                                {/* Entry cards — shown when pilot expanded */}
+                                {pilotOpen && (
+                                <div className={styles.pilotEntriesBody}>
+                                {entries.map((rec) => {
+                                  const std         = getSectorStandard(rec.origin, rec.destination);
+                                  const excess      = std !== null ? rec.flight_minutes - std : null;
+                                  const canEditThis = isPrivileged || rec.submitted_by === user.id;
+                                  return (
+                                    <div key={rec.id} className={styles.recordRow}>
+                                      <span className={styles.recordRowRoute}>
+                                        {rec.origin}→{rec.destination}
+                                      </span>
+                                      <span className={styles.recordRowTimes}>
+                                        {rec.takeoff_time}–{rec.landing_time}
+                                      </span>
+                                      <span className={styles.recordRowDur}>
+                                        {formatMinutes(rec.flight_minutes)}
+                                        {excess !== null && (
+                                          <span className={excess > 0 ? styles.excessBad : styles.excessOk}>
+                                            {excess > 0 ? ` +${excess}` : " ✓"}
+                                          </span>
+                                        )}
+                                      </span>
+                                      {rec.flight_date && (
+                                        <span className={styles.recordRowDate}>{rec.flight_date}</span>
+                                      )}
+                                      {std !== null && (
+                                        <span className={styles.recordRowStd}>標準{formatMinutes(std)}</span>
+                                      )}
+                                      {canEditThis && (
+                                        <span className={styles.recordRowActions}>
+                                          <button className={styles.btnEdit} onClick={() => handleEditRecord(rec)}>編輯</button>
+                                          <button className={styles.btnDelete} onClick={() => handleDeleteRecord(rec)}>刪除</button>
+                                        </span>
+                                      )}
+                                    </div>
+                                  );
+                                })}
+                                </div>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
                     </div>
                   );
                 })}
