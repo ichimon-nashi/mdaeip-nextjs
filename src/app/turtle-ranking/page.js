@@ -425,7 +425,7 @@ export default function TurtleRanking() {
 
   // ── dashboard state ───────────────────────────────────────────────────
   const [activeTab,     setActiveTab]     = useState("dashboard");
-  const [dashTab,       setDashTab]       = useState("routes");  // "routes" | "overall"
+  const [dashTab,       setDashTab]       = useState("overall"); // "routes" | "overall"
   const [routeData,     setRouteData]     = useState({});  // { "KHH↔MZG": [...pilots] }
   const [selectedRoute, setSelectedRoute] = useState("");  // currently viewed route
   const [baseFilter,    setBaseFilter]    = useState("ALL");
