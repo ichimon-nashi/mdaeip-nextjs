@@ -113,7 +113,8 @@ function computeOverallRanking(routeData) {
 // ── Turtle titles — based on excess over route standard ───────────────────
 function getTurtleTitle(excessMinutes) {
   if (excessMinutes === null || excessMinutes === undefined) return "—";
-  if (excessMinutes <= 5)  return "可接受";
+  if (excessMinutes < 0)   return "🧑‍✈️ 風馳電掣";
+  if (excessMinutes <= 5)  return "👌 分秒不差";
   if (excessMinutes <= 10) return "🐢 慢吞吞、慢條斯理";
   if (excessMinutes <= 15) return "🐌 龜速、拖泥帶水";
   return "🚨 龜縮、停滯不前";
@@ -182,12 +183,13 @@ function RouteChart({ pilots, routeStd }) {
     // routeStd must be a positive number; null/0/undefined = no standard defined.
     const hasStd = typeof routeStd === "number" && routeStd > 0;
     const excessData = pilots.map((p) =>
-      hasStd ? Math.max(0, p.avg_minutes - routeStd) : 0
+      hasStd ? p.avg_minutes - routeStd : 0
     );
 
-    // 4-tier color by excess: green=ok, yellow=mild, orange=slow, red=very slow
+    // 5-tier color matching getTurtleTitle thresholds
     const excessColor = (v) => {
-      if (v <= 5)  return { bg: "#059669bb", border: "#059669" }; // green  — 可接受
+      if (v < 0)   return { bg: "#0369a1bb", border: "#0369a1" }; // blue   — 風馳電掣
+      if (v <= 5)  return { bg: "#059669bb", border: "#059669" }; // green  — 分秒不差
       if (v <= 10) return { bg: "#d97706bb", border: "#d97706" }; // amber  — 慢吞吞
       if (v <= 15) return { bg: "#ea580cbb", border: "#ea580c" }; // orange — 龜速
       return             { bg: "#dc2626bb", border: "#dc2626" }; // red    — 龜縮
@@ -266,7 +268,7 @@ function RouteChart({ pilots, routeStd }) {
   }, [pilots, routeStd]);
 
   return (
-    <div style={{ position: "relative", height: "320px", width: "100%" }}>
+    <div style={{ position: "relative", height: `${Math.max(320, pilots.length * 42)}px`, width: "100%" }}>
       <canvas ref={canvasRef} />
     </div>
   );
@@ -785,7 +787,12 @@ export default function TurtleRanking() {
               >
                 {b === "ALL"
                   ? "🌏 全部"
-                  : `${BASE_CONFIG[b]?.label} · ${BASE_CONFIG[b]?.labelZh} (${b})`}
+                  : (
+                    <>
+                      <span className={styles.filterLabelFull}>{BASE_CONFIG[b]?.label} · {BASE_CONFIG[b]?.labelZh} ({b})</span>
+                      <span className={styles.filterLabelShort}>{BASE_CONFIG[b]?.labelZh} ({b})</span>
+                    </>
+                  )}
               </button>
             ))}
           </div>
@@ -841,7 +848,7 @@ export default function TurtleRanking() {
                           </span>
                         )}
                       </span>
-                      <span className={styles.chartHint}>🐢 越長偷越多 · 紅=超標 綠=準時</span>
+                      <span className={styles.chartHint}>🐢 越長偷越多</span>
                     </div>
                     <RouteChart pilots={currentPilots} routeStd={routeStd} />
                   </div>
@@ -862,14 +869,16 @@ export default function TurtleRanking() {
                         >
                           <div className={styles.medal}>{medal}</div>
                           <div className={styles.rankInfo}>
-                            <div className={styles.pilotName}>{pilot.pilot_name}</div>
+                            <div className={styles.pilotNameRow}>
+                              <span className={styles.pilotName}>{pilot.pilot_name}</span>
+                              {TURTLE_SPECIES[pilot.base] && excess > 5 && (
+                                <span className={styles.turtleSpeciesBadge}>{TURTLE_SPECIES[pilot.base]}</span>
+                              )}
+                            </div>
                             <span className={styles.baseBadge} style={{ color: cfg.color, background: cfg.light }}>
                               {cfg.label}{cfg.labelZh ? ` · ${cfg.labelZh}` : ""}
                             </span>
                             <div className={styles.turtleTitle}>{title}</div>
-                            {TURTLE_SPECIES[pilot.base] && (
-                              <div className={styles.turtleSpecies}>{TURTLE_SPECIES[pilot.base]}</div>
-                            )}
                             <div className={styles.rankEntries}>
                               {pilot.entry_count} 次記錄
                             </div>
@@ -915,14 +924,16 @@ export default function TurtleRanking() {
                         >
                           <div className={styles.medal}>{medal}</div>
                           <div className={styles.rankInfo}>
-                            <div className={styles.pilotName}>{pilot.pilot_name}</div>
+                            <div className={styles.pilotNameRow}>
+                              <span className={styles.pilotName}>{pilot.pilot_name}</span>
+                              {TURTLE_SPECIES[pilot.base] && pilot.avg_excess > 5 && (
+                                <span className={styles.turtleSpeciesBadge}>{TURTLE_SPECIES[pilot.base]}</span>
+                              )}
+                            </div>
                             <span className={styles.baseBadge} style={{ color: cfg.color, background: cfg.light }}>
                               {cfg.label}{cfg.labelZh ? ` · ${cfg.labelZh}` : ""}
                             </span>
                             <div className={styles.turtleTitle}>{title}</div>
-                            {TURTLE_SPECIES[pilot.base] && (
-                              <div className={styles.turtleSpecies}>{TURTLE_SPECIES[pilot.base]}</div>
-                            )}
                             <div className={styles.rankEntries}>{pilot.routeCount} 條航線</div>
                           </div>
                           <div className={styles.avgBox}>
