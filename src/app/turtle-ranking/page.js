@@ -247,7 +247,7 @@ function RouteChart({ pilots, routeStd }) {
                 font: { size: 11 },
               },
               ticks: {
-                callback: (v) => v === 0 ? "準時" : `+${v}min`,
+                callback: (v) => v === 0 ? "準時" : v > 0 ? `+${v}min` : `${v}min`,
                 font: { size: 11 },
               },
             },
