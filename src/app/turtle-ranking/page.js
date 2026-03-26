@@ -1040,7 +1040,7 @@ export default function TurtleRanking() {
 
             {/* Add pilot segment button */}
             <button className={styles.btnAddSegment} onClick={addSegment}>
-              🐢 換飛行員 / 新增段落
+              🐢 換烏龜 / 新增段落
             </button>
 
             <button className={styles.btnSubmit} onClick={handleSubmit} disabled={!canSubmit}>
@@ -1114,7 +1114,7 @@ export default function TurtleRanking() {
                           {cfg.label} · {cfg.labelZh} ({base})
                         </span>
                         <span className={styles.baseAccordionMeta}>
-                          {Object.keys(pilots).length} 名飛行員 · {total} 筆記錄
+                          {Object.keys(pilots).length} 隻烏龜 · {total} 筆記錄
                         </span>
                         <span className={styles.baseAccordionChevron} style={{ color: cfg.color }}>
                           {isOpen ? "▲" : "▼"}
