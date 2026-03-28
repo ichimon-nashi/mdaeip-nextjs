@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import {
 	ChevronLeft,
 	Plus,
@@ -44,18 +44,43 @@ function isoWeekday(dateStr) {
 	return date.getDay() === 0 ? 7 : date.getDay();
 }
 
-function getWeeksForMonth(year, month) {
+// Week number (1-based) for a given week (identified by its Monday dateStr) within its dominant month
+function weekNumberInMonth(year, month, mondayDateStr) {
 	const firstDay = new Date(year, month - 1, 1);
-	const lastDay = new Date(year, month - 1, daysInMonth(year, month));
 	const startIso = firstDay.getDay() === 0 ? 7 : firstDay.getDay();
-	const weekStart = new Date(firstDay);
-	weekStart.setDate(firstDay.getDate() - (startIso - 1));
+	const firstMonday = new Date(firstDay);
+	firstMonday.setDate(firstDay.getDate() - (startIso - 1));
+	const [y, mo, d] = mondayDateStr.split("-").map(Number);
+	const target = new Date(y, mo - 1, d);
+	const diff = Math.round((target - firstMonday) / (7 * 24 * 60 * 60 * 1000));
+	return diff + 1;
+}
+
+function getWeeksForMonth(year, month) {
+	// so dispatch can navigate freely across month boundaries
+	const prevMonth = month === 1 ? 12 : month - 1;
+	const prevYear = month === 1 ? year - 1 : year;
+	const nextMonth = month === 12 ? 1 : month + 1;
+	const nextYear = month === 12 ? year + 1 : year;
+
+	// Start from first Monday on or before the 1st of prev month
+	const rangeStart = new Date(prevYear, prevMonth - 1, 1);
+	const startIso = rangeStart.getDay() === 0 ? 7 : rangeStart.getDay();
+	rangeStart.setDate(rangeStart.getDate() - (startIso - 1));
+
+	// End at last day of next month
+	const rangeEnd = new Date(
+		nextYear,
+		nextMonth - 1,
+		daysInMonth(nextYear, nextMonth),
+	);
+
 	const weeks = [];
-	const cur = new Date(weekStart);
-	while (cur <= lastDay) {
+	const cur = new Date(rangeStart);
+	while (cur <= rangeEnd) {
 		const week = [];
 		for (let i = 0; i < 7; i++) {
-			week.push(localDateStr(new Date(cur))); // local date, not UTC
+			week.push(localDateStr(new Date(cur)));
 			cur.setDate(cur.getDate() + 1);
 		}
 		weeks.push(week);
@@ -109,6 +134,45 @@ export default function DispatchMonthView({
 	const [weekDragCode, setWeekDragCode] = useState(null);
 	const [weekDragOverCode, setWeekDragOverCode] = useState(null);
 	const [hiddenCodes, setHiddenCodes] = useState(new Set());
+	const [collapsedBases, setCollapsedBases] = useState(new Set());
+	const lastEditedIdRef = useRef(null);
+
+	// Cross-month duty loading: when week view shows adjacent months
+	const [crossMonthCache, setCrossMonthCache] = useState({}); // { "YYYY-MM": { duties, sectors } }
+	const [loadingCrossMonth, setLoadingCrossMonth] = useState(false);
+
+	async function loadCrossMonthDuties(yearNum, monthNum) {
+		const key = `${yearNum}-${String(monthNum).padStart(2, "0")}`;
+		if (crossMonthCache[key] !== undefined) return; // already loaded (even if empty)
+		setLoadingCrossMonth(true);
+		// Find if a pdx_months entry exists for this year/month
+		const { data: monthRow } = await supabase
+			.from("pdx_months")
+			.select("id")
+			.eq("year", yearNum)
+			.eq("month", monthNum)
+			.maybeSingle();
+		if (!monthRow) {
+			setCrossMonthCache((prev) => ({ ...prev, [key]: null })); // null = no data
+			setLoadingCrossMonth(false);
+			return;
+		}
+		const { data: dutyList } = await pdxDutyHelpers.getByMonth(monthRow.id);
+		const sectorsMap = {};
+		if (dutyList?.length) {
+			await Promise.all(
+				dutyList.map(async (d) => {
+					const { data } = await pdxSectorHelpers.getByDuty(d.id);
+					sectorsMap[d.id] = data || [];
+				}),
+			);
+		}
+		setCrossMonthCache((prev) => ({
+			...prev,
+			[key]: { duties: dutyList || [], sectors: sectorsMap },
+		}));
+		setLoadingCrossMonth(false);
+	}
 
 	function toggleHideCode(code) {
 		setHiddenCodes((prev) => {
@@ -118,15 +182,13 @@ export default function DispatchMonthView({
 		});
 	}
 
-	// When switching to week tab, jump to today's week if in this month
+	// When clicking today button, jump to week containing today
 	function handleWeekTabClick() {
 		setActiveTab("week");
 		setFromWeek(false);
 		setTooltip(null);
-		if (todayStr >= monthStart && todayStr <= monthEnd) {
-			const todayWeekIdx = weeks.findIndex((w) => w.includes(todayStr));
-			if (todayWeekIdx >= 0) setWeekIndex(todayWeekIdx);
-		}
+		const todayWeekIdx = weeks.findIndex((w) => w.includes(todayStr));
+		if (todayWeekIdx >= 0) setWeekIndex(todayWeekIdx);
 	}
 
 	async function handlePublish() {
@@ -206,7 +268,12 @@ export default function DispatchMonthView({
 		);
 		setSectors(sectorsMap);
 
-		if (dutyList.length > 0) setSelectedId(dutyList[0].id);
+		if (dutyList.length > 0) {
+			const restoreId = lastEditedIdRef.current;
+			const match = restoreId && dutyList.find((d) => d.id === restoreId);
+			setSelectedId(match ? restoreId : dutyList[0].id);
+			lastEditedIdRef.current = null;
+		}
 		setLoading(false);
 	}, [month.id]);
 
@@ -221,6 +288,19 @@ export default function DispatchMonthView({
 		}
 	}, [savedCounter]);
 
+	// Load cross-month duties for all months visible in the current week
+	useEffect(() => {
+		if (activeTab !== "week") return;
+		const seen = new Set();
+		(weeks[weekIndex] || []).forEach((dateStr) => {
+			const ym = dateStr.slice(0, 7);
+			if (ym === monthPrefix || seen.has(ym)) return;
+			seen.add(ym);
+			const [y, m] = ym.split("-").map(Number);
+			loadCrossMonthDuties(y, m);
+		});
+	}, [weekIndex, activeTab]);
+
 	// Set correct starting week whenever month changes
 	useEffect(() => {
 		const idx = weeks.findIndex((w) =>
@@ -230,6 +310,8 @@ export default function DispatchMonthView({
 	}, [month.year, month.month]);
 
 	useEffect(() => {
+		// On remount (returning from builder), lastEditedIdRef is already set by the edit button click.
+		// For other reloads within the same session, preserve current selection as fallback.
 		setSelectedId(null);
 		setSectors({});
 		setStats({});
@@ -280,20 +362,18 @@ export default function DispatchMonthView({
 		return [s[0].dep_airport, ...s.map((seg) => seg.arr_airport)].join("→");
 	}
 
-	function findApplicableDuty(code, dateStr) {
-		const matches = duties.filter(
+	function findApplicableDuty(code, dateStr, dutyList = duties) {
+		const matches = dutyList.filter(
 			(d) => d.duty_code === code && dutyAppliesToDate(d, dateStr),
 		);
 		if (!matches.length) return null;
 		if (matches.length === 1) return matches[0];
-		// Multiple matches: prefer the most specific (narrowest date range wins)
-		// A single-date entry (date_from === date_to) beats a recurring weekly pattern
 		return matches.sort((a, b) => {
 			const rangeA =
 				parseLocalDate(a.date_to) - parseLocalDate(a.date_from);
 			const rangeB =
 				parseLocalDate(b.date_to) - parseLocalDate(b.date_from);
-			return rangeA - rangeB; // smallest range = most specific = wins
+			return rangeA - rangeB;
 		})[0];
 	}
 
@@ -432,10 +512,15 @@ export default function DispatchMonthView({
 
 	function handleCellMouseEnter(e, cellKey, applicable, dutySectors) {
 		const rect = e.currentTarget.getBoundingClientRect();
+		const TOOLTIP_EST_HEIGHT = 220; // estimated tooltip height
+		const spaceBelow = window.innerHeight - rect.bottom;
+		const showAbove = spaceBelow < TOOLTIP_EST_HEIGHT + 12;
 		setTooltip({
 			cellKey,
 			x: rect.left,
-			y: rect.bottom + window.scrollY + 4,
+			y: showAbove
+				? rect.top + window.scrollY - TOOLTIP_EST_HEIGHT - 4
+				: rect.bottom + window.scrollY + 4,
 			applicable,
 			dutySectors,
 		});
@@ -687,7 +772,17 @@ export default function DispatchMonthView({
 			);
 
 			for (const base of activeBases) {
-				const baseDuties = duties.filter((d) => d.base === base);
+				// Sort: alphabetical duty_code, then normal (no label) before special (has label), then label alphabetically
+				const baseDuties = duties
+					.filter((d) => d.base === base)
+					.sort((a, b) => {
+						if (a.duty_code !== b.duty_code)
+							return a.duty_code.localeCompare(b.duty_code);
+						const aSpec = !!a.label,
+							bSpec = !!b.label;
+						if (aSpec !== bSpec) return aSpec ? 1 : -1; // normal first
+						return (a.label || "").localeCompare(b.label || "");
+					});
 				// Split into chunks of 6 cards per page (3 rows × 2 cols)
 				const CARDS_PER_PAGE = 6;
 				for (let i = 0; i < baseDuties.length; i += CARDS_PER_PAGE) {
@@ -878,7 +973,10 @@ export default function DispatchMonthView({
 					</button>
 					<button
 						className={styles.btnPrimary}
-						onClick={() => onNewDuty(month)}
+						onClick={() => {
+							lastEditedIdRef.current = selectedId;
+							onNewDuty(month);
+						}}
 					>
 						<Plus size={14} /> 新增班型
 					</button>
@@ -925,7 +1023,10 @@ export default function DispatchMonthView({
 							</span>
 							<button
 								className={styles.btnIcon}
-								onClick={() => onNewDuty(month)}
+								onClick={() => {
+									lastEditedIdRef.current = selectedId;
+									onNewDuty(month);
+								}}
 								title="新增班型"
 							>
 								<Plus size={13} />
@@ -945,103 +1046,225 @@ export default function DispatchMonthView({
 									</span>
 								</div>
 							) : (
-								duties.map((duty) => (
-									<div
-										key={duty.id}
-										className={`${styles.dutyItem} ${selectedId === duty.id ? styles.active : ""} ${dragOverId === duty.id ? styles.dragOver : ""} ${styles["base" + duty.base] || ""}`}
-										onClick={() => setSelectedId(duty.id)}
-										draggable
-										onDragStart={() => setDragId(duty.id)}
-										onDragOver={(e) => {
-											e.preventDefault();
-											setDragOverId(duty.id);
-										}}
-										onDragLeave={() => setDragOverId(null)}
-										onDrop={() => handleDrop(duty.id)}
-										onDragEnd={() => {
-											setDragId(null);
-											setDragOverId(null);
-										}}
-										style={{
-											opacity:
-												dragId === duty.id ? 0.4 : 1,
-											cursor: "grab",
-										}}
-									>
-										<div className={styles.dragHandle}>
-											<svg
-												width="10"
-												height="14"
-												viewBox="0 0 10 14"
-												fill="currentColor"
-											>
-												<circle cx="3" cy="2" r="1.2" />
-												<circle cx="7" cy="2" r="1.2" />
-												<circle cx="3" cy="7" r="1.2" />
-												<circle cx="7" cy="7" r="1.2" />
-												<circle
-													cx="3"
-													cy="12"
-													r="1.2"
-												/>
-												<circle
-													cx="7"
-													cy="12"
-													r="1.2"
-												/>
-											</svg>
-										</div>
-										{duty.label ? (
-											<div
-												className={
-													styles.dutyItemOverrideDot
+								["KHH", "TSA", "RMQ"].map((base) => {
+									const baseDuties = duties.filter(
+										(d) => d.base === base,
+									);
+									if (baseDuties.length === 0) return null;
+									const isCollapsed =
+										collapsedBases.has(base);
+									const baseColors = {
+										KHH: "#2563eb",
+										TSA: "#16a34a",
+										RMQ: "#ea580c",
+									};
+									const baseNames = {
+										KHH: "高雄",
+										TSA: "台北",
+										RMQ: "台中",
+									};
+									return (
+										<div key={base}>
+											{/* Accordion header */}
+											<button
+												onClick={() =>
+													setCollapsedBases(
+														(prev) => {
+															const next =
+																new Set(prev);
+															next.has(base)
+																? next.delete(
+																		base,
+																	)
+																: next.add(
+																		base,
+																	);
+															return next;
+														},
+													)
 												}
-											/>
-										) : (
-											<div
-												className={
-													styles.dutyItemPlaceholder
-												}
-											/>
-										)}
-										<div
-											style={{
-												fontWeight: 600,
-												fontSize: 13,
-												color:
-													selectedId === duty.id
-														? "#0f62fe"
-														: "#1a1a1a",
-												minWidth: 28,
-											}}
-										>
-											{duty.duty_code}
-										</div>
-										<span
-											className={`${styles.dutyItemBase} ${styles["baseTag" + duty.base] || ""}`}
-										>
-											{duty.base}
-										</span>
-										<div className={styles.dutyItemMeta}>
-											<div
-												className={styles.dutyItemRoute}
+												style={{
+													width: "100%",
+													display: "flex",
+													alignItems: "center",
+													justifyContent:
+														"space-between",
+													padding: "9px 12px",
+													background: "#f8f9fa",
+													border: "none",
+													borderBottom: `2px solid ${baseColors[base]}`,
+													cursor: "pointer",
+													fontFamily: "inherit",
+												}}
 											>
-												{buildRoute(duty.id)}
-											</div>
-											<div
-												className={styles.dutyItemRange}
-											>
-												{duty.label ||
-													`${duty.date_from?.slice(5)} – ${duty.date_to?.slice(5)}`}
-											</div>
+												<span
+													style={{
+														fontSize: 13,
+														fontWeight: 700,
+														color: baseColors[base],
+														letterSpacing: "0.04em",
+													}}
+												>
+													{base} {baseNames[base]}　
+													{baseDuties.length} 個班型
+												</span>
+												<span
+													style={{
+														fontSize: 12,
+														color: baseColors[base],
+													}}
+												>
+													{isCollapsed ? "▶" : "▼"}
+												</span>
+											</button>
+											{/* Accordion body */}
+											{!isCollapsed &&
+												baseDuties.map((duty) => (
+													<div
+														key={duty.id}
+														className={`${styles.dutyItem} ${selectedId === duty.id ? styles.active : ""} ${dragOverId === duty.id ? styles.dragOver : ""} ${styles["base" + duty.base] || ""}`}
+														onClick={() =>
+															setSelectedId(
+																duty.id,
+															)
+														}
+														draggable
+														onDragStart={() =>
+															setDragId(duty.id)
+														}
+														onDragOver={(e) => {
+															e.preventDefault();
+															setDragOverId(
+																duty.id,
+															);
+														}}
+														onDragLeave={() =>
+															setDragOverId(null)
+														}
+														onDrop={() =>
+															handleDrop(duty.id)
+														}
+														onDragEnd={() => {
+															setDragId(null);
+															setDragOverId(null);
+														}}
+														style={{
+															opacity:
+																dragId ===
+																duty.id
+																	? 0.4
+																	: 1,
+															cursor: "grab",
+														}}
+													>
+														<div
+															className={
+																styles.dragHandle
+															}
+														>
+															<svg
+																width="10"
+																height="14"
+																viewBox="0 0 10 14"
+																fill="currentColor"
+															>
+																<circle
+																	cx="3"
+																	cy="2"
+																	r="1.2"
+																/>
+																<circle
+																	cx="7"
+																	cy="2"
+																	r="1.2"
+																/>
+																<circle
+																	cx="3"
+																	cy="7"
+																	r="1.2"
+																/>
+																<circle
+																	cx="7"
+																	cy="7"
+																	r="1.2"
+																/>
+																<circle
+																	cx="3"
+																	cy="12"
+																	r="1.2"
+																/>
+																<circle
+																	cx="7"
+																	cy="12"
+																	r="1.2"
+																/>
+															</svg>
+														</div>
+														{duty.label ? (
+															<div
+																className={
+																	styles.dutyItemOverrideDot
+																}
+															/>
+														) : (
+															<div
+																className={
+																	styles.dutyItemPlaceholder
+																}
+															/>
+														)}
+														<div
+															style={{
+																fontWeight: 600,
+																fontSize: 13,
+																color:
+																	selectedId ===
+																	duty.id
+																		? "#0f62fe"
+																		: "#1a1a1a",
+																minWidth: 28,
+															}}
+														>
+															{duty.duty_code}
+														</div>
+														<div
+															className={
+																styles.dutyItemMeta
+															}
+														>
+															<div
+																className={
+																	styles.dutyItemRoute
+																}
+															>
+																{buildRoute(
+																	duty.id,
+																)}
+															</div>
+															<div
+																className={
+																	styles.dutyItemRange
+																}
+															>
+																{duty.label ||
+																	`${duty.date_from?.slice(5)} – ${duty.date_to?.slice(5)}`}
+															</div>
+														</div>
+														<div
+															className={
+																styles.dutyItemSectors
+															}
+														>
+															{stats[duty.id]
+																?.sector_count ??
+																"—"}
+															s
+														</div>
+													</div>
+												))}
 										</div>
-										<div className={styles.dutyItemSectors}>
-											{stats[duty.id]?.sector_count ??
-												"—"}
-											s
-										</div>
-									</div>
-								))
+									);
+								})
 							)}
 						</div>
 					</div>
@@ -1185,12 +1408,14 @@ export default function DispatchMonthView({
 											</button>
 											<button
 												className={styles.btnIcon}
-												onClick={() =>
+												onClick={() => {
+													lastEditedIdRef.current =
+														selectedDuty.id;
 													onEditDuty(
 														selectedDuty,
 														month,
-													)
-												}
+													);
+												}}
 												title="編輯"
 											>
 												<Edit2 size={13} />
@@ -1461,306 +1686,500 @@ export default function DispatchMonthView({
 			)}
 
 			{/* ── TAB: 週次檢視 ──────────────────────── */}
-			{activeTab === "week" && (
-				<div className={styles.weekTabWrap}>
-					<div className={styles.weekNav}>
-						<button
-							className={styles.weekNavBtn}
-							onClick={() =>
-								setWeekIndex((i) => Math.max(0, i - 1))
-							}
-							disabled={weekIndex === 0}
-						>
-							<ChevronLeft size={16} />
-						</button>
-						<div className={styles.weekNavLabel}>
-							第 {weekIndex + 1} 週　
-							<span style={{ color: "#555", fontWeight: 400 }}>
-								{currentWeek[0]?.slice(5).replace("-", "/")} –{" "}
-								{currentWeek[6]?.slice(5).replace("-", "/")}
-							</span>
-						</div>
-						<button
-							className={styles.weekNavBtn}
-							onClick={() =>
-								setWeekIndex((i) =>
-									Math.min(weeks.length - 1, i + 1),
-								)
-							}
-							disabled={weekIndex === weeks.length - 1}
-						>
-							<ChevronRight size={16} />
-						</button>
-						{/* Today jump button — only shown when today is in this month */}
-						{todayStr >= monthStart && todayStr <= monthEnd && (
-							<button
-								className={styles.weekNavBtn}
-								onClick={handleWeekTabClick}
-								title="跳至今天"
-								style={{
-									fontSize: 12,
-									padding: "0 10px",
-									width: "auto",
-								}}
-							>
-								今天
-							</button>
-						)}
-						{/* Reset hidden rows — visible when any are hidden */}
-						{hiddenCodes.size > 0 && (
-							<button
-								onClick={() => setHiddenCodes(new Set())}
-								style={{
-									marginLeft: 8,
-									fontSize: 12,
-									color: "#0f62fe",
-									background: "#eff6ff",
-									border: "1px solid #bfdbfe",
-									borderRadius: 8,
-									padding: "5px 12px",
-									cursor: "pointer",
-									fontFamily: "inherit",
-									whiteSpace: "nowrap",
-								}}
-							>
-								全部顯示（{hiddenCodes.size}）
-							</button>
-						)}
-						{/* Base quick-hide pills */}
-						<div
-							style={{
-								display: "flex",
-								gap: 6,
-								marginLeft: 12,
-								flexWrap: "wrap",
-							}}
-						>
-							{[
-								{ key: "all", label: "全選", color: null },
-								{
-									key: "KHH",
-									label: "高雄",
-									color: "#2563eb",
-									bg: "#dbeafe",
-								},
-								{
-									key: "TSA",
-									label: "台北",
-									color: "#16a34a",
-									bg: "#dcfce7",
-								},
-								{
-									key: "RMQ",
-									label: "台中",
-									color: "#ea580c",
-									bg: "#ffedd5",
-								},
-							].map((f) => {
-								// Determine active state: "all" = nothing hidden, base = that base's codes all visible, others hidden
-								const allCodesForBase =
-									f.key === "all"
-										? []
-										: duties
-												.filter((d) => d.base === f.key)
-												.map((d) => d.duty_code);
-								const otherCodes = duties
-									.filter((d) => d.base !== f.key)
-									.map((d) => d.duty_code);
-								const isActive =
-									f.key === "all"
-										? hiddenCodes.size === 0
-										: otherCodes.every((c) =>
-												hiddenCodes.has(c),
-											) &&
-											allCodesForBase.every(
-												(c) => !hiddenCodes.has(c),
-											);
-								return (
+			{activeTab === "week" &&
+				(() => {
+					// Determine which month is being "viewed" based on majority of days in currentWeek
+					const weekMonths = currentWeek.map((d) => d?.slice(0, 7)); // "YYYY-MM"
+					const monthCounts = {};
+					weekMonths.forEach((m) => {
+						if (m) monthCounts[m] = (monthCounts[m] || 0) + 1;
+					});
+					const dominantYM =
+						Object.entries(monthCounts).sort(
+							(a, b) => b[1] - a[1],
+						)[0]?.[0] || monthPrefix;
+					const [domYear, domMonth] = dominantYM
+						.split("-")
+						.map(Number);
+
+					// Week number within the dominant month — use simple per-month calculator
+					const weekNumInMonth = weekNumberInMonth(
+						domYear,
+						domMonth,
+						currentWeek[0],
+					);
+					const isViewingOtherMonth = dominantYM !== monthPrefix;
+
+					// Resolve duties/sectors: each day may belong to a different month
+					// Build a helper that returns the correct duties/sectors for any given dateStr
+					const crossKey = dominantYM;
+					const crossData = isViewingOtherMonth
+						? crossMonthCache[crossKey]
+						: null;
+					const crossLoading =
+						isViewingOtherMonth && crossData === undefined;
+
+					function getDutiesForDate(dateStr) {
+						const ym = dateStr.slice(0, 7);
+						if (ym === monthPrefix) return { duties, sectors };
+						const cached = crossMonthCache[ym];
+						if (!cached) return { duties: [], sectors: {} };
+						return {
+							duties: cached.duties || [],
+							sectors: cached.sectors || {},
+						};
+					}
+
+					// For the dominant month: show its duty rows in the grid
+					const viewDuties = isViewingOtherMonth
+						? crossData?.duties || []
+						: duties;
+					const viewSectors = isViewingOtherMonth
+						? crossData?.sectors || {}
+						: sectors;
+					const viewDutyCodeGroups = [
+						...new Set(viewDuties.map((d) => d.duty_code)),
+					];
+
+					return (
+						<div className={styles.weekTabWrap}>
+							<div className={styles.weekNav}>
+								<button
+									className={styles.weekNavBtn}
+									onClick={() =>
+										setWeekIndex((i) => Math.max(0, i - 1))
+									}
+								>
+									<ChevronLeft size={16} />
+								</button>
+								<div className={styles.weekNavLabel}>
+									{isViewingOtherMonth && (
+										<span
+											style={{
+												fontSize: 11,
+												color: "#888",
+												marginRight: 6,
+											}}
+										>
+											{domYear}年
+											{String(domMonth).padStart(2, "0")}
+											月
+										</span>
+									)}
+									第 {weekNumInMonth} 週　
+									<span
+										style={{
+											color: "#555",
+											fontWeight: 400,
+										}}
+									>
+										{currentWeek[0]
+											?.slice(5)
+											.replace("-", "/")}{" "}
+										–{" "}
+										{currentWeek[6]
+											?.slice(5)
+											.replace("-", "/")}
+									</span>
+								</div>
+								<button
+									className={styles.weekNavBtn}
+									onClick={() =>
+										setWeekIndex((i) =>
+											Math.min(weeks.length - 1, i + 1),
+										)
+									}
+								>
+									<ChevronRight size={16} />
+								</button>
+								{/* Today jump — always visible */}
+								<button
+									className={styles.weekNavBtn}
+									onClick={handleWeekTabClick}
+									title="跳至今天"
+									style={{
+										fontSize: 12,
+										padding: "0 10px",
+										width: "auto",
+									}}
+								>
+									今天
+								</button>
+								{/* Reset hidden rows — visible when any are hidden */}
+								{hiddenCodes.size > 0 && (
 									<button
-										key={f.key}
-										onClick={() => {
-											if (f.key === "all") {
-												setHiddenCodes(new Set());
-											} else {
-												// Hide all duties NOT from this base, keep this base's visible
-												const toHide = new Set(
-													duties
+										onClick={() =>
+											setHiddenCodes(new Set())
+										}
+										style={{
+											marginLeft: 8,
+											fontSize: 12,
+											color: "#0f62fe",
+											background: "#eff6ff",
+											border: "1px solid #bfdbfe",
+											borderRadius: 8,
+											padding: "5px 12px",
+											cursor: "pointer",
+											fontFamily: "inherit",
+											whiteSpace: "nowrap",
+										}}
+									>
+										全部顯示（{hiddenCodes.size}）
+									</button>
+								)}
+								{/* Base quick-hide pills */}
+								<div
+									style={{
+										display: "flex",
+										gap: 6,
+										marginLeft: 12,
+										flexWrap: "wrap",
+									}}
+								>
+									{[
+										{
+											key: "all",
+											label: "全選",
+											color: null,
+										},
+										{
+											key: "KHH",
+											label: "高雄",
+											color: "#2563eb",
+											bg: "#dbeafe",
+										},
+										{
+											key: "TSA",
+											label: "台北",
+											color: "#16a34a",
+											bg: "#dcfce7",
+										},
+										{
+											key: "RMQ",
+											label: "台中",
+											color: "#ea580c",
+											bg: "#ffedd5",
+										},
+									].map((f) => {
+										// Determine active state: "all" = nothing hidden, base = that base's codes all visible, others hidden
+										const allCodesForBase =
+											f.key === "all"
+												? []
+												: viewDuties
 														.filter(
 															(d) =>
-																d.base !==
+																d.base ===
 																f.key,
 														)
 														.map(
 															(d) => d.duty_code,
-														),
-												);
-												setHiddenCodes(toHide);
-											}
-										}}
-										style={{
-											padding: "5px 12px",
-											borderRadius: 20,
-											fontSize: 12,
-											fontWeight: 500,
-											border: isActive
-												? `2px solid ${f.color || "#1a1a1a"}`
-												: "1.5px solid #e5e7eb",
-											background: isActive
-												? f.bg || "#1a1a1a"
-												: "#fff",
-											color: isActive
-												? f.color || "#fff"
-												: "#555",
-											cursor: "pointer",
-											fontFamily: "inherit",
-											whiteSpace: "nowrap",
-											transition: "all 0.12s",
-										}}
-									>
-										{f.label}
-									</button>
-								);
-							})}
-						</div>
-					</div>
-
-					{duties.length === 0 ? (
-						<div
-							style={{
-								textAlign: "center",
-								padding: "60px 20px",
-								color: "#777",
-							}}
-						>
-							尚無班型資料
-						</div>
-					) : (
-						<div className={styles.weekGridWrap}>
-							<table className={styles.weekGrid}>
-								<thead>
-									<tr>
-										<th className={styles.wgCodeHead}>
-											班型
-										</th>
-										<th className={styles.wgCodeHead}>
-											基地
-										</th>
-										{currentWeek.map((dateStr, di) => {
-											const inMonth =
-												dateStr >= monthStart &&
-												dateStr <= monthEnd;
-											const isToday =
-												dateStr === todayStr;
-											return (
-												<th
-													key={di}
-													className={`${styles.wgDayHead} ${!inMonth ? styles.wgDayOutOfMonth : ""} ${isToday ? styles.wgDayToday : ""}`}
-												>
-													<div
-														className={
-															styles.wgDayName
-														}
-													>
-														{DAY_NAMES[di]}
-													</div>
-													<div
-														className={
-															styles.wgDayNum
-														}
-													>
-														{dateStr.slice(8)}
-													</div>
-												</th>
-											);
-										})}
-									</tr>
-								</thead>
-								<tbody>
-									{dutyCodeGroups.map((code) => {
-										const baseDuty = duties.find(
-											(d) => d.duty_code === code,
-										);
-										const isHidden = hiddenCodes.has(code);
+														);
+										const otherCodes = viewDuties
+											.filter((d) => d.base !== f.key)
+											.map((d) => d.duty_code);
+										const isActive =
+											f.key === "all"
+												? hiddenCodes.size === 0
+												: otherCodes.every((c) =>
+														hiddenCodes.has(c),
+													) &&
+													allCodesForBase.every(
+														(c) =>
+															!hiddenCodes.has(c),
+													);
 										return (
-											<tr
-												key={code}
-												className={`${styles.wgRow} ${weekDragOverCode === code ? styles.wgRowDragOver : ""} ${isHidden ? styles.wgRowHidden : ""}`}
-												draggable={!isHidden}
-												onDragStart={() =>
-													setWeekDragCode(code)
-												}
-												onDragOver={(e) => {
-													e.preventDefault();
-													setWeekDragOverCode(code);
-												}}
-												onDragLeave={() =>
-													setWeekDragOverCode(null)
-												}
-												onDrop={() => {
-													if (
-														!weekDragCode ||
-														weekDragCode === code
-													) {
-														setWeekDragCode(null);
-														setWeekDragOverCode(
-															null,
+											<button
+												key={f.key}
+												onClick={() => {
+													if (f.key === "all") {
+														setHiddenCodes(
+															new Set(),
 														);
-														return;
+													} else {
+														// Hide all duties NOT from this base, keep this base's visible
+														const toHide = new Set(
+															viewDuties
+																.filter(
+																	(d) =>
+																		d.base !==
+																		f.key,
+																)
+																.map(
+																	(d) =>
+																		d.duty_code,
+																),
+														);
+														setHiddenCodes(toHide);
 													}
-													const fromDuty =
-														duties.find(
-															(d) =>
-																d.duty_code ===
-																weekDragCode,
+												}}
+												style={{
+													padding: "5px 12px",
+													borderRadius: 20,
+													fontSize: 12,
+													fontWeight: 500,
+													border: isActive
+														? `2px solid ${f.color || "#1a1a1a"}`
+														: "1.5px solid #e5e7eb",
+													background: isActive
+														? f.bg || "#1a1a1a"
+														: "#fff",
+													color: isActive
+														? f.color || "#fff"
+														: "#555",
+													cursor: "pointer",
+													fontFamily: "inherit",
+													whiteSpace: "nowrap",
+													transition: "all 0.12s",
+												}}
+											>
+												{f.label}
+											</button>
+										);
+									})}
+								</div>
+							</div>
+
+							{crossLoading ? (
+								<div
+									style={{
+										textAlign: "center",
+										padding: "60px 20px",
+										color: "#777",
+									}}
+								>
+									載入中...
+								</div>
+							) : viewDuties.length === 0 ? (
+								<div
+									style={{
+										textAlign: "center",
+										padding: "60px 20px",
+										color: "#777",
+									}}
+								>
+									{isViewingOtherMonth
+										? "此月份無派遣資料"
+										: "尚無班型資料"}
+								</div>
+							) : (
+								<div className={styles.weekGridWrap}>
+									<table className={styles.weekGrid}>
+										<thead>
+											<tr>
+												<th
+													className={
+														styles.wgCodeHead
+													}
+												>
+													班型
+												</th>
+												<th
+													className={
+														styles.wgCodeHead
+													}
+												>
+													基地
+												</th>
+												{currentWeek.map(
+													(dateStr, di) => {
+														const domStart = `${dominantYM}-01`;
+														const domEnd = `${dominantYM}-${String(new Date(domYear, domMonth, 0).getDate()).padStart(2, "0")}`;
+														const inMonth =
+															dateStr >=
+																domStart &&
+															dateStr <= domEnd;
+														const isToday =
+															dateStr ===
+															todayStr;
+														return (
+															<th
+																key={di}
+																className={`${styles.wgDayHead} ${!inMonth ? styles.wgDayOutOfMonth : ""} ${isToday ? styles.wgDayToday : ""}`}
+															>
+																<div
+																	className={
+																		styles.wgDayName
+																	}
+																>
+																	{
+																		DAY_NAMES[
+																			di
+																		]
+																	}
+																</div>
+																<div
+																	className={
+																		styles.wgDayNum
+																	}
+																>
+																	{dateStr.slice(
+																		8,
+																	)}
+																</div>
+															</th>
 														);
-													const toDuty = duties.find(
+													},
+												)}
+											</tr>
+										</thead>
+										<tbody>
+											{viewDutyCodeGroups.map((code) => {
+												const baseDuty =
+													viewDuties.find(
 														(d) =>
 															d.duty_code ===
 															code,
 													);
-													if (fromDuty && toDuty)
-														handleDrop(
-															toDuty.id,
-															fromDuty.id,
-														);
-													setWeekDragCode(null);
-													setWeekDragOverCode(null);
-												}}
-												onDragEnd={() => {
-													setWeekDragCode(null);
-													setWeekDragOverCode(null);
-												}}
-												style={{
-													opacity:
-														weekDragCode === code
-															? 0.4
-															: 1,
-												}}
-											>
-												<td
-													className={`${styles.wgCodeCell} ${styles["base" + (baseDuty?.base || "")]}`}
-												>
-													<div
+												const isHidden =
+													hiddenCodes.has(code);
+												return (
+													<tr
+														key={code}
+														className={`${styles.wgRow} ${weekDragOverCode === code ? styles.wgRowDragOver : ""} ${isHidden ? styles.wgRowHidden : ""}`}
+														draggable={!isHidden}
+														onDragStart={() =>
+															setWeekDragCode(
+																code,
+															)
+														}
+														onDragOver={(e) => {
+															e.preventDefault();
+															setWeekDragOverCode(
+																code,
+															);
+														}}
+														onDragLeave={() =>
+															setWeekDragOverCode(
+																null,
+															)
+														}
+														onDrop={() => {
+															if (
+																!weekDragCode ||
+																weekDragCode ===
+																	code
+															) {
+																setWeekDragCode(
+																	null,
+																);
+																setWeekDragOverCode(
+																	null,
+																);
+																return;
+															}
+															const fromDuty =
+																duties.find(
+																	(d) =>
+																		d.duty_code ===
+																		weekDragCode,
+																);
+															const toDuty =
+																duties.find(
+																	(d) =>
+																		d.duty_code ===
+																		code,
+																);
+															if (
+																fromDuty &&
+																toDuty
+															)
+																handleDrop(
+																	toDuty.id,
+																	fromDuty.id,
+																);
+															setWeekDragCode(
+																null,
+															);
+															setWeekDragOverCode(
+																null,
+															);
+														}}
+														onDragEnd={() => {
+															setWeekDragCode(
+																null,
+															);
+															setWeekDragOverCode(
+																null,
+															);
+														}}
 														style={{
-															display: "flex",
-															alignItems:
-																"center",
-															gap: 6,
+															opacity:
+																weekDragCode ===
+																code
+																	? 0.4
+																	: 1,
 														}}
 													>
-														{!isHidden && (
-															<span
-																className={
-																	styles.wgDragDot
-																}
+														<td
+															className={`${styles.wgCodeCell} ${styles["base" + (baseDuty?.base || "")]}`}
+														>
+															<div
+																style={{
+																	display:
+																		"flex",
+																	alignItems:
+																		"center",
+																	gap: 6,
+																}}
 															>
-																⠿
-															</span>
-														)}
-														<span
-															className={
-																styles.wgCode
-															}
+																{!isHidden && (
+																	<span
+																		className={
+																			styles.wgDragDot
+																		}
+																	>
+																		⠿
+																	</span>
+																)}
+																<span
+																	className={
+																		styles.wgCode
+																	}
+																	style={{
+																		opacity:
+																			isHidden
+																				? 0.4
+																				: 1,
+																	}}
+																>
+																	{code}
+																</span>
+																<button
+																	onClick={() =>
+																		toggleHideCode(
+																			code,
+																		)
+																	}
+																	title={
+																		isHidden
+																			? "顯示"
+																			: "隱藏"
+																	}
+																	style={{
+																		marginLeft:
+																			"auto",
+																		background:
+																			"none",
+																		border: "none",
+																		cursor: "pointer",
+																		padding:
+																			"2px 4px",
+																		borderRadius: 4,
+																		color: isHidden
+																			? "#94a3b8"
+																			: "#cbd5e1",
+																		fontSize: 13,
+																		lineHeight: 1,
+																	}}
+																>
+																	{isHidden
+																		? "👁"
+																		: "—"}
+																</button>
+															</div>
+														</td>
+														<td
+															className={`${styles.wgBaseCell} ${styles["baseTag" + (baseDuty?.base || "")]}`}
 															style={{
 																opacity:
 																	isHidden
@@ -1768,248 +2187,258 @@ export default function DispatchMonthView({
 																		: 1,
 															}}
 														>
-															{code}
-														</span>
-														<button
-															onClick={() =>
-																toggleHideCode(
-																	code,
-																)
-															}
-															title={
-																isHidden
-																	? "顯示"
-																	: "隱藏"
-															}
-															style={{
-																marginLeft:
-																	"auto",
-																background:
-																	"none",
-																border: "none",
-																cursor: "pointer",
-																padding:
-																	"2px 4px",
-																borderRadius: 4,
-																color: isHidden
-																	? "#94a3b8"
-																	: "#cbd5e1",
-																fontSize: 13,
-																lineHeight: 1,
-															}}
-														>
-															{isHidden
-																? "👁"
-																: "—"}
-														</button>
-													</div>
-												</td>
-												<td
-													className={`${styles.wgBaseCell} ${styles["baseTag" + (baseDuty?.base || "")]}`}
-													style={{
-														opacity: isHidden
-															? 0.4
-															: 1,
-													}}
-												>
-													{baseDuty?.base}
-												</td>
-												{isHidden ? (
-													<td
-														colSpan={7}
-														className={
-															styles.wgHiddenRow
-														}
-													>
-														<span
-															style={{
-																fontSize: 12,
-																color: "#94a3b8",
-																fontStyle:
-																	"italic",
-															}}
-														>
-															已隱藏
-														</span>
-													</td>
-												) : (
-													currentWeek.map(
-														(dateStr, di) => {
-															const inMonth =
-																dateStr >=
-																	monthStart &&
-																dateStr <=
-																	monthEnd;
-															const applicable =
-																findApplicableDuty(
-																	code,
+															{baseDuty?.base}
+														</td>
+														{isHidden ? (
+															<td
+																colSpan={7}
+																className={
+																	styles.wgHiddenRow
+																}
+															>
+																<span
+																	style={{
+																		fontSize: 12,
+																		color: "#94a3b8",
+																		fontStyle:
+																			"italic",
+																	}}
+																>
+																	已隱藏
+																</span>
+															</td>
+														) : (
+															currentWeek.map(
+																(
 																	dateStr,
-																);
-															if (!inMonth)
-																return (
-																	<td
-																		key={di}
-																		className={
-																			styles.wgCellEmpty
-																		}
-																	/>
-																);
-															if (!applicable)
-																return (
-																	<td
-																		key={di}
-																		className={
-																			styles.wgCellOff
-																		}
-																	>
-																		<span
-																			className={
-																				styles.wgOffDash
-																			}
-																		>
-																			—
-																		</span>
-																	</td>
-																);
-															const isSpecial =
-																!!applicable.label;
-															const dutySectors =
-																sectors[
-																	applicable
-																		.id
-																] || [];
-															const fullRoute =
-																dutySectors.length >
-																0
-																	? [
-																			dutySectors[0]
-																				.dep_airport,
-																			...dutySectors.map(
+																	di,
+																) => {
+																	const cellYM =
+																		dateStr.slice(
+																			0,
+																			7,
+																		);
+																	const {
+																		duties: cellDuties,
+																		sectors:
+																			cellSectors,
+																	} =
+																		getDutiesForDate(
+																			dateStr,
+																		);
+																	const inCurrentMonth =
+																		dateStr >=
+																			monthStart &&
+																		dateStr <=
+																			monthEnd;
+																	const inDomMonth =
+																		dateStr >=
+																			`${dominantYM}-01` &&
+																		dateStr <=
+																			`${dominantYM}-${String(new Date(domYear, domMonth, 0).getDate()).padStart(2, "0")}`;
+																	const applicable =
+																		findApplicableDuty(
+																			code,
+																			dateStr,
+																			cellDuties,
+																		);
+																	if (
+																		!applicable
+																	) {
+																		// If no data for this day's month at all (uncached), show empty
+																		const dayData =
+																			crossMonthCache[
+																				cellYM
+																			];
+																		if (
+																			cellYM !==
+																				monthPrefix &&
+																			dayData ===
+																				undefined
+																		)
+																			return (
+																				<td
+																					key={
+																						di
+																					}
+																					className={
+																						styles.wgCellEmpty
+																					}
+																				/>
+																			);
+																		return (
+																			<td
+																				key={
+																					di
+																				}
+																				className={
+																					styles.wgCellOff
+																				}
+																			>
+																				<span
+																					className={
+																						styles.wgOffDash
+																					}
+																				>
+																					—
+																				</span>
+																			</td>
+																		);
+																	}
+																	const isSpecial =
+																		!!applicable.label;
+																	const dutySectors =
+																		cellSectors[
+																			applicable
+																				.id
+																		] || [];
+																	const fullRoute =
+																		dutySectors.length >
+																		0
+																			? [
+																					dutySectors[0]
+																						.dep_airport,
+																					...dutySectors.map(
+																						(
+																							s,
+																						) =>
+																							s.arr_airport,
+																					),
+																				].join(
+																					"→",
+																				)
+																			: applicable.aircraft_type;
+																	const flightCodes =
+																		dutySectors
+																			.map(
 																				(
 																					s,
 																				) =>
-																					s.arr_airport,
-																			),
-																		].join(
-																			"→",
-																		)
-																	: applicable.aircraft_type;
-															const flightCodes =
-																dutySectors
-																	.map(
-																		(s) =>
-																			s.flight_number,
-																	)
-																	.join(", ");
-															const cellKey = `${code}-${dateStr}`;
-															return (
-																<td
-																	key={di}
-																	className={`${styles.wgCell} ${isSpecial ? styles.wgCellSpecial : ""}`}
-																	onClick={() => {
-																		setTooltip(
-																			null,
-																		);
-																		setSelectedId(
-																			applicable.id,
-																		);
-																		setFromWeek(
-																			true,
-																		);
-																		setActiveTab(
-																			"list",
-																		);
-																	}}
-																	onMouseEnter={(
-																		e,
-																	) =>
-																		handleCellMouseEnter(
-																			e,
-																			cellKey,
-																			applicable,
-																			dutySectors,
-																		)
-																	}
-																	onMouseLeave={
-																		handleCellMouseLeave
-																	}
-																>
-																	{isSpecial && (
-																		<div
-																			className={
-																				styles.wgSpecialDot
+																					s.flight_number,
+																			)
+																			.join(
+																				", ",
+																			);
+																	const cellKey = `${code}-${dateStr}`;
+																	return (
+																		<td
+																			key={
+																				di
 																			}
-																		/>
-																	)}
-																	<div
-																		className={
-																			styles.wgDepTime
-																		}
-																	>
-																		{applicable.reporting_time?.slice(
-																			0,
-																			5,
-																		)}
-																	</div>
-																	<div
-																		className={
-																			styles.wgRoute
-																		}
-																	>
-																		{
-																			fullRoute
-																		}
-																	</div>
-																	<div
-																		className={
-																			styles.wgFlightCodes
-																		}
-																	>
-																		{
-																			flightCodes
-																		}
-																	</div>
-																	<div
-																		className={
-																			styles.wgEndTime
-																		}
-																	>
-																		{applicable.duty_end_time?.slice(
-																			0,
-																			5,
-																		)}
-																	</div>
-																</td>
-															);
-														},
-													)
-												)}
-											</tr>
-										);
-									})}
-								</tbody>
-							</table>
-							<div className={styles.weekLegend}>
-								<span className={styles.legendItem}>
-									<span className={styles.legendDotSpecial} />
-									特殊日期（與一般班型不同）
-								</span>
-								<span className={styles.legendItem}>
-									<span className={styles.legendDotToday} />
-									今天
-								</span>
-								<span
-									className={styles.legendItem}
-									style={{ color: "#555" }}
-								>
-									點選格子跳至班型列表　| 點選 —
-									隱藏/顯示該班型
-								</span>
-							</div>
+																			className={`${styles.wgCell} ${isSpecial ? styles.wgCellSpecial : ""}`}
+																			onClick={() => {
+																				setTooltip(
+																					null,
+																				);
+																				setSelectedId(
+																					applicable.id,
+																				);
+																				setFromWeek(
+																					true,
+																				);
+																				setActiveTab(
+																					"list",
+																				);
+																			}}
+																			onMouseEnter={(
+																				e,
+																			) =>
+																				handleCellMouseEnter(
+																					e,
+																					cellKey,
+																					applicable,
+																					dutySectors,
+																				)
+																			}
+																			onMouseLeave={
+																				handleCellMouseLeave
+																			}
+																		>
+																			{isSpecial && (
+																				<div
+																					className={
+																						styles.wgSpecialDot
+																					}
+																				/>
+																			)}
+																			<div
+																				className={
+																					styles.wgDepTime
+																				}
+																			>
+																				{applicable.reporting_time?.slice(
+																					0,
+																					5,
+																				)}
+																			</div>
+																			<div
+																				className={
+																					styles.wgRoute
+																				}
+																			>
+																				{
+																					fullRoute
+																				}
+																			</div>
+																			<div
+																				className={
+																					styles.wgFlightCodes
+																				}
+																			>
+																				{
+																					flightCodes
+																				}
+																			</div>
+																			<div
+																				className={
+																					styles.wgEndTime
+																				}
+																			>
+																				{applicable.duty_end_time?.slice(
+																					0,
+																					5,
+																				)}
+																			</div>
+																		</td>
+																	);
+																},
+															)
+														)}
+													</tr>
+												);
+											})}
+										</tbody>
+									</table>
+									<div className={styles.weekLegend}>
+										<span className={styles.legendItem}>
+											<span
+												className={
+													styles.legendDotSpecial
+												}
+											/>
+											特殊日期（與一般班型不同）
+										</span>
+										<span className={styles.legendItem}>
+											<span
+												className={
+													styles.legendDotToday
+												}
+											/>
+											今天
+										</span>
+										<span
+											className={styles.legendItem}
+											style={{ color: "#555" }}
+										>
+											點選格子跳至班型列表　| 點選 —
+											隱藏/顯示該班型
+										</span>
+									</div>
+								</div>
+							)}
 						</div>
-					)}
-				</div>
-			)}
+					);
+				})()}
 
 			{/* ── TAB: FT / FDP 統計 ─────────────────── */}
 			{activeTab === "ft" && (
