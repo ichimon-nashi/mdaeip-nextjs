@@ -37,6 +37,26 @@
 }
 
 /* ─── Buttons ─────────────────────────────── */
+.btnImport {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	padding: 9px 16px;
+	background: #fff;
+	color: #b45309;
+	border: 1.5px solid #fcd34d;
+	border-radius: 8px;
+	font-size: 13px;
+	font-weight: 600;
+	cursor: pointer;
+	transition: all 0.15s;
+	font-family: inherit;
+}
+.btnImport:hover {
+	background: #fffbeb;
+	border-color: #f59e0b;
+}
+
 .btnPrimary {
 	display: flex;
 	align-items: center;

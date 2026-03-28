@@ -9,10 +9,12 @@ import {
 	ChevronRight,
 	Layers,
 	Edit2,
+	AlertTriangle,
 } from "lucide-react";
 import toast from "react-hot-toast";
 import { supabase } from "../../lib/supabase";
 import { pdxMonthHelpers, monthLabel, daysInMonth } from "../../lib/pdxHelpers";
+import DispatchImport from "./DispatchImport";
 import styles from "../../styles/DispatchDashboard.module.css";
 
 const currentYear = new Date().getFullYear();
@@ -50,6 +52,7 @@ export default function DispatchDashboard({ onSelectMonth }) {
 
 	const [deleting, setDeleting] = useState(null);
 	const [updatingId, setUpdatingId] = useState(null);
+	const [showImport, setShowImport] = useState(false);
 	const [editingMonth, setEditingMonth] = useState(null); // month object being edited
 	const [editYear, setEditYear] = useState(null);
 	const [editMonth, setEditMonth] = useState(null);
@@ -284,6 +287,13 @@ export default function DispatchDashboard({ onSelectMonth }) {
 					<div className={styles.pageSubtitle}>派遣表維護及管理</div>
 				</div>
 				<div className={styles.headerActions}>
+					<button
+						className={styles.btnImport}
+						onClick={() => setShowImport(true)}
+					>
+						<AlertTriangle size={15} />
+						匯入資料
+					</button>
 					<button
 						className={styles.btnPrimary}
 						onClick={() => {
@@ -626,6 +636,19 @@ export default function DispatchDashboard({ onSelectMonth }) {
 						</div>
 					</div>
 				</div>
+			)}
+
+			{/* Import Modal */}
+			{showImport && (
+				<DispatchImport
+					existingMonths={months}
+					onClose={() => setShowImport(false)}
+					onImported={() => {
+						setShowImport(false);
+						loadMonths();
+						toast.success("月份已新增至列表");
+					}}
+				/>
 			)}
 
 			{/* Edit Year/Month Modal */}
