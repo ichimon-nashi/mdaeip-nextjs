@@ -9,6 +9,8 @@ import {
 	employeeList,
 	getEmployeeSchedule,
 } from "../../lib/DataRoster";
+import { supabase } from "../../lib/supabase";
+import { minutesToDisplay } from "../../lib/pdxHelpers";
 import toast from "react-hot-toast";
 
 const formTemplateImage = "/assets/form-template.png";
@@ -29,7 +31,7 @@ function DutyChangeContent() {
 		secondRank: "",
 		secondDate: "",
 		secondTask: "",
-		applicationDate: new Date().toISOString().slice(0, 10),
+		applicationDate: new Date().toISOString().slice(0, 10).replace(/-/g, "/"),
 		selectedMonth: "",
 		selectedDates: [],
 		allDuties: [],
@@ -38,6 +40,28 @@ function DutyChangeContent() {
 	const [isLoading, setIsLoading] = useState(false);
 	const [error, setError] = useState(null);
 	const [userSchedule, setUserSchedule] = useState(null);
+	const [ftData, setFtData] = useState({ firstFt: null, secondFt: null }); // ft_minutes totals
+
+	// ── PDX date-matching helpers ─────────────────────────────────────────
+	const isoWeekday = (dateStr) => {
+		const [y, m, d] = dateStr.split("-").map(Number);
+		const dow = new Date(y, m - 1, d).getDay();
+		return dow === 0 ? 7 : dow;
+	};
+
+	const pdxDutyAppliesToDate = (duty, dateStr) => {
+		if (duty.specific_dates?.length) return duty.specific_dates.includes(dateStr);
+		if (dateStr < duty.date_from || dateStr > duty.date_to) return false;
+		return duty.active_weekdays?.includes(isoWeekday(dateStr)) ?? false;
+	};
+
+	const findPdxDuty = (duties, dutyCode, dateStr) => {
+		const matches = duties.filter(
+			(d) => d.duty_code === dutyCode && pdxDutyAppliesToDate(d, dateStr)
+		);
+		if (!matches.length) return null;
+		return matches.find((d) => d.specific_dates?.length) || matches[0];
+	};
 
 	const findCrewMemberRank = (employeeID) => {
 		const employee = employeeList.find((user) => user.id === employeeID);
@@ -368,7 +392,7 @@ function DutyChangeContent() {
 					secondRank: secondRank,
 					secondDate: secondDate,
 					secondTask: secondTask,
-					applicationDate: new Date().toISOString().slice(0, 10),
+					applicationDate: new Date().toISOString().slice(0, 10).replace(/-/g, "/"),
 					selectedMonth: parsedData.selectedMonth || "",
 					selectedDates: parsedData.selectedDates || [],
 					allDuties: parsedData.allDuties || [],
@@ -381,6 +405,79 @@ function DutyChangeContent() {
 
 		loadData();
 	}, []);
+
+	// ── Fetch PDX FT totals for both persons once formData is ready ──────────
+	useEffect(() => {
+		if (!formData.selectedMonth || !formData.allDuties?.length) return;
+
+		const fetchFt = async () => {
+			const match = formData.selectedMonth.match(/^(\d{4})年(\d{2})月$/);
+			if (!match) return;
+			const yr = parseInt(match[1]);
+			const mo = parseInt(match[2]);
+
+			// Find published PDX month
+			const { data: monthRow, error: monthErr } = await supabase
+				.from("pdx_months")
+				.select("id")
+				.eq("year", yr)
+				.eq("month", mo)
+				.eq("status", "published")
+				.single();
+
+			if (monthErr || !monthRow) return; // No PDX data — silent
+
+			// Fetch all duties + stats for this month
+			const { data: fullDuties } = await supabase
+				.from("pdx_duties")
+				.select("*")
+				.eq("month_id", monthRow.id);
+			if (!fullDuties?.length) return;
+
+			const { data: stats } = await supabase
+				.from("pdx_duty_stats")
+				.select("duty_id, ft_minutes")
+				.eq("month_id", monthRow.id);
+
+			const statsById = {};
+			(stats || []).forEach((s) => { statsById[s.duty_id] = s.ft_minutes; });
+
+			const mergedDuties = fullDuties.map((d) => ({
+				...d,
+				ft_minutes: statsById[d.id] ?? 0,
+			}));
+
+			// Sum FT for Person B's duties (allDuties)
+			let secondFt = 0;
+			formData.allDuties.forEach(({ duty, date }) => {
+				// duty stored as display string — strip attachments (space-separated)
+				const code = (duty || "").split(" ")[0].split("\\")[0].trim();
+				if (!code) return;
+				const matched = findPdxDuty(mergedDuties, code, date);
+				if (matched) secondFt += matched.ft_minutes || 0;
+			});
+
+			// Sum FT for Person A's duties (selectedDates × userSchedule)
+			let firstFt = 0;
+			if (formData.selectedDates?.length && userSchedule?.days) {
+				formData.selectedDates.forEach((date) => {
+					const rawDuty = userSchedule.days[date] || "";
+					const code = rawDuty.split("\\")[0].trim();
+					if (!code) return;
+					const matched = findPdxDuty(mergedDuties, code, date);
+					if (matched) firstFt += matched.ft_minutes || 0;
+				});
+			}
+
+			setFtData({
+				firstFt: firstFt || null,
+				secondFt: secondFt || null,
+			});
+		};
+
+		fetchFt();
+	// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [formData.selectedMonth, formData.allDuties, formData.selectedDates, userSchedule]);
 
 	const generatePDFFromTemplate = async () => {
 		try {
@@ -415,7 +512,8 @@ function DutyChangeContent() {
 				x,
 				y,
 				fontSize = 14,
-				align = "left"
+				align = "left",
+				color = "#1d4ed8"
 			) => {
 				if (!text || typeof text !== "string") return;
 
@@ -423,7 +521,7 @@ function DutyChangeContent() {
 				if (!cleanText) return;
 
 				ctx.font = `${fontSize}px "Noto Sans TC", "Microsoft JhengHei", "PingFang TC", sans-serif`;
-				ctx.fillStyle = "black";
+				ctx.fillStyle = color;
 				ctx.textAlign = align;
 				ctx.textBaseline = "middle";
 				ctx.fillText(cleanText, x, y);
@@ -434,7 +532,8 @@ function DutyChangeContent() {
 				leftX,
 				rightX,
 				y,
-				fontSize = 14
+				fontSize = 14,
+				color = "#1d4ed8"
 			) => {
 				if (!text || typeof text !== "string") return;
 
@@ -446,7 +545,7 @@ function DutyChangeContent() {
 				const boxWidth = rightX - leftX;
 				const centerX = leftX + (boxWidth - textWidth) / 2;
 
-				ctx.fillStyle = "black";
+				ctx.fillStyle = color;
 				ctx.textAlign = "left";
 				ctx.textBaseline = "middle";
 				ctx.fillText(cleanText, centerX, y);
@@ -469,6 +568,7 @@ function DutyChangeContent() {
 
 				if (personData.rank) {
 					ctx.font = "64px Arial";
+					ctx.fillStyle = "#1d4ed8";
 					const rankOffset = isFirst ? 149 : 406;
 
 					if (personData.rank === "PR" || personData.rank === "FI") {
@@ -687,17 +787,57 @@ function DutyChangeContent() {
 				);
 			}
 
-			// Application date
+			const FT_COORDS = {
+				// 甲方 (Person A) — left half of the form
+				firstOriginal:  { x: 148,  y: 498 }, // 原班表時數 upper-left triangle
+				firstDelta:     { x: 250, y: 485 }, // 互換後時數 lower-right triangle
+				// 乙方 (Person B) — right half of the form
+				secondOriginal: { x: 403, y: 498 }, // 原班表時數 upper-left triangle
+				secondDelta:    { x: 510, y: 485 }, // 互換後時數 lower-right triangle
+				fontSize: 40, // ── TWEAK: font size for FT values
+			};
+
+			if (ftData.firstFt !== null || ftData.secondFt !== null) {
+				const firstFt   = ftData.firstFt  ?? 0;
+				const secondFt  = ftData.secondFt ?? 0;
+				const firstDelta  = secondFt - firstFt;  // A gives up firstFt, gains secondFt
+				const secondDelta = firstFt  - secondFt; // B gives up secondFt, gains firstFt
+
+				const formatDelta = (delta) => {
+					if (delta > 0)  return `+${minutesToDisplay(delta)}`;
+					if (delta < 0)  return `-${minutesToDisplay(Math.abs(delta))}`;
+					return "±0";
+				};
+
+				// Person A — 原班表時數
+				if (ftData.firstFt !== null) {
+					const c = convertToCanvasCoords(FT_COORDS.firstOriginal.x, FT_COORDS.firstOriginal.y);
+					renderTextOnCanvas(minutesToDisplay(firstFt), c.x, c.y, FT_COORDS.fontSize, "left", "#1d4ed8");
+				}
+				// Person A — 互換後時數 (delta): green = gain, red = loss
+				{
+					const c = convertToCanvasCoords(FT_COORDS.firstDelta.x, FT_COORDS.firstDelta.y);
+					const deltaColor = firstDelta >= 0 ? "#15803d" : "#dc2626";
+					renderTextOnCanvas(formatDelta(firstDelta), c.x, c.y, FT_COORDS.fontSize, "left", deltaColor);
+				}
+
+				// Person B — 原班表時數
+				if (ftData.secondFt !== null) {
+					const c = convertToCanvasCoords(FT_COORDS.secondOriginal.x, FT_COORDS.secondOriginal.y);
+					renderTextOnCanvas(minutesToDisplay(secondFt), c.x, c.y, FT_COORDS.fontSize, "left", "#1d4ed8");
+				}
+				// Person B — 互換後時數 (delta): green = gain, red = loss
+				{
+					const c = convertToCanvasCoords(FT_COORDS.secondDelta.x, FT_COORDS.secondDelta.y);
+					const deltaColor = secondDelta >= 0 ? "#15803d" : "#dc2626";
+					renderTextOnCanvas(formatDelta(secondDelta), c.x, c.y, FT_COORDS.fontSize, "left", deltaColor);
+				}
+			}
+
+			// Application date — stored as YYYY/MM/DD, render directly
 			let coords = convertToCanvasCoords(180, 461);
 			if (formData.applicationDate) {
-				const formattedDate = new Date(
-					formData.applicationDate
-				).toLocaleDateString("en-US", {
-					month: "2-digit",
-					day: "2-digit",
-					year: "numeric",
-				});
-				renderTextOnCanvas(formattedDate, coords.x, coords.y, 56);
+				renderTextOnCanvas(formData.applicationDate, coords.x, coords.y, 56);
 			}
 
 			// Now convert canvas to PDF with compression
@@ -737,76 +877,44 @@ function DutyChangeContent() {
 				// Get PDF as base64 for email attachment
 				const pdfBase64 = pdf.output("dataurlstring");
 
-				// Detect mobile device (iOS or Android) - mobile-first approach
 				const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
-				console.log('Device is mobile:', isMobile);
-
-				// Try to send email first (before any download to avoid mobile popup blocking)
 				try {
-					console.log("Sending email...");
-					const emailResponse = await fetch(
-						"/api/send-duty-change-email",
-						{
-							method: "POST",
-							headers: {
-								"Content-Type": "application/json",
+					const emailResponse = await fetch("/api/send-duty-change-email", {
+						method: "POST",
+						headers: { "Content-Type": "application/json" },
+						body: JSON.stringify({
+							pdfData: pdfBase64,
+							formData: {
+								firstID: formData.firstID,
+								firstName: formData.firstName,
+								firstRank: formData.firstRank,
+								firstDate: formData.firstDate,
+								firstTask: formData.firstTask,
+								secondID: formData.secondID,
+								secondName: formData.secondName,
+								secondRank: formData.secondRank,
+								secondDate: formData.secondDate,
+								secondTask: formData.secondTask,
+								selectedMonth: formData.selectedMonth,
+								applicationDate: formData.applicationDate,
 							},
-							body: JSON.stringify({
-								pdfData: pdfBase64,
-								formData: {
-									firstID: formData.firstID,
-									firstName: formData.firstName,
-									firstRank: formData.firstRank,
-									firstDate: formData.firstDate,
-									firstTask: formData.firstTask,
-									secondID: formData.secondID,
-									secondName: formData.secondName,
-									secondRank: formData.secondRank,
-									secondDate: formData.secondDate,
-									secondTask: formData.secondTask,
-									selectedMonth: formData.selectedMonth,
-									applicationDate: formData.applicationDate,
-								},
-							}),
-						}
-					);
-
+						}),
+					});
 					const emailResult = await emailResponse.json();
-
 					if (emailResult.success) {
-						console.log("Email sent successfully:", emailResult.messageId);
-						
-						// Email sent successfully - handle based on device type
 						if (isMobile) {
-							// Mobile (iOS/Android): Email only, no download
-							// Users will receive PDF via email - cleaner mobile experience
 							toast.success("✅ 換班單已成功寄送！請15分後確認信箱！");
 						} else {
-							// Desktop: Download PDF for user convenience
 							pdf.save(filename);
-							setTimeout(() => {
-								toast.success("✅ 換班單已成功寄送並下載！");
-							}, 200);
+							setTimeout(() => toast.success("✅ 換班單已成功寄送並下載！"), 200);
 						}
 					} else {
-						console.error("Email sending failed:", emailResult.error);
 						throw new Error(emailResult.error || "Email failed");
 					}
 				} catch (emailError) {
 					console.error("Error sending email:", emailError);
-					
-					// Email FAILED - Save PDF locally as fallback (ALL devices)
-					// User needs the PDF to manually send it
-					console.log("Email failed, saving PDF locally as fallback...");
 					pdf.save(filename);
-					
-					// Show error message with manual send instructions
-					setTimeout(() => {
-						toast.error(
-							"⚠️ 郵件發送失敗，但PDF已下載。\n請手動發送至管派組信箱",
-							{ duration: 8000 }
-						);
-					}, 200);
+					setTimeout(() => toast.error("⚠️ 郵件發送失敗，但PDF已下載。\n請手動發送至管派組信箱", { duration: 8000 }), 200);
 				}
 		} catch (error) {
 			console.error("Error generating PDF:", error);
@@ -888,6 +996,29 @@ function DutyChangeContent() {
 									disabled
 								/>
 							</div>
+
+							{/* FT summary for Person A */}
+							{ftData.firstFt !== null && (() => {
+								// A gives up firstFt, receives secondFt
+								const delta = (ftData.secondFt ?? 0) - ftData.firstFt;
+								const deltaStr = delta > 0
+									? `(+${minutesToDisplay(delta)})`
+									: delta < 0
+										? `(-${minutesToDisplay(Math.abs(delta))})`
+										: "(±0)";
+								const deltaColor = delta > 0 ? "#16a34a" : delta < 0 ? "#dc2626" : "#6b7280";
+								return (
+									<div className={styles.ftSummary}>
+										<span className={styles.ftLabel}>飛行時間 (FT)</span>
+										<span className={styles.ftValue}>
+											{minutesToDisplay(ftData.firstFt)}{" "}
+											<span className={styles.ftDelta} style={{ color: deltaColor }}>
+												{deltaStr}
+											</span>
+										</span>
+									</div>
+								);
+							})()}
 						</div>
 
 						<div className={styles.formSection}>
@@ -948,13 +1079,36 @@ function DutyChangeContent() {
 									disabled
 								/>
 							</div>
+
+							{/* FT summary for Person B */}
+							{ftData.secondFt !== null && (() => {
+								// B gives up secondFt, receives firstFt
+								const delta = (ftData.firstFt ?? 0) - ftData.secondFt;
+								const deltaStr = delta > 0
+									? `(+${minutesToDisplay(delta)})`
+									: delta < 0
+										? `(-${minutesToDisplay(Math.abs(delta))})`
+										: "(±0)";
+								const deltaColor = delta > 0 ? "#16a34a" : delta < 0 ? "#dc2626" : "#6b7280";
+								return (
+									<div className={styles.ftSummary}>
+										<span className={styles.ftLabel}>飛行時間 (FT)</span>
+										<span className={styles.ftValue}>
+											{minutesToDisplay(ftData.secondFt)}{" "}
+											<span className={styles.ftDelta} style={{ color: deltaColor }}>
+												{deltaStr}
+											</span>
+										</span>
+									</div>
+								);
+							})()}
 						</div>
 					</div>
 
 					<div className={styles.dateGroup}>
 						<label className={styles.formLabel}>申請日期</label>
 						<input
-							type="date"
+							type="text"
 							value={formData.applicationDate || ""}
 							disabled
 							className={`${styles.formInput} ${styles.disabled} ${styles.dateInput}`}

@@ -222,3 +222,34 @@
 		flex-direction: column;
 	}
 }
+/* ── FT Summary Row ─────────────────────────────────────────────────────── */
+.ftSummary {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	margin-top: 0.75rem;
+	padding: 0.625rem 0.875rem;
+	background: #eff6ff;
+	border: 1px solid #bfdbfe;
+	border-radius: 0.5rem;
+}
+
+.ftLabel {
+	font-size: 0.875rem;
+	font-weight: 600;
+	color: #1e40af;
+}
+
+.ftValue {
+	font-size: 1rem;
+	font-weight: 700;
+	color: #1e3a8a;
+	font-variant-numeric: tabular-nums;
+	letter-spacing: 0.01em;
+}
+
+.ftDelta {
+	font-weight: 700;
+	font-variant-numeric: tabular-nums;
+	margin-left: 0.25rem;
+}

@@ -928,8 +928,7 @@ export default function DispatchDutyBuilder({ month, duty, onBack, onSaved }) {
 																key={a.code}
 																value={a.code}
 															>
-																{a.code}{" "}
-																{a.name}
+																{a.code}
 															</option>
 														),
 													)}
@@ -1042,8 +1041,7 @@ export default function DispatchDutyBuilder({ month, duty, onBack, onSaved }) {
 																key={a.code}
 																value={a.code}
 															>
-																{a.code}{" "}
-																{a.name}
+																{a.code}
 															</option>
 														),
 													)}

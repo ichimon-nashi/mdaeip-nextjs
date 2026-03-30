@@ -124,7 +124,16 @@ export const pdxMonthHelpers = {
 			if (dutiesError) throw new Error(dutiesError);
 			if (!sourceDuties.length) return { data: newMonth, error: null };
 
-			// 3. For each duty, copy it and its sectors
+			// Helper: remap a YYYY-MM-DD date to the target month, keeping day clamped to last day
+			function remapDate(dateStr) {
+				if (!dateStr) return dateStr;
+				const day = parseInt(dateStr.slice(8, 10));
+				const lastDay = new Date(targetYear, targetMonth, 0).getDate();
+				const clampedDay = Math.min(day, lastDay);
+				return `${targetYear}-${String(targetMonth).padStart(2, "0")}-${String(clampedDay).padStart(2, "0")}`;
+			}
+
+			// 3. For each duty, copy it and its sectors with remapped dates
 			for (const duty of sourceDuties) {
 				const {
 					id: _id,
@@ -134,9 +143,19 @@ export const pdxMonthHelpers = {
 					...dutyData
 				} = duty;
 
+				const remappedDuty = {
+					...dutyData,
+					month_id: newMonth.id,
+					date_from: remapDate(duty.date_from),
+					date_to: remapDate(duty.date_to),
+					specific_dates: duty.specific_dates?.length
+						? duty.specific_dates.map(remapDate)
+						: duty.specific_dates,
+				};
+
 				const { data: newDuty, error: newDutyError } = await supabase
 					.from("pdx_duties")
-					.insert([{ ...dutyData, month_id: newMonth.id }])
+					.insert([remappedDuty])
 					.select()
 					.single();
 				if (newDutyError) throw newDutyError;

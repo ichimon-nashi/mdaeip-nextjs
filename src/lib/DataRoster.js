@@ -90,7 +90,7 @@ export const employeeList = [
 	{ id: "59230", name: "葉容婷", rank: "FS", base: "KHH" },
 	{ id: "59262", name: "劉紋瑄", rank: "LF", base: "KHH" },
 	{ id: "59822", name: "郭惟歆", rank: "LF", base: "KHH" },
-	{ id: "60426", name: "陳筱雅", rank: "FS", base: "KHH" },
+	{ id: "60426", name: "陳筱雅", rank: "FS", base: "TSA" },
 	{ id: "60428", name: "江奕蓁", rank: "FS", base: "KHH" },
 	{ id: "60429", name: "李芷璇", rank: "FS", base: "KHH" },
 	{ id: "60430", name: "蕭芷瑄", rank: "FS", base: "KHH" },

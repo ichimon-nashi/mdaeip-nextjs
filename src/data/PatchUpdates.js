@@ -142,9 +142,18 @@ export const patchUpdates = [
 		appName: "派遣表系統",
 		updateInfo: ["建立初版電子派遣表"],
 	},
-		{
+	{
 		date: "2026-03-24",
 		appName: "烏龜排行榜",
 		updateInfo: ["建立初版烏龜排行榜"],
+	},
+		{
+		date: "2026-03-30",
+		appName: "任務互換系統",
+		updateInfo: [
+			"點選任務會有更詳細飛航資訊",
+			"產生換班pdf增加顏色及自動寄送FT差異",
+			"點選組員名字會秀出當月飛航資訊",
+		],
 	},
 ];

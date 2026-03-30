@@ -13,6 +13,10 @@ import {
 } from "lucide-react";
 import toast from "react-hot-toast";
 import { supabase } from "../../lib/supabase";
+
+// Module-level store: persists accordion collapsed state across component remounts
+// keyed by month.id so each month remembers its own state
+const _collapsedBasesStore = {};
 import {
 	pdxMonthHelpers,
 	pdxDutyHelpers,
@@ -134,7 +138,18 @@ export default function DispatchMonthView({
 	const [weekDragCode, setWeekDragCode] = useState(null);
 	const [weekDragOverCode, setWeekDragOverCode] = useState(null);
 	const [hiddenCodes, setHiddenCodes] = useState(new Set());
-	const [collapsedBases, setCollapsedBases] = useState(new Set());
+	// Initialise from module-level store so accordion state survives remount (builder navigation)
+	const [collapsedBases, setCollapsedBasesRaw] = useState(
+		() => new Set(_collapsedBasesStore[month.id] || []),
+	);
+	function setCollapsedBases(updater) {
+		setCollapsedBasesRaw((prev) => {
+			const next =
+				typeof updater === "function" ? updater(prev) : updater;
+			_collapsedBasesStore[month.id] = [...next]; // persist to module store
+			return next;
+		});
+	}
 	const lastEditedIdRef = useRef(null);
 
 	// Cross-month duty loading: when week view shows adjacent months
@@ -277,9 +292,11 @@ export default function DispatchMonthView({
 		setLoading(false);
 	}, [month.id]);
 
-	// Auto-revert to draft whenever a duty is saved, if currently published
+	// Auto-revert to draft only when savedCounter genuinely increments (not on remount)
+	const prevSavedCounterRef = useRef(savedCounter);
 	useEffect(() => {
-		if (savedCounter === 0) return; // skip on initial mount
+		if (savedCounter === prevSavedCounterRef.current) return; // no change, skip
+		prevSavedCounterRef.current = savedCounter;
 		if (monthState.status === "published") {
 			pdxMonthHelpers.updateStatus(month.id, "draft").then(() => {
 				setMonthState((prev) => ({ ...prev, status: "draft" }));
@@ -915,7 +932,9 @@ export default function DispatchMonthView({
 				}
 			}
 
-			pdf.save(`${label}派遣表.pdf`);
+			pdf.save(
+				`${label}派遣表REV${String(monthState.revision).padStart(3, "0")}.pdf`,
+			);
 			toast.success("PDF 已下載");
 		} catch (err) {
 			console.error(err);
@@ -956,7 +975,7 @@ export default function DispatchMonthView({
 					<button
 						className={
 							monthState.status === "published"
-								? styles.btnSecondary
+								? styles.btnUnpublish
 								: styles.btnPublish
 						}
 						onClick={handlePublish}
@@ -965,10 +984,7 @@ export default function DispatchMonthView({
 							? "取消發布"
 							: "發布"}
 					</button>
-					<button
-						className={styles.btnSecondary}
-						onClick={handleExport}
-					>
+					<button className={styles.btnExport} onClick={handleExport}>
 						<FileText size={14} /> 匯出 PDF
 					</button>
 					<button
@@ -1737,9 +1753,18 @@ export default function DispatchMonthView({
 					const viewSectors = isViewingOtherMonth
 						? crossData?.sectors || {}
 						: sectors;
+					const BASE_ORDER = { KHH: 0, TSA: 1, RMQ: 2 };
 					const viewDutyCodeGroups = [
 						...new Set(viewDuties.map((d) => d.duty_code)),
-					];
+					].sort((a, b) => {
+						const dutyA = viewDuties.find((d) => d.duty_code === a);
+						const dutyB = viewDuties.find((d) => d.duty_code === b);
+						const baseOrderA = BASE_ORDER[dutyA?.base] ?? 9;
+						const baseOrderB = BASE_ORDER[dutyB?.base] ?? 9;
+						if (baseOrderA !== baseOrderB)
+							return baseOrderA - baseOrderB;
+						return a.localeCompare(b);
+					});
 
 					return (
 						<div className={styles.weekTabWrap}>

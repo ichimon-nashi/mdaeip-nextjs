@@ -5,6 +5,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { hasAppAccess } from '../../lib/permissionHelpers';
 import { useRouter } from 'next/navigation';
 import toast from 'react-hot-toast';
+import { Plane, Clock, ChevronDown, ChevronUp, X } from 'lucide-react';
 import styles from '../../styles/Schedule.module.css';
 import { 
 	getAllSchedulesForMonth, 
@@ -13,7 +14,36 @@ import {
 	getEmployeeById,
 	getAvailableMonths
 } from '../../lib/DataRoster';
-import { flightDutyHelpers } from '../../lib/supabase';
+import { supabase, flightDutyHelpers } from '../../lib/supabase';
+import { minutesToDisplay } from '../../lib/pdxHelpers';
+
+
+// ─── PDX date-matching helpers (mirrors dashboard logic) ────────────────────
+const isoWeekday = (dateStr) => {
+	const [y, m, d] = dateStr.split('-').map(Number);
+	const dow = new Date(y, m - 1, d).getDay();
+	return dow === 0 ? 7 : dow;
+};
+
+const pdxDutyAppliesToDate = (duty, dateStr) => {
+	if (duty.specific_dates?.length) return duty.specific_dates.includes(dateStr);
+	if (dateStr < duty.date_from || dateStr > duty.date_to) return false;
+	return duty.active_weekdays?.includes(isoWeekday(dateStr)) ?? false;
+};
+
+const findPdxDuty = (duties, dutyCode, dateStr) => {
+	const matches = duties.filter(d => d.duty_code === dutyCode && pdxDutyAppliesToDate(d, dateStr));
+	if (!matches.length) return null;
+	const specific = matches.find(d => d.specific_dates?.length);
+	return specific || matches[0];
+};
+
+const buildRouteString = (sectors) => {
+	if (!sectors?.length) return null;
+	const airports = [sectors[0].dep_airport];
+	sectors.forEach(s => airports.push(s.arr_airport));
+	return airports.join('→');
+};
 
 const useIsMobile = () => {
 	const [isMobile, setIsMobile] = useState(() => {
@@ -34,48 +64,15 @@ const useIsMobile = () => {
 	return isMobile;
 };
 
-const SelectionSummary = ({ selectedDuties, onClear, formatDate }) => {
-	if (selectedDuties.length === 0) return null;
-
-	return (
-		<div className={styles.mobileSelectionSummary}>
-			<div className={styles.selectionHeader}>
-				<span>已選擇 {selectedDuties.length} 項</span>
-				<button onClick={onClear} className={styles.clearButton}>清除全部</button>
-			</div>
-			<div className={styles.selectionList}>
-				{selectedDuties.slice(0, 3).map((item, index) => (
-					<div key={index} className={styles.selectionItem}>
-						{item.name} - {formatDate(item.date)} ({item.duty})
-					</div>
-				))}
-				{selectedDuties.length > 3 && (
-					<div className={styles.selectionMore}>
-						還有 {selectedDuties.length - 3} 項...
-					</div>
-				)}
-			</div>
-		</div>
-	);
-};
-
-const MobileInfoButton = ({ onClick, isActive }) => (
-	<button 
-		className={styles.mobileInfoButton + (isActive ? ' ' + styles.active : '')}
-		onClick={onClick}
-	>
-		{isActive ? '🔍' : '📋'}
-	</button>
-);
 
 export default function SchedulePage() {
 	const { user, loading } = useAuth();
 	const router = useRouter();
 	const isMobile = useIsMobile();
 	
-	const [mobileInfoMode, setMobileInfoMode] = useState(false);
 	const userTableRef = useRef(null);
 	const crewTableRef = useRef(null);
+	const tooltipRef = useRef(null);
 
 	const [availableMonths, setAvailableMonths] = useState([]);
 	const [currentMonth, setCurrentMonth] = useState('');
@@ -276,6 +273,300 @@ export default function SchedulePage() {
 		loadScheduleData();
 	}, [currentMonth, activeTab, user?.id, initialLoad]);
 
+	// PDX data for current month (bulk-fetched, stored in ref to avoid re-renders)
+	const pdxMonthDataRef = useRef(null);   // { duties, sectorsById } | null
+	const pdxMonthLoadedFor = useRef('');   // which month it was loaded for
+
+	// Rich tooltip state — declared early so effects and handlers below can reference it
+	const [tooltipData, setTooltipData] = useState({
+		visible: false,
+		employeeId: '',
+		name: '',
+		dutyCode: '',
+		date: '',
+		reportingTime: '',
+		endTime: '',
+		pdxDutyRow: null,
+		pdxSectors: null,
+		sameEmployees: [],
+		isUserSchedule: false,
+		x: 0,
+		y: 0,
+		above: false,
+	});
+	const [sectorsExpanded, setSectorsExpanded] = useState(false);
+
+
+	// Employee name-cell tooltip (separate from duty tooltip)
+	const empTooltipRef = useRef(null);
+	const [empTooltipData, setEmpTooltipData] = useState({
+		visible: false,
+		name: '',
+		totalFt: 0,
+		amCount: 0,
+		pmCount: 0,
+		duties4: 0,   // duties with sector_count <= 4
+		duties6: 0,   // duties with sector_count <= 6 (but > 4)
+		x: 0,
+		y: 0,
+		above: false,
+	});
+	// ── PDX bulk-fetch for current month ────────────────────────────────────
+	// Runs when currentMonth changes. Stores data in a ref (no re-render needed).
+	useEffect(() => {
+		if (!currentMonth) return;
+		// Already loaded for this month
+		if (pdxMonthLoadedFor.current === currentMonth) return;
+
+		const loadPdx = async () => {
+			pdxMonthLoadedFor.current = currentMonth;
+			pdxMonthDataRef.current = null;
+
+			const match = currentMonth.match(/^(\d{4})年(\d{2})月$/);
+			if (!match) return;
+			const yr = parseInt(match[1]);
+			const mo = parseInt(match[2]);
+
+			const { data: monthRow, error: monthErr } = await supabase
+				.from('pdx_months')
+				.select('id')
+				.eq('year', yr)
+				.eq('month', mo)
+				.eq('status', 'published')
+				.single();
+
+			if (monthErr || !monthRow) return; // No published PDX for this month — silent
+
+			const { data: fullDuties, error: dutiesErr } = await supabase
+				.from('pdx_duties')
+				.select('*')
+				.eq('month_id', monthRow.id);
+			if (dutiesErr || !fullDuties?.length) return;
+
+			const { data: stats } = await supabase
+				.from('pdx_duty_stats')
+				.select('*')
+				.eq('month_id', monthRow.id);
+
+			const dutyIds = fullDuties.map(d => d.id);
+			const { data: sectors } = await supabase
+				.from('pdx_sectors')
+				.select('*')
+				.in('duty_id', dutyIds)
+				.order('seq', { ascending: true });
+
+			const statsById = {};
+			(stats || []).forEach(s => { statsById[s.duty_id] = s; });
+
+			const mergedDuties = fullDuties.map(d => ({ ...d, ...(statsById[d.id] || {}) }));
+
+			const sectorsById = {};
+			(sectors || []).forEach(s => {
+				if (!sectorsById[s.duty_id]) sectorsById[s.duty_id] = [];
+				sectorsById[s.duty_id].push(s);
+			});
+
+			pdxMonthDataRef.current = { duties: mergedDuties, sectorsById };
+		};
+
+		loadPdx();
+	}, [currentMonth]);
+
+	// ── Close tooltip on outside click ─────────────────────────────────────
+	useEffect(() => {
+		const handleOutsideClick = (e) => {
+			if (tooltipRef.current && !tooltipRef.current.contains(e.target)) {
+				setTooltipData(prev => ({ ...prev, visible: false }));
+			}
+		};
+		if (tooltipData.visible) {
+			document.addEventListener('mousedown', handleOutsideClick);
+			document.addEventListener('touchstart', handleOutsideClick);
+		}
+		return () => {
+			document.removeEventListener('mousedown', handleOutsideClick);
+			document.removeEventListener('touchstart', handleOutsideClick);
+		};
+	}, [tooltipData.visible]);
+
+	// ── Close employee tooltip on outside click ─────────────────────────────
+	useEffect(() => {
+		const handleOutsideClick = (e) => {
+			if (empTooltipRef.current && !empTooltipRef.current.contains(e.target)) {
+				setEmpTooltipData(prev => ({ ...prev, visible: false }));
+			}
+		};
+		if (empTooltipData.visible) {
+			document.addEventListener('mousedown', handleOutsideClick);
+			document.addEventListener('touchstart', handleOutsideClick);
+		}
+		return () => {
+			document.removeEventListener('mousedown', handleOutsideClick);
+			document.removeEventListener('touchstart', handleOutsideClick);
+		};
+	}, [empTooltipData.visible]);
+
+	// ── Name cell click: compute monthly stats from PDX data ─────────────────
+	const handleNameCellClick = useCallback((e, schedule) => {
+		e.stopPropagation();
+
+		// Toggle off if same employee clicked again
+		if (empTooltipData.visible && empTooltipData.employeeId === schedule.employeeID) {
+			setEmpTooltipData(prev => ({ ...prev, visible: false }));
+			return;
+		}
+
+		const pdx = pdxMonthDataRef.current;
+
+		// Non-flight duty codes to skip entirely
+		const NON_FLIGHT = new Set(['OFF', '休', '例', 'G', 'A/L', '福補', '年假', '空', 'RESV',
+			'OD', '會', '課', '訓', 'P/L', 'S/L', 'SH1', 'SH2', '']);
+
+		let totalFt = 0, amCount = 0, pmCount = 0, duties4 = 0, duties6 = 0;
+
+		Object.entries(schedule.days || {}).forEach(([date, dutyRaw]) => {
+			if (!dutyRaw) return;
+			const code = dutyRaw.toString().split(/[\\\n]/)[0].trim();
+			if (NON_FLIGHT.has(code)) return;
+			// Skip anything that doesn't start with a letter (guard against date strings etc.)
+			if (!/^[A-Za-z]/.test(code)) return;
+
+			if (pdx) {
+				const matched = findPdxDuty(pdx.duties, code, date);
+				if (matched) {
+					totalFt += matched.ft_minutes || 0;
+					// AM = reporting before 12:00, PM = 12:00 or later
+					const rt = matched.reporting_time || '';
+					const hour = parseInt(rt.substring(0, 2), 10);
+					if (!isNaN(hour)) {
+						if (hour < 12) amCount++; else pmCount++;
+					}
+					const sc = matched.sector_count || 0;
+					if (sc <= 4) duties4++;
+					else if (sc <= 6) duties6++;
+				}
+			}
+		});
+
+		// Position tooltip: flip above if near bottom
+		const rect = e.currentTarget.getBoundingClientRect();
+		const tooltipHeight = 200;
+		const tooltipWidth  = 220;
+		const viewportH = window.innerHeight;
+		const viewportW = window.innerWidth;
+		let x = rect.right + 8; // default: pop out to the right of the name cell
+		if (x + tooltipWidth > viewportW - 8) x = rect.left - tooltipWidth - 8; // flip left
+		const spaceBelow = viewportH - rect.top;
+		const above = spaceBelow < tooltipHeight + 16;
+		const y = above ? rect.bottom - tooltipHeight : rect.top;
+
+		setEmpTooltipData({
+			visible: true,
+			employeeId: schedule.employeeID,
+			name: schedule.name || schedule.employeeID,
+			totalFt,
+			amCount,
+			pmCount,
+			duties4,
+			duties6,
+			x, y, above,
+		});
+	}, [empTooltipData.visible, empTooltipData.employeeId]);
+
+	// Flight duty cache for performance
+	const flightDutyCache = useRef(new Map());
+
+	// Fetch flight duty details for a specific duty and date
+	const getFlightDutyDetails = useCallback(async (dutyCode, date) => {
+		const cacheKey = `${dutyCode}-${date}-${currentMonth}`;
+		if (flightDutyCache.current.has(cacheKey)) {
+			return flightDutyCache.current.get(cacheKey);
+		}
+		try {
+			const { data, error } = await flightDutyHelpers.getFlightDutyDetails(dutyCode, date, currentMonth);
+			if (error) {
+				console.error('Error fetching flight duty details:', error);
+				return null;
+			}
+			flightDutyCache.current.set(cacheKey, data);
+			return data;
+		} catch (error) {
+			console.error('Error in getFlightDutyDetails:', error);
+			return null;
+		}
+	}, [currentMonth]);
+
+	// ── Unified click handler: show tooltip on any device ───────────────────
+	const handleDutyCellClick = useCallback(async (e, employeeId, name, date, duty, sameEmployees, isUserSchedule) => {
+		e.stopPropagation();
+
+		// Toggle off if same cell clicked again
+		if (tooltipData.visible && tooltipData.date === date && tooltipData.employeeId === employeeId) {
+			setTooltipData(prev => ({ ...prev, visible: false }));
+			return;
+		}
+
+		const baseDutyCode = duty ? duty.split(/[\\\n]/)[0].trim() : '';
+		let reportingTime = '';
+		let endTime = '';
+		let pdxDutyRow = null;
+		let pdxSectors = null;
+
+		// PDX lookup (primary)
+		const pdx = pdxMonthDataRef.current;
+		if (pdx && baseDutyCode && /^[A-Z]/.test(baseDutyCode)) {
+			const matched = findPdxDuty(pdx.duties, baseDutyCode, date);
+			if (matched) {
+				pdxDutyRow = matched;
+				pdxSectors = pdx.sectorsById[matched.id] || [];
+				if (matched.reporting_time) reportingTime = matched.reporting_time.substring(0, 5);
+				if (matched.duty_end_time)  endTime = matched.duty_end_time.substring(0, 5);
+			}
+		}
+
+		// Fallback to flight_duty_records
+		if (!pdxDutyRow && baseDutyCode && /^[A-Z]\d+$/.test(baseDutyCode)) {
+			try {
+				const flightDetails = await getFlightDutyDetails(baseDutyCode, date);
+				if (flightDetails) {
+					if (flightDetails.reporting_time) reportingTime = flightDetails.reporting_time.substring(0, 5);
+					if (flightDetails.end_time)       endTime = flightDetails.end_time.substring(0, 5);
+				}
+			} catch (err) {
+				console.error('Fallback flight duty fetch failed:', err);
+			}
+		}
+
+		// Position: flip above if near bottom
+		const rect = e.currentTarget.getBoundingClientRect();
+		const tooltipHeight = 320;
+		const tooltipWidth  = 300;
+		const viewportH = window.innerHeight;
+		const viewportW = window.innerWidth;
+		let x = rect.left + rect.width / 2;
+		if (x - tooltipWidth / 2 < 8) x = tooltipWidth / 2 + 8;
+		if (x + tooltipWidth / 2 > viewportW - 8) x = viewportW - tooltipWidth / 2 - 8;
+		const spaceBelow = viewportH - rect.bottom;
+		const above = spaceBelow < tooltipHeight + 16;
+		const y = above ? rect.top - 8 : rect.bottom + 8;
+
+		setSectorsExpanded(false);
+		setTooltipData({
+			visible: true,
+			employeeId,
+			name,
+			dutyCode: duty || '空',
+			date,
+			reportingTime,
+			endTime,
+			pdxDutyRow,
+			pdxSectors,
+			sameEmployees,
+			isUserSchedule,
+			x, y, above,
+		});
+	}, [tooltipData.visible, tooltipData.date, tooltipData.employeeId, getFlightDutyDetails]);
+
 	const getDayOfWeek = useCallback((dateStr) => {
 		const date = new Date(dateStr);
 		const days = ['日', '一', '二', '三', '四', '五', '六'];
@@ -325,10 +616,10 @@ export default function SchedulePage() {
 
 	const getEmployeesWithSameDuty = useCallback((date, duty, excludeEmployeeId = null) => {
 		if (!duty || !scheduleData.hasScheduleData) return [];
-		const baseDuty = duty.split('\\')[0];
+		const baseDuty = duty.split(/[\\\n]/)[0].trim();
 		return scheduleData.allSchedules
 			.filter(schedule => 
-				(schedule.days[date] || '').split('\\')[0] === baseDuty && 
+				(schedule.days[date] || '').split(/[\\\n]/)[0].trim() === baseDuty && 
 				schedule.employeeID !== user?.id &&
 				schedule.employeeID !== excludeEmployeeId
 			)
@@ -336,293 +627,36 @@ export default function SchedulePage() {
 				id: schedule.employeeID,
 				name: schedule.name || '',
 				rank: schedule.rank || '',
+				base: schedule.base || '',
 				duty: schedule.days[date]
 			}));
 	}, [scheduleData.allSchedules, scheduleData.hasScheduleData, user?.id]);
 
-	// Flight duty cache for performance
-	const flightDutyCache = useRef(new Map());
+	// PDX data for current month (bulk-fetched, stored in ref to avoid re-renders)
 
-	// Fetch flight duty details for a specific duty and date
-	const getFlightDutyDetails = useCallback(async (dutyCode, date) => {
-		const cacheKey = `${dutyCode}-${date}-${currentMonth}`;
-		
-		// Check cache first
-		if (flightDutyCache.current.has(cacheKey)) {
-			return flightDutyCache.current.get(cacheKey);
-		}
 
-		try {
-			const { data, error } = await flightDutyHelpers.getFlightDutyDetails(dutyCode, date, currentMonth);
-			
-			if (error) {
-				console.error('Error fetching flight duty details:', error);
-				return null;
-			}
 
-			// Cache the result
-			flightDutyCache.current.set(cacheKey, data);
-			return data;
-		} catch (error) {
-			console.error('Error in getFlightDutyDetails:', error);
-			return null;
-		}
-	}, [currentMonth]);
-
-	// Enhanced tooltip content with flight duty cross-reference
-	const generateTooltipContent = useCallback(async (employeeId, date, duty, sameEmployees) => {
-		const displayDuty = duty || "空";
-		let content = displayDuty;
-		
-		// Try to get flight duty details if duty looks like a flight duty code
-		if (duty && duty.length >= 2 && /^[A-Z]\d+$/.test(duty)) {
-			try {
-				const flightDetails = await getFlightDutyDetails(duty, date);
-				
-				if (flightDetails) {
-					content += '\n\n【飛班資訊】';
-					if (flightDetails.duty_code) {
-						content += '\n班型: ' + flightDetails.duty_code;
-					}
-					if (flightDetails.reporting_time) {
-						content += '\n報到時間: ' + flightDetails.reporting_time;
-					}
-					if (flightDetails.end_time) {
-						content += '\n結束時間: ' + flightDetails.end_time;
-					}
-					if (flightDetails.duty_type) {
-						content += '\n班別類型: ' + flightDetails.duty_type;
-					}
-					if (flightDetails.total_sectors) {
-						content += '\n腿數: ' + flightDetails.total_sectors;
-					}
-				}
-			} catch (error) {
-				console.error('Error getting flight duty details for tooltip:', error);
-			}
-		}
-		
-		// Add same duty employees
-		if (sameEmployees.length > 0) {
-			content += '\n\n【相同任務】';
-			const employeeList = sameEmployees.slice(0, 5).map(emp => emp.id + ' ' + (emp.name || 'N/A')).join(', ');
-			content += '\n' + employeeList;
-			if (sameEmployees.length > 5) {
-				content += ' 等' + sameEmployees.length + '人';
-			}
-		} else {
-			content += '\n\n【相同班別】無';
-		}
-		
-		return content;
-	}, [getFlightDutyDetails]);
-
-	// Tooltip state for async loading
-	const [tooltipData, setTooltipData] = useState({
-		visible: false,
-		content: '',
-		x: 0,
-		y: 0
-	});
-	const tooltipTimeoutRef = useRef(null);
-
-	// Enhanced mobile info with better formatting
-	const handleDutyInfo = useCallback(async (employeeId, name, date, duty, sameEmployees) => {
-		if (!isMobile) return;
-		
-		const displayDuty = duty || "空";
-		
-		// Try to get flight duty details for mobile info
-		if (duty && duty.length >= 2 && /^[A-Z]\d+$/.test(duty)) {
-			try {
-				const flightDetails = await getFlightDutyDetails(duty, date);
-				if (flightDetails) {
-					// Format as requested: H2 : 4腿\n08:00 --> 15:20\n--相同任務--\n員工列表
-					let message = `${flightDetails.duty_code}`;
-					
-					if (flightDetails.total_sectors) {
-						message += ` : ${flightDetails.total_sectors}腿`;
-					}
-					
-					if (flightDetails.reporting_time && flightDetails.end_time) {
-						// Convert time format from "08:00:00" to "08:00"
-						const startTime = flightDetails.reporting_time.substring(0, 5);
-						const endTime = flightDetails.end_time.substring(0, 5);
-						message += `\n${startTime} --> ${endTime}`;
-					}
-					
-					// Add same duty employees (excluding the hovered employee)
-					if (mobileInfoMode && sameEmployees.length > 0) {
-						message += '\n\n--相同任務--';
-						sameEmployees.forEach(emp => {
-							message += `\n${emp.id} ${emp.name || 'N/A'}`;
-						});
-					}
-					
-					toast(message, {
-						icon: '✈️',
-						duration: 5000,
-						position: 'bottom-center',
-						style: {
-							background: '#333',
-							color: '#fff',
-							fontSize: '14px',
-							lineHeight: '1.4',
-							whiteSpace: 'pre-line'
-						}
-					});
-					return;
-				}
-			} catch (error) {
-				console.error('Error getting flight duty details for mobile:', error);
-			}
-		}
-		
-		// Fallback for non-flight duties or if flight details failed
-		if (mobileInfoMode && sameEmployees.length > 0) {
-			let message = `${displayDuty}\n\n--相同任務--`;
-			sameEmployees.forEach(emp => {
-				message += `\n${emp.id} ${emp.name || 'N/A'}`;
-			});
-			
-			toast(message, {
-				icon: 'ℹ️',
-				duration: 4000,
-				position: 'bottom-center',
-				style: {
-					whiteSpace: 'pre-line'
-				}
-			});
-		}
-	}, [isMobile, mobileInfoMode, getFlightDutyDetails]);
-
-	// Handle mouse enter for tooltips with flight duty details
-	const handleDutyMouseEnter = useCallback(async (event, employeeId, date, duty, sameEmployees) => {
-		if (isMobile) return; // Skip tooltips on mobile
-		
-		// Prevent execution during render
-		if (!event || !event.target) return;
-		
-		// Clear any existing timeout
-		if (tooltipTimeoutRef.current) {
-			clearTimeout(tooltipTimeoutRef.current);
-		}
-
-		// Show tooltip immediately for better UX
-		const displayDuty = duty || "空";
-		let content = displayDuty;
-		
-		// Try to get flight duty details
-		if (duty && duty.length >= 2 && /^[A-Z]\d+$/.test(duty)) {
-			try {
-				const flightDetails = await getFlightDutyDetails(duty, date);
-				
-				if (flightDetails) {
-					content = `${flightDetails.duty_code}`;
-					
-					if (flightDetails.total_sectors) {
-						content += ` : ${flightDetails.total_sectors}腿`;
-					}
-					
-					if (flightDetails.reporting_time && flightDetails.end_time) {
-						const startTime = flightDetails.reporting_time.substring(0, 5);
-						const endTime = flightDetails.end_time.substring(0, 5);
-						content += `\n${startTime} --> ${endTime}`;
-					}
-				}
-			} catch (error) {
-				console.error('Error getting flight duty details for tooltip:', error);
-			}
-		}
-		
-		// Add same duty employees (excluding the hovered employee)
-		if (sameEmployees.length > 0) {
-			content += '\n\n--相同任務--';
-			sameEmployees.forEach(emp => {
-				content += `\n${emp.id} ${emp.name || 'N/A'}`;
-			});
-		}
-
-		// Show custom tooltip immediately
-		const rect = event.target.getBoundingClientRect();
-		setTooltipData({
-			visible: true,
-			content: content,
-			x: rect.left + rect.width / 2,
-			y: rect.top - 10
-		});
-	}, [isMobile, getFlightDutyDetails]);
-
-	// Handle mouse leave for tooltips
-	const handleDutyMouseLeave = useCallback(() => {
-		if (tooltipTimeoutRef.current) {
-			clearTimeout(tooltipTimeoutRef.current);
-		}
-		setTooltipData(prev => ({ ...prev, visible: false }));
-	}, []);
-
-	const lastToggleTime = useRef(0);
-	const toggleMobileInfoMode = useCallback(() => {
-		const now = Date.now();
-		if (now - lastToggleTime.current < 1000) return;
-		lastToggleTime.current = now;
-		
-		setMobileInfoMode(prev => {
-			const newMode = !prev;
-			toast(newMode ? '查看模式：點選班表查看相同班別' : '選擇模式：點選班表選擇換班', {
-				icon: newMode ? '🔍' : '📋',
-				duration: 2000
-			});
-			return newMode;
-		});
-	}, []);
 
 	const handleDutySelect = useCallback((employeeId, name, date, duty) => {
 		if (!scheduleData.hasScheduleData) {
 			toast("此月份沒有班表資料！", { icon: '📅', duration: 3000 });
 			return;
 		}
-
-		if (isMobile && mobileInfoMode) {
-			const sameEmployees = getEmployeesWithSameDuty(date, duty);
-			handleDutyInfo(employeeId, name, date, duty, sameEmployees);
-			return;
-		}
-
 		if (window.navigator && window.navigator.vibrate) {
 			window.navigator.vibrate(50);
 		}
-
 		const displayDuty = duty === "" ? "空" : duty.replace(/\\/g, ' ');
 		const existingIndex = selectedDuties.findIndex(item =>
 			item.employeeId === employeeId && item.date === date
 		);
-
 		if (existingIndex >= 0) {
 			const newSelectedDuties = [...selectedDuties];
 			newSelectedDuties.splice(existingIndex, 1);
 			setSelectedDuties(newSelectedDuties);
-			if (isMobile) {
-				toast('取消選擇 ' + name + ' 的 ' + formatDate(date) + ' (' + displayDuty + ')', { 
-					icon: '❌', 
-					duration: 2000 
-				});
-			}
 		} else {
-			setSelectedDuties(prev => [...prev, {
-				employeeId,
-				name,
-				date,
-				duty: displayDuty
-			}]);
-			if (isMobile) {
-				toast('選擇 ' + name + ' 的 ' + formatDate(date) + ' (' + displayDuty + ')', { 
-					icon: '✅', 
-					duration: 2000 
-				});
-			}
+			setSelectedDuties(prev => [...prev, { employeeId, name, date, duty: displayDuty }]);
 		}
-	}, [scheduleData.hasScheduleData, selectedDuties, isMobile, mobileInfoMode, formatDate, getEmployeesWithSameDuty, handleDutyInfo]);
+	}, [scheduleData.hasScheduleData, selectedDuties, formatDate]);
 
 	const handleTabChange = useCallback(async (base) => {
 		if (scheduleLoading || activeTab === base) return;
@@ -700,7 +734,10 @@ export default function SchedulePage() {
 					{schedule.employeeID}
 				</td>
 			)}
-			<td className={styles.stickyCol + ' ' + styles.employeeNameCell}>
+			<td
+				className={styles.stickyCol + ' ' + styles.employeeNameCell + ' ' + styles.clickableNameCell}
+				onClick={(e) => handleNameCellClick(e, schedule)}
+			>
 				<div className={styles.nameContainer}>
 					<div className={styles.employeeName}>{schedule.name || '-'}</div>
 					<div className={styles.badgeContainer}>
@@ -733,19 +770,7 @@ export default function SchedulePage() {
 					<td
 						key={date}
 						className={className}
-						onMouseEnter={(e) => handleDutyMouseEnter(e, schedule.employeeID, date, duty, sameEmployees)}
-						onMouseLeave={handleDutyMouseLeave}
-						onClick={() => {
-							if (isMobile && mobileInfoMode) {
-								handleDutyInfo(schedule.employeeID, schedule.name, date, duty, sameEmployees);
-							} else if (!isUserSchedule) {
-								if (!isMobile) {
-									handleDutySelect(schedule.employeeID, schedule.name, date, duty);
-								} else {
-									handleDutySelect(schedule.employeeID, schedule.name, date, duty);
-								}
-							}
-						}}
+						onClick={(e) => handleDutyCellClick(e, schedule.employeeID, schedule.name, date, duty, sameEmployees, isUserSchedule)}
 					>
 						<div className={styles.dutyContent + ' ' + styles[fontSizeClass]}>
 							{formattedDuty.split('\n').map((line, index) => (
@@ -759,7 +784,7 @@ export default function SchedulePage() {
 				);
 			})}
 		</tr>
-	), [scheduleData.allDates, selectedDuties, formatDutyText, getDutyBackgroundColor, getDutyFontSize, getEmployeesWithSameDuty, generateTooltipContent, handleDutySelect, isMobile]);
+	), [scheduleData.allDates, selectedDuties, formatDutyText, getDutyBackgroundColor, getDutyFontSize, getEmployeesWithSameDuty, handleDutyCellClick, handleNameCellClick, isMobile]);
 
 	// Table sync effects
 	useEffect(() => {
@@ -843,31 +868,217 @@ export default function SchedulePage() {
 
 	return (
 		<div className={styles.mainContainer}>
-			{/* Custom Tooltip */}
-			{tooltipData.visible && (
-				<div 
-					style={{
-						position: 'fixed',
-						left: tooltipData.x - 75, // Center horizontally
-						top: tooltipData.y - 80, // Position above the cell
-						backgroundColor: '#2d3748',
-						color: '#ffffff',
-						padding: '12px 16px',
-						borderRadius: '8px',
-						fontSize: '13px',
-						fontFamily: 'monospace',
-						whiteSpace: 'pre-line',
-						zIndex: 9999,
-						pointerEvents: 'none',
-						maxWidth: '250px',
-						boxShadow: '0 4px 12px rgba(0,0,0,0.4)',
-						border: '1px solid #4a5568',
-						lineHeight: '1.4'
-					}}
+			{/* ── Employee Stats Tooltip ── */}
+			{empTooltipData.visible && (
+				<div
+					ref={empTooltipRef}
+					className={styles.empTooltip}
+					style={{ left: empTooltipData.x, top: empTooltipData.y }}
 				>
-					{tooltipData.content}
+					<div className={styles.empTooltipHeader}>
+						<span className={styles.empTooltipName}>{empTooltipData.name}</span>
+						<button
+							className={styles.empTooltipClose}
+							onClick={() => setEmpTooltipData(prev => ({ ...prev, visible: false }))}
+							aria-label="關閉"
+						>
+							<X size={13} />
+						</button>
+					</div>
+					<div className={styles.empTooltipBody}>
+						{empTooltipData.totalFt > 0 ? (
+							<>
+								<div className={styles.empTooltipRow}>
+									<span className={styles.empTooltipLabel}>總飛時</span>
+									<span className={styles.empTooltipValue}>{minutesToDisplay(empTooltipData.totalFt)}</span>
+								</div>
+								<div className={styles.empTooltipRow}>
+									<span className={styles.empTooltipLabel}>早/晚班</span>
+									<span className={styles.empTooltipValue}>{empTooltipData.amCount}早 / {empTooltipData.pmCount}晚</span>
+								</div>
+								<div className={styles.empTooltipRow}>
+									<span className={styles.empTooltipLabel}>4腿以下</span>
+									<span className={styles.empTooltipValue}>{empTooltipData.duties4} 班</span>
+								</div>
+								<div className={styles.empTooltipRow}>
+									<span className={styles.empTooltipLabel}>5-6腿</span>
+									<span className={styles.empTooltipValue}>{empTooltipData.duties6} 班</span>
+								</div>
+							</>
+						) : (
+							<div className={styles.empTooltipNoData}>無PDX飛行資料</div>
+						)}
+					</div>
 				</div>
 			)}
+
+			{/* ── Rich Tooltip (all devices) ── */}
+			{tooltipData.visible && (() => {
+				const td = tooltipData;
+				const pdx = td.pdxDutyRow;
+				const sectors = td.pdxSectors;
+				const routeStr = pdx ? buildRouteString(sectors) : null;
+				const baseDuty = td.dutyCode?.split(/[\\\n]/)[0].trim() || '';
+				const WEEKDAYS = ['日','一','二','三','四','五','六'];
+				const dateDisplay = (() => {
+					if (!td.date) return '';
+					const [y, m, d] = td.date.split('-').map(Number);
+					const dow = new Date(y, m - 1, d).getDay();
+					return `${m}月${d}日 (${WEEKDAYS[dow]})`;
+				})();
+				const isAlreadySelected = selectedDuties.some(
+					item => item.employeeId === td.employeeId && item.date === td.date
+				);
+				return (
+					<div
+						ref={tooltipRef}
+						className={styles.schedTooltip}
+						style={{
+							left: td.x,
+							...(td.above
+								? { bottom: `calc(100vh - ${td.y}px)`, top: 'auto' }
+								: { top: td.y }),
+							transform: 'translateX(-50%)',
+						}}
+					>
+						{/* Arrow */}
+						<div className={td.above ? styles.schedTooltipArrowDown : styles.schedTooltipArrowUp} />
+
+						{/* Header */}
+						<div className={styles.schedTooltipHeader}>
+							<div className={styles.schedTooltipHeaderLeft}>
+								<span className={styles.schedTooltipIcon}><Plane size={14} /></span>
+								<div>
+									<div className={styles.schedTooltipDate}>{dateDisplay}</div>
+									<div className={styles.schedTooltipDutyCode}>{baseDuty}</div>
+								</div>
+							</div>
+							<button
+								className={styles.schedTooltipClose}
+								onClick={() => setTooltipData(prev => ({ ...prev, visible: false }))}
+								aria-label="關閉"
+							>
+								<X size={14} />
+							</button>
+						</div>
+
+						{/* Body */}
+						<div className={styles.schedTooltipBody}>
+							{/* Time */}
+							{(td.reportingTime || td.endTime) && (
+								<div className={styles.schedTooltipRow}>
+									<Clock size={12} className={styles.schedTooltipRowIcon} />
+									<span className={styles.schedTooltipRowLabel}>時間</span>
+									<span className={styles.schedTooltipRowValue}>
+										{td.reportingTime || '—'} → {td.endTime || '—'}
+									</span>
+								</div>
+							)}
+							{/* Aircraft type (PDX) */}
+							{pdx?.aircraft_type && (
+								<div className={styles.schedTooltipRow}>
+									<Plane size={12} className={styles.schedTooltipRowIcon} />
+									<span className={styles.schedTooltipRowLabel}>機型</span>
+									<span className={styles.schedTooltipRowValue}>
+										{pdx.aircraft_type}
+										{pdx.is_international && (
+											<span className={styles.schedTooltipIntlBadge}>國際</span>
+										)}
+									</span>
+								</div>
+							)}
+							{/* Route string (PDX) */}
+							{routeStr && (
+								<div className={styles.schedTooltipRow}>
+									<span className={styles.schedTooltipRowIcon} style={{ fontSize: '0.7rem' }}>🗺</span>
+									<span className={styles.schedTooltipRowLabel}>航路</span>
+									<span className={styles.schedTooltipRouteValue}>{routeStr}</span>
+								</div>
+							)}
+							{/* FT / FDP (PDX) */}
+							{pdx && (pdx.ft_minutes > 0 || pdx.fdp_minutes > 0) && (
+								<div className={styles.schedTooltipRow}>
+									<span className={styles.schedTooltipRowIcon} style={{ fontSize: '0.7rem' }}>⏱</span>
+									<span className={styles.schedTooltipRowLabel}>FT / FDP</span>
+									<span className={styles.schedTooltipRowValue}>
+										{minutesToDisplay(pdx.ft_minutes)} / {minutesToDisplay(pdx.fdp_minutes)}
+									</span>
+								</div>
+							)}
+							{/* Expandable sectors (PDX) */}
+							{pdx && sectors?.length > 0 && (
+								<div className={styles.schedTooltipSectorSection}>
+									<button
+										className={styles.schedTooltipSectorToggle}
+										onClick={() => setSectorsExpanded(v => !v)}
+									>
+										<span style={{ fontSize: '0.7rem' }}>✈</span>
+										<span>航段明細 ({sectors.length} 段)</span>
+										{sectorsExpanded ? <ChevronUp size={11} /> : <ChevronDown size={11} />}
+									</button>
+									{sectorsExpanded && (
+										<div className={styles.schedTooltipSectorList}>
+											{sectors.map((s, i) => (
+												<div key={i} className={`${styles.schedTooltipSectorRow}${s.is_highlight ? ' ' + styles.schedTooltipSectorHighlight : ''}`}>
+													<span className={styles.schedTooltipSectorFlight}>{s.flight_number}</span>
+													<span className={styles.schedTooltipSectorRoute}>
+														{s.dep_airport}
+														<span className={styles.schedTooltipSectorArrow}>→</span>
+														{s.arr_airport}
+													</span>
+													<span className={styles.schedTooltipSectorTimes}>
+														{s.dep_time?.substring(0,5)} – {s.arr_time?.substring(0,5)}
+													</span>
+												</div>
+											))}
+										</div>
+									)}
+								</div>
+							)}
+							{/* 加入換班 button — only for crew rows, not user's own schedule */}
+							{!td.isUserSchedule && (
+								<button
+									className={isAlreadySelected ? styles.schedTooltipRemoveBtn : styles.schedTooltipAddBtn}
+									onClick={() => {
+										handleDutySelect(td.employeeId, td.name, td.date, td.dutyCode);
+										setTooltipData(prev => ({ ...prev, visible: false }));
+									}}
+								>
+									{isAlreadySelected ? '✕ 移除換班' : '＋ 加入換班'}
+								</button>
+							)}
+
+							{/* Crewmates with same duty */}
+							<div className={styles.schedTooltipCrewSection}>
+								<div className={styles.schedTooltipCrewLabel}>同勤組員</div>
+								{td.sameEmployees?.length > 0 ? (
+									<div className={styles.schedTooltipCrewList}>
+										{td.sameEmployees.slice(0, 8).map((emp, i) => {
+											const baseColors = {
+												TSA: { bg: '#fee2e2', text: '#991b1b' },
+												RMQ: { bg: '#d1fae5', text: '#065f46' },
+												KHH: { bg: '#dbeafe', text: '#1e40af' },
+											};
+											const bc = baseColors[emp.base] || { bg: '#f3f4f6', text: '#374151' };
+											return (
+												<span key={i} className={styles.schedTooltipCrewBadge}
+													style={{ backgroundColor: bc.bg, color: bc.text }}>
+													{emp.name || emp.id}
+												</span>
+											);
+										})}
+										{td.sameEmployees.length > 8 && (
+											<span className={styles.schedTooltipCrewMore}>+{td.sameEmployees.length - 8}</span>
+										)}
+									</div>
+								) : (
+									<span className={styles.schedTooltipNoCrewText}>無同勤組員</span>
+								)}
+							</div>
+						</div>
+					</div>
+				);
+			})()}
 			
 			<div className={styles.scheduleContainer}>
 				<div className={styles.monthSelectionContainer}>
@@ -960,21 +1171,6 @@ export default function SchedulePage() {
 								</table>
 							</div>
 						</div>
-
-						{isMobile && (
-							<MobileInfoButton 
-								onClick={toggleMobileInfoMode}
-								isActive={mobileInfoMode}
-							/>
-						)}
-
-						{isMobile && (
-							<SelectionSummary 
-								selectedDuties={selectedDuties}
-								onClear={handleClearAll}
-								formatDate={formatDate}
-							/>
-						)}
 
 						{/* Fixed submit button - always visible at bottom */}
 						<div className={styles.submitButtonFixed}>

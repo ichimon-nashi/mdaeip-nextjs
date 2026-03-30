@@ -135,7 +135,7 @@
 	align-items: center;
 	gap: 6px;
 	padding: 8px 14px;
-	background: #377af7;
+	background: #0f62fe;
 	color: #fff;
 	border: none;
 	border-radius: 8px;
@@ -147,10 +147,30 @@
 	white-space: nowrap;
 }
 .btnPrimary:hover {
-	background: #044acc;
+	background: #0353e9;
 }
 
 .btnSecondary {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	padding: 8px 14px;
+	background: #fff;
+	color: #333;
+	border: 1px solid #ddd;
+	border-radius: 8px;
+	font-size: 13px;
+	font-weight: 500;
+	cursor: pointer;
+	transition: background 0.15s;
+	font-family: inherit;
+	white-space: nowrap;
+}
+.btnSecondary:hover {
+	background: #f5f5f5;
+}
+
+.btnExport {
 	display: flex;
 	align-items: center;
 	gap: 6px;
@@ -166,7 +186,7 @@
 	font-family: inherit;
 	white-space: nowrap;
 }
-.btnSecondary:hover {
+.btnExport:hover {
 	background: #ea5e2b;
 }
 
@@ -175,7 +195,7 @@
 	align-items: center;
 	gap: 6px;
 	padding: 8px 16px;
-	background: #2fac5d;
+	background: #16a34a;
 	color: #fff;
 	border: none;
 	border-radius: 8px;
@@ -187,7 +207,27 @@
 	white-space: nowrap;
 }
 .btnPublish:hover {
-	background: #08923a;
+	background: #15803d;
+}
+
+.btnUnpublish {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	padding: 8px 16px;
+	background: #dc2626;
+	color: #fff;
+	border: none;
+	border-radius: 8px;
+	font-size: 13px;
+	font-weight: 600;
+	cursor: pointer;
+	transition: background 0.15s;
+	font-family: inherit;
+	white-space: nowrap;
+}
+.btnUnpublish:hover {
+	background: #b91c1c;
 }
 
 /* (base filter removed — use per-row hide toggle instead) */

@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useRouter } from 'next/navigation';
-import { Plane, Moon, Clock, TreePalm, CircleHelp, ChevronLeft, ChevronRight, X, Sun } from 'lucide-react';
+import { Plane, Moon, Clock, TreePalm, CircleHelp, ChevronLeft, ChevronRight, X, Sun, ChevronDown, ChevronUp } from 'lucide-react';
 import toast from 'react-hot-toast';
 import styles from '../../styles/Dashboard.module.css';
 import { 
@@ -11,6 +11,7 @@ import {
 	getAllSchedulesForMonth
 } from '../../lib/DataRoster';
 import { supabase, flightDutyHelpers } from '../../lib/supabase';
+import { minutesToDisplay } from '../../lib/pdxHelpers';
 
 // ─── parse YYYY-MM-DD using local parts (avoids UTC-shift off-by-one bug) ───
 const parseDateStr = (dateStr) => {
@@ -24,6 +25,34 @@ const getLocalTodayStr = () => {
 	return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
 };
 
+// ─── ISO weekday: 1=Mon … 7=Sun ─────────────────────────────────────────────
+const isoWeekday = (dateStr) => {
+	const { year, month, day } = parseDateStr(dateStr);
+	const dow = new Date(year, month, day).getDay(); // 0=Sun
+	return dow === 0 ? 7 : dow;
+};
+
+// ─── Does a pdx_duty row apply to a given YYYY-MM-DD date? ──────────────────
+// Priority: specific_dates (exact) > date_from/date_to + active_weekdays
+const pdxDutyAppliesToDate = (duty, dateStr) => {
+	if (duty.specific_dates?.length) {
+		return duty.specific_dates.includes(dateStr);
+	}
+	if (dateStr < duty.date_from || dateStr > duty.date_to) return false;
+	const iso = isoWeekday(dateStr);
+	return duty.active_weekdays?.includes(iso) ?? false;
+};
+
+// ─── Find the best matching pdx duty for a code+date from a month's duty list ─
+// specific_dates entries win over range+weekday entries (special day priority)
+const findPdxDuty = (duties, dutyCode, dateStr) => {
+	const matches = duties.filter(d => d.duty_code === dutyCode && pdxDutyAppliesToDate(d, dateStr));
+	if (!matches.length) return null;
+	// Prefer specific_dates entries (special day override)
+	const specific = matches.find(d => d.specific_dates?.length);
+	return specific || matches[0];
+};
+
 export default function DashboardPage() {
 	const { user, loading } = useAuth();
 	const router = useRouter();
@@ -35,6 +64,7 @@ export default function DashboardPage() {
 	const [activeDate, setActiveDate] = useState(null);
 	const [tooltipDate, setTooltipDate] = useState(null);
 	const [tooltipPos, setTooltipPos] = useState({ x: 0, y: 0, above: false });
+	const [sectorsExpanded, setSectorsExpanded] = useState(false);
 	const [calendarMonth, setCalendarMonth] = useState(() => {
 		const now = new Date();
 		return { year: now.getFullYear(), month: now.getMonth() };
@@ -66,6 +96,11 @@ export default function DashboardPage() {
 			document.removeEventListener('mousedown', handleOutsideClick);
 			document.removeEventListener('touchstart', handleOutsideClick);
 		};
+	}, [tooltipDate]);
+
+	// Reset sector expansion when tooltip changes date
+	useEffect(() => {
+		setSectorsExpanded(false);
 	}, [tooltipDate]);
 
 	// ─── Duty color system ───────────────────────────────────────────────────
@@ -127,6 +162,14 @@ export default function DashboardPage() {
 		if (!loading && user?.id) fetchScheduleData();
 	}, [user, loading]);
 
+	// ─── Build a route string from PDX sectors e.g. "KHH→TSA→KHH→RMQ→KHH" ──
+	const buildRouteString = (sectors) => {
+		if (!sectors?.length) return null;
+		const airports = [sectors[0].dep_airport];
+		sectors.forEach(s => airports.push(s.arr_airport));
+		return airports.join('→');
+	};
+
 	const fetchScheduleData = async () => {
 		try {
 			setIsLoading(true);
@@ -140,6 +183,7 @@ export default function DashboardPage() {
 				monthsToLoad.push(`${d.getFullYear()}年${String(d.getMonth() + 1).padStart(2, '0')}月`);
 			}
 
+			// ── 1. Load roster schedules (unchanged) ────────────────────────
 			const allMonthsSchedules = await Promise.all(monthsToLoad.map(m => getAllSchedulesForMonth(m)));
 			
 			const monthsWithData = new Set();
@@ -156,6 +200,73 @@ export default function DashboardPage() {
 			const allSchedulesByMonth = {};
 			allMonthsSchedules.forEach((schedules, idx) => { allSchedulesByMonth[monthsToLoad[idx]] = schedules; });
 
+			// ── 2. Bulk-load PDX data for all months (one query set per month) ─
+			// pdx_months stores year (int) and month (int), not a label string.
+			// Parse each roster month label to year+month ints for matching.
+			const pdxDataByMonthLabel = {}; // key: "2026年03月" → { duties, sectorsById }
+
+			await Promise.all(monthsToLoad.map(async (label) => {
+				const match = label.match(/^(\d{4})年(\d{2})月$/);
+				if (!match) return;
+				const yr = parseInt(match[1]);
+				const mo = parseInt(match[2]);
+
+				// Find the pdx_months row for this year+month
+				const { data: monthRow, error: monthErr } = await supabase
+					.from('pdx_months')
+					.select('id, status')
+					.eq('year', yr)
+					.eq('month', mo)
+					.eq('status', 'published')
+					.single();
+
+				// No published PDX month for this period — that's fine, skip silently
+				if (monthErr || !monthRow) return;
+
+				// Fetch all duties for this month (includes stats fields via pdx_duty_stats view)
+				const { data: duties, error: dutiesErr } = await supabase
+					.from('pdx_duty_stats')
+					.select('*')
+					.eq('month_id', monthRow.id);
+
+				if (dutiesErr || !duties?.length) return;
+
+				// Fetch all sectors for all duties in this month in one query
+				const dutyIds = duties.map(d => d.duty_id);
+				const { data: sectors, error: sectorsErr } = await supabase
+					.from('pdx_sectors')
+					.select('*')
+					.in('duty_id', dutyIds)
+					.order('seq', { ascending: true });
+
+				// Also fetch full duty rows (need specific_dates, active_weekdays, date_from, date_to)
+				const { data: fullDuties, error: fullDutiesErr } = await supabase
+					.from('pdx_duties')
+					.select('*')
+					.eq('month_id', monthRow.id);
+
+				if (fullDutiesErr) return;
+
+				// Build a lookup: duty_id → sectors array
+				const sectorsById = {};
+				(sectors || []).forEach(s => {
+					if (!sectorsById[s.duty_id]) sectorsById[s.duty_id] = [];
+					sectorsById[s.duty_id].push(s);
+				});
+
+				// Merge stats into full duty rows for convenience
+				const statsById = {};
+				(duties || []).forEach(d => { statsById[d.duty_id] = d; });
+
+				const mergedDuties = (fullDuties || []).map(d => ({
+					...d,
+					...(statsById[d.id] || {}),
+				}));
+
+				pdxDataByMonthLabel[label] = { duties: mergedDuties, sectorsById };
+			}));
+
+			// ── 3. Build date range to display ──────────────────────────────
 			const startDate = new Date(todayYear, todayMonth - 1, 1);
 			const endDate   = new Date(todayYear, todayMonth + 3, 0);
 			const allDatesToShow = new Set();
@@ -165,6 +276,7 @@ export default function DashboardPage() {
 			
 			const sortedDates = Array.from(allDatesToShow).sort();
 
+			// ── 4. Per-date enrichment ───────────────────────────────────────
 			const dataPromises = sortedDates.map(async (date) => {
 				const duty = allUserSchedules[date];
 				const dutyStr = duty?.toString() || '';
@@ -176,6 +288,9 @@ export default function DashboardPage() {
 				let dutyCode = '', reportingTime = '', endTime = '', dutyType = '';
 				let totalSectors = 0, isDutyOff = false, isResv = false;
 				let hasData = !!duty;
+				// PDX enrichment fields
+				let pdxDutyRow = null;   // matched pdx_duty row (with stats merged)
+				let pdxSectors = null;   // array of pdx_sector rows for this duty
 
 				if (!duty) {
 					if (!monthHasData) { dutyCode = 'N/A'; hasData = false; }
@@ -202,23 +317,42 @@ export default function DashboardPage() {
 					if (isLeave) { reportingTime = 'N/A'; endTime = 'N/A'; }
 					else if (isOffice) { reportingTime = reportingTime || '08:30'; endTime = endTime || '17:30'; }
 					
-					if ((!reportingTime || !endTime) && !isLeave && !isOffice && dutyCode && !['OFF','RESV','空','N/A'].includes(dutyCode)) {
-						try {
-							const { year: yr, month: mo } = parseDateStr(date);
-							const ms = `${yr}年${String(mo + 1).padStart(2, '0')}月`;
-							const flightDetails = await flightDutyHelpers.getFlightDutyDetails(dutyCode.split('\\')[0], date, ms);
-							if (flightDetails?.data) {
-								const det = flightDetails.data;
-								if (det.reporting_time) reportingTime = det.reporting_time.substring(0, 5);
-								if (det.end_time) endTime = det.end_time.substring(0, 5);
-								if (det.duty_type) dutyType = det.duty_type;
+					// ── PDX lookup (primary source for flight duties) ────────
+					if (!isLeave && !isOffice) {
+						const baseDutyCode = dutyCode.split('\\')[0];
+						const pdxMonthData = pdxDataByMonthLabel[dateMonthString];
+
+						if (pdxMonthData) {
+							const matched = findPdxDuty(pdxMonthData.duties, baseDutyCode, date);
+							if (matched) {
+								pdxDutyRow = matched;
+								pdxSectors = pdxMonthData.sectorsById[matched.id] || [];
+								// Use PDX times — these are the accurate dispatch times
+								if (matched.reporting_time) reportingTime = matched.reporting_time.substring(0, 5);
+								if (matched.duty_end_time)  endTime = matched.duty_end_time.substring(0, 5);
+								if (matched.aircraft_type)  dutyType = matched.aircraft_type;
+								if (matched.sector_count)   totalSectors = matched.sector_count;
 							}
-						} catch (err) {
-							console.error(`Error fetching flight details for ${dutyCode} on ${date}:`, err);
+						}
+
+						// ── Fallback to flight_duty_records if PDX had no match ─
+						if (!pdxDutyRow && (!reportingTime || !endTime)) {
+							try {
+								const flightDetails = await flightDutyHelpers.getFlightDutyDetails(baseDutyCode, date, dateMonthString);
+								if (flightDetails?.data) {
+									const det = flightDetails.data;
+									if (det.reporting_time) reportingTime = det.reporting_time.substring(0, 5);
+									if (det.end_time)       endTime = det.end_time.substring(0, 5);
+									if (det.duty_type)      dutyType = det.duty_type;
+								}
+							} catch (err) {
+								console.error(`Error fetching flight details for ${baseDutyCode} on ${date}:`, err);
+							}
 						}
 					}
 				}
 
+				// ── Crewmates: roster prefix matching (unchanged) ────────────
 				const monthSchedules = allSchedulesByMonth[dateMonthString] || [];
 				const isEmptyDuty = dutyCode === '空';
 				const dutyPrefix = dutyStr.split('\\')[0];
@@ -232,7 +366,13 @@ export default function DashboardPage() {
 					})
 					.map(s => ({ name: s.name, base: s.base }));
 
-				return { date, dutyCode, reportingTime, endTime, dutyType, totalSectors, isDutyOff, isResv, hasData, crewmates, rawDuty: dutyStr };
+				return {
+					date, dutyCode, reportingTime, endTime, dutyType,
+					totalSectors, isDutyOff, isResv, hasData, crewmates,
+					rawDuty: dutyStr,
+					pdxDutyRow,   // null if no PDX match
+					pdxSectors,   // null if no PDX match
+				};
 			});
 
 			const scheduleArray = await Promise.all(dataPromises);
@@ -271,7 +411,7 @@ export default function DashboardPage() {
 		if (tooltipDate === dateStr) { setTooltipDate(null); return; }
 
 		const rect = e.currentTarget.getBoundingClientRect();
-		const tooltipHeight = 240;
+		const tooltipHeight = 280;
 		const tooltipWidth  = 300;
 		const viewportH = window.innerHeight;
 		const viewportW = window.innerWidth;
@@ -352,6 +492,109 @@ export default function DashboardPage() {
 	const todayItem    = getScheduleItem(todayStr);
 	const tomorrowItem = getScheduleItem(tomorrowStr);
 	const greeting     = getGreeting();
+
+	// ─── Tooltip body: PDX enriched section ─────────────────────────────────
+	const renderTooltipFlightDetails = (item) => {
+		const pdx = item.pdxDutyRow;
+		const sectors = item.pdxSectors;
+		const hasPdx = !!pdx;
+		const routeStr = hasPdx ? buildRouteString(sectors) : null;
+
+		return (
+			<>
+				{/* Time row — always show if available */}
+				{(item.reportingTime || item.endTime) && (
+					<div className={styles.tooltipRow}>
+						<Clock size={14} className={styles.tooltipRowIcon} />
+						<span className={styles.tooltipRowLabel}>時間</span>
+						<span className={styles.tooltipRowValue}>
+							{item.reportingTime || '—'} → {item.endTime || '—'}
+						</span>
+					</div>
+				)}
+
+				{/* Aircraft type badge (PDX only) */}
+				{hasPdx && pdx.aircraft_type && (
+					<div className={styles.tooltipRow}>
+						<Plane size={14} className={styles.tooltipRowIcon} />
+						<span className={styles.tooltipRowLabel}>機型</span>
+						<span className={styles.tooltipRowValue}>
+							{pdx.aircraft_type}
+							{pdx.is_international && (
+								<span className={styles.tooltipIntlBadge}>國際</span>
+							)}
+						</span>
+					</div>
+				)}
+
+				{/* Fallback: duty type from old table */}
+				{!hasPdx && item.dutyType && (
+					<div className={styles.tooltipRow}>
+						<Plane size={14} className={styles.tooltipRowIcon} />
+						<span className={styles.tooltipRowLabel}>班別</span>
+						<span className={styles.tooltipRowValue}>{item.dutyType}</span>
+					</div>
+				)}
+
+				{/* Route string (PDX only) */}
+				{hasPdx && routeStr && (
+					<div className={styles.tooltipRow}>
+						<span className={styles.tooltipRowIcon} style={{ fontSize: '0.75rem' }}>🗺</span>
+						<span className={styles.tooltipRowLabel}>航路</span>
+						<span className={styles.tooltipRouteValue}>{routeStr}</span>
+					</div>
+				)}
+
+				{/* FT / FDP (PDX only) */}
+				{hasPdx && (pdx.ft_minutes > 0 || pdx.fdp_minutes > 0) && (
+					<div className={styles.tooltipRow}>
+						<span className={styles.tooltipRowIcon} style={{ fontSize: '0.75rem' }}>⏱</span>
+						<span className={styles.tooltipRowLabel}>FT / FDP</span>
+						<span className={styles.tooltipRowValue}>
+							{minutesToDisplay(pdx.ft_minutes)} / {minutesToDisplay(pdx.fdp_minutes)}
+						</span>
+					</div>
+				)}
+
+				{/* Sectors (fallback count or PDX expandable detail) */}
+				{hasPdx && sectors?.length > 0 ? (
+					<div className={styles.tooltipSectorSection}>
+						<button
+							className={styles.tooltipSectorToggle}
+							onClick={() => setSectorsExpanded(v => !v)}
+						>
+							<span className={styles.tooltipRowIcon} style={{ fontSize: '0.75rem' }}>✈</span>
+							<span>航段明細 ({sectors.length} 段)</span>
+							{sectorsExpanded ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
+						</button>
+						{sectorsExpanded && (
+							<div className={styles.tooltipSectorList}>
+								{sectors.map((s, i) => (
+									<div key={i} className={`${styles.tooltipSectorRow} ${s.is_highlight ? styles.tooltipSectorHighlight : ''}`}>
+										<span className={styles.tooltipSectorFlight}>{s.flight_number}</span>
+										<span className={styles.tooltipSectorRoute}>
+											{s.dep_airport}
+											<span className={styles.tooltipSectorArrow}>→</span>
+											{s.arr_airport}
+										</span>
+										<span className={styles.tooltipSectorTimes}>
+											{s.dep_time?.substring(0,5)} – {s.arr_time?.substring(0,5)}
+										</span>
+									</div>
+								))}
+							</div>
+						)}
+					</div>
+				) : item.totalSectors > 0 ? (
+					<div className={styles.tooltipRow}>
+						<span className={styles.tooltipRowIcon} style={{ fontSize: '0.75rem' }}>✈</span>
+						<span className={styles.tooltipRowLabel}>航段</span>
+						<span className={styles.tooltipRowValue}>{item.totalSectors} 段</span>
+					</div>
+				) : null}
+			</>
+		);
+	};
 
 	if (loading) return (
 		<div className={styles.loadingScreen}>
@@ -572,29 +815,11 @@ export default function DashboardPage() {
 										待命備用：需保持聯絡，隨時準備執勤
 									</div>
 								)}
-								{(tooltipItem.reportingTime || tooltipItem.endTime) && !tooltipItem.isResv && (
-									<div className={styles.tooltipRow}>
-										<Clock size={14} className={styles.tooltipRowIcon} />
-										<span className={styles.tooltipRowLabel}>時間</span>
-										<span className={styles.tooltipRowValue}>
-											{tooltipItem.reportingTime || '—'} → {tooltipItem.endTime || '—'}
-										</span>
-									</div>
-								)}
-								{tooltipItem.dutyType && (
-									<div className={styles.tooltipRow}>
-										<Plane size={14} className={styles.tooltipRowIcon} />
-										<span className={styles.tooltipRowLabel}>班別</span>
-										<span className={styles.tooltipRowValue}>{tooltipItem.dutyType}</span>
-									</div>
-								)}
-								{tooltipItem.totalSectors > 0 && (
-									<div className={styles.tooltipRow}>
-										<span className={styles.tooltipRowIcon} style={{ fontSize: '0.75rem' }}>✈</span>
-										<span className={styles.tooltipRowLabel}>航段</span>
-										<span className={styles.tooltipRowValue}>{tooltipItem.totalSectors} 段</span>
-									</div>
-								)}
+
+								{/* Flight duty details (PDX-enriched or fallback) */}
+								{!tooltipItem.isResv && renderTooltipFlightDetails(tooltipItem)}
+
+								{/* Crewmates */}
 								{!tooltipItem.isResv && (
 									<div className={styles.tooltipCrewSection}>
 										<div className={styles.tooltipCrewLabel}>同勤組員</div>
