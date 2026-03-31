@@ -43,7 +43,7 @@
 .welcomeIcon {
 	display: flex;
 	align-items: center;
-	color: #fde68a;
+	color: #d97706;
 	flex-shrink: 0;
 }
 
@@ -93,15 +93,28 @@
 	display: flex;
 	flex-direction: column;
 	gap: 0.5rem;
+	margin-top: 0.25rem;
 }
 
+/* Today — brighter mini-card */
 .welcomeDutyRow {
 	display: flex;
 	align-items: center;
 	gap: 0.5rem;
+	background: rgba(255,255,255,0.22);
+	border: 1px solid rgba(255,255,255,0.4);
+	border-radius: 0.625rem;
+	padding: 0.375rem 0.625rem;
 }
 
-.welcomeDutyRowSecondary { opacity: 0.8; }
+/* Tomorrow — dimmer mini-card */
+.welcomeDutyRowSecondary {
+	background: rgba(255,255,255,0.08);
+	border: 1px solid rgba(255,255,255,0.18);
+	border-radius: 0.625rem;
+	padding: 0.375rem 0.625rem;
+	opacity: 0.85;
+}
 
 .welcomeDayLabel {
 	display: flex;
@@ -112,18 +125,20 @@
 }
 
 .welcomeDayBadge {
-	background: rgba(255,255,255,0.9);
+	background: white;
 	color: #1e40af;
 	font-size: 0.6875rem;
 	font-weight: 800;
-	padding: 0.15rem 0.45rem;
+	padding: 0.2rem 0.5rem;
 	border-radius: 0.375rem;
 	flex-shrink: 0;
+	box-shadow: 0 1px 4px rgba(0,0,0,0.15);
 }
 
 .welcomeDayBadgeTomorrow {
-	background: rgba(255,255,255,0.55);
-	color: white;
+	background: rgba(255,255,255,0.35);
+	color: rgba(255,255,255,0.9);
+	box-shadow: none;
 }
 
 .welcomeDayDate {
@@ -134,7 +149,6 @@
 }
 
 .welcomeDutyChip {
-	flex: 1;
 	min-width: 0;
 	padding: 0.3rem 0.625rem;
 	border-radius: 0.5rem;
@@ -144,6 +158,64 @@
 	white-space: nowrap;
 	overflow: hidden;
 	text-overflow: ellipsis;
+	align-self: flex-start;
+}
+
+/* Wrapper: route below, chip+crew on same first line */
+.welcomeDutyInfo {
+	flex: 1;
+	min-width: 0;
+	display: flex;
+	flex-direction: column;
+	gap: 0.25rem;
+}
+
+/* Top line: chip + crew side by side */
+.welcomeDutyTopLine {
+	display: flex;
+	align-items: center;
+	gap: 0.375rem;
+	flex-wrap: wrap;
+	min-width: 0;
+}
+
+/* Route string */
+.welcomeRoute {
+	font-size: 0.7rem;
+	color: rgba(255,255,255,0.75);
+	font-weight: 500;
+	letter-spacing: 0.03em;
+	padding-left: 0.125rem;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+/* Crewmate badges row */
+.welcomeCrewRow {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 0.25rem;
+}
+
+.welcomeCrewBadge {
+	display: inline-block;
+	padding: 0.175rem 0.5rem;
+	border-radius: 0.3rem;
+	font-size: 0.8125rem;
+	font-weight: 600;
+	line-height: 1.4;
+	white-space: nowrap;
+}
+
+.welcomeCrewMore {
+	display: inline-block;
+	padding: 0.175rem 0.5rem;
+	border-radius: 0.3rem;
+	font-size: 0.8125rem;
+	font-weight: 600;
+	background: rgba(255,255,255,0.2);
+	color: rgba(255,255,255,0.85);
 }
 
 @media (min-width: 768px) { .welcomeDutyChip { font-size: 0.875rem; } }
@@ -694,4 +766,42 @@
 	-moz-osx-font-smoothing: grayscale;
 	font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang TC",
 		"Microsoft JhengHei", "Noto Sans TC", "Heiti TC", sans-serif;
+}
+/* ── Dispatch PDF download bar ───────────────────────────────────────────── */
+/* Slim full-width button between calendar header and weekday labels.        */
+/* Only rendered when the viewed month has a published dispatch table.       */
+.pdxDownloadBar {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	gap: 0.375rem;
+	width: 100%;
+	padding: 0.3rem 0.75rem;
+	margin-top: 0.625rem;
+	background: rgba(34, 197, 94, 0.18);
+	border: 1px solid rgba(34, 197, 94, 0.35);
+	border-radius: 0.5rem;
+	color: #bbf7d0;
+	font-size: 0.7rem;
+	font-weight: 600;
+	cursor: pointer;
+	transition: background 0.15s, opacity 0.15s;
+	flex-shrink: 0;
+	letter-spacing: 0.02em;
+}
+.pdxDownloadBar:hover:not(:disabled) {
+	background: rgba(34, 197, 94, 0.3);
+}
+.pdxDownloadBar:disabled {
+	opacity: 0.7;
+	cursor: not-allowed;
+}
+
+.calendarDownloadSpinner {
+	width: 12px;
+	height: 12px;
+	border: 2px solid rgba(255,255,255,0.3);
+	border-top-color: white;
+	border-radius: 50%;
+	animation: spin 0.8s linear infinite;
 }

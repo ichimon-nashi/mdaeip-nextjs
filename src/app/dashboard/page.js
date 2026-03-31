@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useRouter } from 'next/navigation';
-import { Plane, Moon, Clock, TreePalm, CircleHelp, ChevronLeft, ChevronRight, X, Sun, ChevronDown, ChevronUp } from 'lucide-react';
+import { Plane, Moon, Clock, TreePalm, CircleHelp, ChevronLeft, ChevronRight, X, Sun, ChevronDown, ChevronUp, Download } from 'lucide-react';
 import toast from 'react-hot-toast';
 import styles from '../../styles/Dashboard.module.css';
 import { 
@@ -12,6 +12,7 @@ import {
 } from '../../lib/DataRoster';
 import { supabase, flightDutyHelpers } from '../../lib/supabase';
 import { minutesToDisplay } from '../../lib/pdxHelpers';
+import { exportDispatchPdf } from '../../lib/pdxPdfExport';
 
 // ─── parse YYYY-MM-DD using local parts (avoids UTC-shift off-by-one bug) ───
 const parseDateStr = (dateStr) => {
@@ -65,6 +66,8 @@ export default function DashboardPage() {
 	const [tooltipDate, setTooltipDate] = useState(null);
 	const [tooltipPos, setTooltipPos] = useState({ x: 0, y: 0, above: false });
 	const [sectorsExpanded, setSectorsExpanded] = useState(false);
+	const [pdxMonthsByLabel, setPdxMonthsByLabel] = useState({}); // label → { id, year, month, revision }
+	const [downloadingPdf, setDownloadingPdf] = useState(false);
 	const [calendarMonth, setCalendarMonth] = useState(() => {
 		const now = new Date();
 		return { year: now.getFullYear(), month: now.getMonth() };
@@ -204,6 +207,7 @@ export default function DashboardPage() {
 			// pdx_months stores year (int) and month (int), not a label string.
 			// Parse each roster month label to year+month ints for matching.
 			const pdxDataByMonthLabel = {}; // key: "2026年03月" → { duties, sectorsById }
+			const publishedPdxMonths = {};   // key: label → { id, year, month, revision }
 
 			await Promise.all(monthsToLoad.map(async (label) => {
 				const match = label.match(/^(\d{4})年(\d{2})月$/);
@@ -214,7 +218,7 @@ export default function DashboardPage() {
 				// Find the pdx_months row for this year+month
 				const { data: monthRow, error: monthErr } = await supabase
 					.from('pdx_months')
-					.select('id, status')
+					.select('id, status, revision')
 					.eq('year', yr)
 					.eq('month', mo)
 					.eq('status', 'published')
@@ -222,6 +226,9 @@ export default function DashboardPage() {
 
 				// No published PDX month for this period — that's fine, skip silently
 				if (monthErr || !monthRow) return;
+
+				// Store the full month row so the download button can use it
+				publishedPdxMonths[label] = { id: monthRow.id, year: yr, month: mo, revision: monthRow.revision ?? 0 };
 
 				// Fetch all duties for this month (includes stats fields via pdx_duty_stats view)
 				const { data: duties, error: dutiesErr } = await supabase
@@ -265,6 +272,9 @@ export default function DashboardPage() {
 
 				pdxDataByMonthLabel[label] = { duties: mergedDuties, sectorsById };
 			}));
+
+			// Store published PDX month rows for the download button
+			setPdxMonthsByLabel(publishedPdxMonths);
 
 			// ── 3. Build date range to display ──────────────────────────────
 			const startDate = new Date(todayYear, todayMonth - 1, 1);
@@ -441,6 +451,21 @@ export default function DashboardPage() {
 		setCalendarMonth({ year: now.getFullYear(), month: now.getMonth() });
 		setActiveDate(getLocalTodayStr());
 		setTooltipDate(null);
+	};
+
+	const handleDownloadPdf = async () => {
+		const label = `${calendarMonth.year}年${String(calendarMonth.month + 1).padStart(2, '0')}月`;
+		const monthRow = pdxMonthsByLabel[label];
+		if (!monthRow) return;
+		setDownloadingPdf(true);
+		try {
+			await exportDispatchPdf(monthRow, (msg) => toast(msg, { icon: '⏳' }));
+			toast.success('PDF 已下載');
+		} catch (err) {
+			console.error(err);
+			toast.error('PDF 產生失敗: ' + err.message);
+		}
+		setDownloadingPdf(false);
 	};
 
 	// ─── Welcome card helpers ────────────────────────────────────────────────
@@ -629,47 +654,83 @@ export default function DashboardPage() {
 						</div>
 					) : (
 						<div className={styles.welcomeDutyRows}>
-							{/* Today */}
-							<div className={styles.welcomeDutyRow}>
-								<div className={styles.welcomeDayLabel}>
-									<span className={styles.welcomeDayBadge}>今天</span>
-									<span className={styles.welcomeDayDate}>
-										{today.getMonth()+1}月{today.getDate()}日 ({WEEKDAY_LABELS[today.getDay()]})
-									</span>
-								</div>
-								<div
-									className={styles.welcomeDutyChip}
-									style={todayItem ? {
-										backgroundColor: getDutyColors(todayItem).bg,
-										color: getDutyColors(todayItem).text,
-										borderColor: getDutyColors(todayItem).border,
-									} : { backgroundColor: 'rgba(255,255,255,0.15)', color: '#9ca3af', borderColor: 'rgba(255,255,255,0.2)' }}
-								>
-									{todayItem ? formatDutyCardText(todayItem) : '無資料'}
-								</div>
-							</div>
-
-							{/* Tomorrow */}
-							<div className={`${styles.welcomeDutyRow} ${styles.welcomeDutyRowSecondary}`}>
-								<div className={styles.welcomeDayLabel}>
-									<span className={`${styles.welcomeDayBadge} ${styles.welcomeDayBadgeTomorrow}`}>明天</span>
-									<span className={styles.welcomeDayDate}>
-										{(() => { const d = new Date(); d.setDate(d.getDate()+1); return `${d.getMonth()+1}月${d.getDate()}日 (${WEEKDAY_LABELS[d.getDay()]})`; })()}
-									</span>
-								</div>
-								<div
-									className={styles.welcomeDutyChip}
-									style={tomorrowItem ? {
-										backgroundColor: getDutyColors(tomorrowItem).bg,
-										color: getDutyColors(tomorrowItem).text,
-										borderColor: getDutyColors(tomorrowItem).border,
-									} : { backgroundColor: 'rgba(255,255,255,0.15)', color: '#9ca3af', borderColor: 'rgba(255,255,255,0.2)' }}
-								>
-									{tomorrowItem ? formatDutyCardText(tomorrowItem) : '無資料'}
-								</div>
-							</div>
+							{[
+								{ item: todayItem,    label: '今天',    isTomorrow: false,
+								  dateStr: `${today.getMonth()+1}月${today.getDate()}日 (${WEEKDAY_LABELS[today.getDay()]})` },
+								{ item: tomorrowItem, label: '明天',    isTomorrow: true,
+								  dateStr: (() => { const d = new Date(); d.setDate(d.getDate()+1); return `${d.getMonth()+1}月${d.getDate()}日 (${WEEKDAY_LABELS[d.getDay()]})`; })() },
+							].map(({ item, label, isTomorrow, dateStr }) => {
+								const colors = item ? getDutyColors(item) : null;
+								// Flight duty = has data, not OFF, not RESV, not leave, has PDX sectors
+								const isFlightDuty = item && item.hasData && !item.isDutyOff && !item.isResv
+									&& item.dutyCode !== 'N/A' && item.dutyCode !== '空'
+									&& !['A/L','例','休','G','福補','年假','ANNUAL'].some(t => item.dutyCode.includes(t) || item.rawDuty.includes(t))
+									&& !['OD','會','課','教師會','訓'].some(t => item.dutyCode.startsWith(t));
+								const routeStr = isFlightDuty ? buildRouteString(item.pdxSectors) : null;
+								const crewmates = isFlightDuty ? (item.crewmates || []) : [];
+								return (
+									<div key={label} className={`${styles.welcomeDutyRow} ${isTomorrow ? styles.welcomeDutyRowSecondary : ''}`}>
+										{/* Day label column */}
+										<div className={styles.welcomeDayLabel}>
+											<span className={`${styles.welcomeDayBadge} ${isTomorrow ? styles.welcomeDayBadgeTomorrow : ''}`}>{label}</span>
+											<span className={styles.welcomeDayDate}>{dateStr}</span>
+										</div>
+										{/* Duty info column */}
+										<div className={styles.welcomeDutyInfo}>
+											{/* Top line: duty chip + crew badges side by side */}
+											<div className={styles.welcomeDutyTopLine}>
+												<div
+													className={styles.welcomeDutyChip}
+													style={colors ? {
+														backgroundColor: colors.bg,
+														color: colors.text,
+														borderColor: colors.border,
+													} : { backgroundColor: 'rgba(255,255,255,0.15)', color: '#9ca3af', borderColor: 'rgba(255,255,255,0.2)' }}
+												>
+													{item ? formatDutyCardText(item) : '無資料'}
+												</div>
+												{/* Crew badges — right of chip, flight duties only */}
+												{crewmates.slice(0, 4).map((c, i) => {
+													const bc = getBaseColor(c.base);
+													return (
+														<span key={i} className={styles.welcomeCrewBadge}
+															style={{ backgroundColor: bc.bg, color: bc.text }}>
+															{c.name}
+														</span>
+													);
+												})}
+												{crewmates.length > 4 && (
+													<span className={styles.welcomeCrewMore}>+{crewmates.length - 4}</span>
+												)}
+											</div>
+											{/* Route — below, flight duties with PDX data only */}
+											{routeStr && (
+												<div className={styles.welcomeRoute}>{routeStr}</div>
+											)}
+										</div>
+									</div>
+								);
+							})}
 						</div>
 					)}
+
+					{/* ── Dispatch PDF download — bottom of welcome card ── */}
+					{(() => {
+						const label = `${calendarMonth.year}年${String(calendarMonth.month + 1).padStart(2, '0')}月`;
+						const hasPublished = !!pdxMonthsByLabel[label];
+						if (!hasPublished) return null;
+						return (
+							<button
+								className={styles.pdxDownloadBar}
+								onClick={handleDownloadPdf}
+								disabled={downloadingPdf}
+							>
+								{downloadingPdf
+									? <><div className={styles.calendarDownloadSpinner} /><span>產生 PDF 中...</span></>
+									: <><Download size={13} /><span>下載 {label} 任務派遣表</span></>}
+							</button>
+						);
+					})()}
 				</div>
 			</div>
 
