@@ -64,6 +64,19 @@ const useIsMobile = () => {
 	return isMobile;
 };
 
+// ─── Helper: parse "2026年04月" → { year: 2026, month: 4 } ─────────────────
+const parseMonthString = (monthStr) => {
+	const match = monthStr?.match(/^(\d{4})年(\d{2})月$/);
+	if (!match) return null;
+	return { year: parseInt(match[1]), month: parseInt(match[2]) };
+};
+
+// ─── Helper: get current real-world year/month ───────────────────────────────
+const getCurrentYearMonth = () => {
+	const now = new Date();
+	return { year: now.getFullYear(), month: now.getMonth() + 1 };
+};
+
 
 export default function SchedulePage() {
 	const { user, loading } = useAuth();
@@ -90,6 +103,11 @@ export default function SchedulePage() {
 		allDates: [],
 		otherSchedules: []
 	});
+
+	// ── NEW: swap request overlay map ────────────────────────────────────────
+	// Key: "employeeId|date"  Value: "pending" | "approved"
+	// Populated for BOTH person_a and person_b of each request so both rows light up.
+	const [swapRequestMap, setSwapRequestMap] = useState({});
 
 	// Flight duty data state - REMOVED for performance
 	// const [flightDutyData, setFlightDutyData] = useState(new Map());
@@ -128,6 +146,11 @@ export default function SchedulePage() {
 				}
 				
 				setInitialLoad(false);
+
+				// ── NEW: auto-purge old duty_change_requests records ──────
+				// Runs once on app load. Deletes records from months prior to
+				// the current real-world month (not the selected month).
+				purgeOldDutyChangeRequests();
 			} catch (error) {
 				console.error('Error loading months:', error);
 				toast.error('載入月份資料失敗');
@@ -137,6 +160,142 @@ export default function SchedulePage() {
 		
 		loadMonths();
 	}, [initialLoad]);
+
+	// ── NEW: purge old duty_change_requests (prior months) ───────────────────
+	const purgeOldDutyChangeRequests = async () => {
+		try {
+			const { year: curYear, month: curMonth } = getCurrentYearMonth();
+
+			// Fetch all distinct months in the table
+			const { data: allRecords, error } = await supabase
+				.from('duty_change_requests')
+				.select('id, month, pdf_storage_path');
+
+			if (error || !allRecords?.length) return;
+
+			// Find records from months strictly before the current real month
+			const staleRecords = allRecords.filter(record => {
+				const parsed = parseMonthString(record.month);
+				if (!parsed) return false;
+				// Before current year, or same year but before current month
+				return parsed.year < curYear || (parsed.year === curYear && parsed.month < curMonth);
+			});
+
+			if (!staleRecords.length) return;
+
+			console.log(`Purging ${staleRecords.length} stale duty change request(s)...`);
+
+			// Delete PDFs from Storage first
+			const pathsToDelete = staleRecords
+				.map(r => r.pdf_storage_path)
+				.filter(Boolean);
+
+			if (pathsToDelete.length) {
+				const { error: storageErr } = await supabase.storage
+					.from('duty-change-pdfs')
+					.remove(pathsToDelete);
+				if (storageErr) {
+					console.error('Error deleting stale PDFs from storage:', storageErr);
+				}
+			}
+
+			// Delete DB records
+			const staleIds = staleRecords.map(r => r.id);
+			const { error: deleteErr } = await supabase
+				.from('duty_change_requests')
+				.delete()
+				.in('id', staleIds);
+
+			if (deleteErr) {
+				console.error('Error purging stale duty change requests:', deleteErr);
+			} else {
+				console.log('Stale duty change requests purged successfully.');
+			}
+		} catch (err) {
+			console.error('Unexpected error during duty change purge:', err);
+		}
+	};
+
+	// ── NEW: fetch swap requests for current month and build overlay map ──────
+	useEffect(() => {
+		if (!currentMonth) return;
+
+		const fetchSwapRequests = async () => {
+			try {
+				const { data, error } = await supabase
+					.from('duty_change_requests')
+					.select('person_a_id, person_b_id, selected_dates, all_duties, person_a_duties, status')
+					.eq('month', currentMonth)
+					.in('status', ['pending', 'approved']);
+
+				if (error) {
+					console.error('Error fetching swap requests:', error);
+					return;
+				}
+
+				if (!data?.length) {
+					setSwapRequestMap({});
+					return;
+				}
+
+				// map key: "employeeId|date"
+				// map value: { status, swappedDuty }
+				// swappedDuty = the duty the person RECEIVES after the approved swap
+				const map = {};
+
+				data.forEach(req => {
+					const status = req.status; // 'pending' | 'approved'
+
+					// Build lookup: date → duty for each party
+					// person_a_duties: [{date, duty}] — A's original duties
+					// all_duties:      [{date, duty}] — B's original duties
+					const aDuties = Array.isArray(req.person_a_duties) ? req.person_a_duties : [];
+					const bDuties = Array.isArray(req.all_duties)       ? req.all_duties       : [];
+
+					const aDutyByDate = {};
+					aDuties.forEach(d => { if (d?.date) aDutyByDate[d.date] = d.duty || ''; });
+
+					const bDutyByDate = {};
+					bDuties.forEach(d => { if (d?.date) bDutyByDate[d.date] = d.duty || ''; });
+
+					// Person A's cells: they RECEIVE B's duty on those dates
+					const selectedDates = Array.isArray(req.selected_dates) ? req.selected_dates : [];
+					selectedDates.forEach(date => {
+						const key = `${req.person_a_id}|${date}`;
+						const existing = map[key];
+						if (!existing || status === 'approved') {
+							map[key] = {
+								status,
+								// A receives B's duty for this date
+								swappedDuty: status === 'approved' ? (bDutyByDate[date] ?? null) : null,
+							};
+						}
+					});
+
+					// Person B's cells: they RECEIVE A's duty on those dates
+					bDuties.forEach(dutyItem => {
+						if (!dutyItem?.date) return;
+						const date = dutyItem.date;
+						const key = `${req.person_b_id}|${date}`;
+						const existing = map[key];
+						if (!existing || status === 'approved') {
+							map[key] = {
+								status,
+								// B receives A's duty for this date
+								swappedDuty: status === 'approved' ? (aDutyByDate[date] ?? null) : null,
+							};
+						}
+					});
+				});
+
+				setSwapRequestMap(map);
+			} catch (err) {
+				console.error('Unexpected error fetching swap requests:', err);
+			}
+		};
+
+		fetchSwapRequests();
+	}, [currentMonth]);
 
 	// Set user's base as default tab only once after initial load
 	useEffect(() => {
@@ -727,6 +886,7 @@ export default function SchedulePage() {
 		</thead>
 	), [scheduleData.allDates, formatDate, getDayOfWeek, isMobile]);
 
+	// ── UPDATED renderTableRow: reads swapRequestMap for outline classes ──────
 	const renderTableRow = useCallback((schedule, isUserSchedule = false) => (
 		<tr key={schedule.employeeID}>
 			{!isMobile && (
@@ -761,22 +921,44 @@ export default function SchedulePage() {
 					item.employeeId === schedule.employeeID && item.date === date
 				);
 
+				// ── Swap request overlay ─────────────────────────────────
+				const swapEntry     = swapRequestMap[`${schedule.employeeID}|${date}`];
+				const swapStatus    = swapEntry?.status;
+				const isSwapPending  = swapStatus === 'pending';
+				const isSwapApproved = swapStatus === 'approved';
+
+				// For approved swaps: display the received duty instead of the original.
+				// Fall back to original if swappedDuty is null (e.g. old records without person_a_duties).
+				// Keep original `duty` for click handler so PDX tooltip still works correctly.
+				const displayedDuty = (isSwapApproved && swapEntry?.swappedDuty != null)
+					? swapEntry.swappedDuty
+					: (duty || '空');
+				const formattedDisplayDuty = formatDutyText(displayedDuty);
+				const displayFontSizeClass = getDutyFontSize(displayedDuty);
+				// Background color follows the displayed duty so colours stay meaningful
+				const displayBgClass = isSwapApproved && swapEntry?.swappedDuty != null
+					? getDutyBackgroundColor(swapEntry.swappedDuty)
+					: bgColorClass;
+
 				let className = styles.dutyCell;
 				if (!isUserSchedule) className += ' ' + styles.selectable;
-				if (bgColorClass) className += ' ' + bgColorClass;
+				if (displayBgClass) className += ' ' + displayBgClass;
 				if (isSelected) className += ' ' + styles.selected;
+				if (isSwapApproved) className += ' ' + styles.dutyCellApproved;
+				else if (isSwapPending) className += ' ' + styles.dutyCellPending;
 
 				return (
 					<td
 						key={date}
 						className={className}
+						// Pass original duty to click handler so PDX tooltip data is correct
 						onClick={(e) => handleDutyCellClick(e, schedule.employeeID, schedule.name, date, duty, sameEmployees, isUserSchedule)}
 					>
-						<div className={styles.dutyContent + ' ' + styles[fontSizeClass]}>
-							{formattedDuty.split('\n').map((line, index) => (
+						<div className={styles.dutyContent + ' ' + styles[displayFontSizeClass]}>
+							{formattedDisplayDuty.split('\n').map((line, index) => (
 								<React.Fragment key={index}>
 									{line}
-									{index < formattedDuty.split('\n').length - 1 && <br />}
+									{index < formattedDisplayDuty.split('\n').length - 1 && <br />}
 								</React.Fragment>
 							))}
 						</div>
@@ -784,7 +966,8 @@ export default function SchedulePage() {
 				);
 			})}
 		</tr>
-	), [scheduleData.allDates, selectedDuties, formatDutyText, getDutyBackgroundColor, getDutyFontSize, getEmployeesWithSameDuty, handleDutyCellClick, handleNameCellClick, isMobile]);
+	// ── swapRequestMap added to dependency array ──────────────────────────────
+	), [scheduleData.allDates, selectedDuties, swapRequestMap, formatDutyText, getDutyBackgroundColor, getDutyFontSize, getEmployeesWithSameDuty, handleDutyCellClick, handleNameCellClick, isMobile]);
 
 	// Table sync effects
 	useEffect(() => {
@@ -1170,6 +1353,18 @@ export default function SchedulePage() {
 									</tbody>
 								</table>
 							</div>
+						</div>
+
+						{/* ── Swap status legend ── */}
+						<div className={styles.swapLegend}>
+							<span className={styles.swapLegendItem}>
+								<span className={styles.swapLegendDotPending} />
+								審核中
+							</span>
+							<span className={styles.swapLegendItem}>
+								<span className={styles.swapLegendDotApproved} />
+								已核准
+							</span>
 						</div>
 
 						{/* Fixed submit button - always visible at bottom */}

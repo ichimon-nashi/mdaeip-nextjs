@@ -3,6 +3,25 @@ import { scheduleHelpers, flightDutyHelpers } from "./supabase";
 const scheduleCache = new Map();
 const employeeCache = new Map();
 
+// ── Clear cached data for a specific month (call after schedule DB updates) ──
+// Pass the month string e.g. "2026年04月" to invalidate that month's cache.
+// Both caches are cleared since employeeCache entries reference scheduleCache data.
+export const clearScheduleCache = (month) => {
+	scheduleCache.forEach((_, key) => {
+		// Clear exact month key and any base-filtered keys for that month
+		if (key === month || key.startsWith(month + '-')) {
+			scheduleCache.delete(key);
+		}
+	});
+	employeeCache.forEach((_, key) => {
+		// Employee cache keys are "employeeId-month"
+		if (key.endsWith('-' + month)) {
+			employeeCache.delete(key);
+		}
+	});
+	console.log(`Schedule cache cleared for month: ${month}`);
+};
+
 export const employeeList = [
 	{ id: "21701", name: "陳怡如", rank: "經理", base: "TSA" },
 	{ id: "20580", name: "陳秀英", rank: "組長", base: "TSA" },
@@ -384,11 +403,7 @@ export const uploadScheduleData = async (scheduleData, userAccessLevel) => {
 	);
 };
 
-// Clear cache when needed (useful for development)
-export const clearScheduleCache = () => {
-	scheduleCache.clear();
-	employeeCache.clear();
-};
+// clearScheduleCache is exported above (month-specific version)
 
 // Flight duty cache
 const flightDutyCache = new Map();

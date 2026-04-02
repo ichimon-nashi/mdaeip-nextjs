@@ -322,6 +322,7 @@ const DatabaseManagement = () => {
 				gday: { access: false },
 				etr_generator: { access: false },
 				dispatch: { access: false },
+				duty_change_review: { access: false },
 				database_management: { access: false },
 				turtle_ranking: { access: false },
 			},
@@ -345,6 +346,7 @@ const DatabaseManagement = () => {
 				gday: { access: false },
 				etr_generator: { access: false },
 				dispatch: { access: false },
+				duty_change_review: { access: false },
 				database_management: { access: false },
 				turtle_ranking: { access: false },
 			},
@@ -976,6 +978,7 @@ const DatabaseManagement = () => {
 											{ key: "gday", label: "GDay劃假" },
 											{ key: "etr_generator", label: "eTR產生器" },
 											{ key: "dispatch", label: "派遣表系統" },
+											{ key: "duty_change_review", label: "換班審核" },
 											{ key: "turtle_ranking", label: "烏龜排行榜 🐢" },
 											{ key: "database_management", label: "資料庫管理" },
 										].map(({ key, label }) => (

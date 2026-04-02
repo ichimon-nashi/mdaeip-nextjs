@@ -147,13 +147,20 @@ export const patchUpdates = [
 		appName: "烏龜排行榜",
 		updateInfo: ["建立初版烏龜排行榜"],
 	},
-		{
+	{
 		date: "2026-03-30",
 		appName: "任務互換系統",
 		updateInfo: [
 			"點選任務會有更詳細飛航資訊",
 			"產生換班pdf增加顏色及自動寄送FT差異",
 			"點選組員名字會秀出當月飛航資訊",
+		],
+	},
+	{
+		date: "2026-04-02",
+		appName: "換班審核系統",
+		updateInfo: [
+			"新增換班審核系統",
 		],
 	},
 ];

@@ -479,6 +479,110 @@ function DutyChangeContent() {
 	// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [formData.selectedMonth, formData.allDuties, formData.selectedDates, userSchedule]);
 
+	// ── Check submission quota for current user this month ───────────────────
+	const checkSubmissionQuota = async (personAId, personBId, month) => {
+		// Count active requests for submission_number tracking (no hard limit enforced)
+		const [{ data: aData, error: aError }, { data: bData, error: bError }] = await Promise.all([
+			supabase
+				.from("duty_change_requests")
+				.select("id")
+				.eq("person_a_id", personAId)
+				.eq("month", month)
+				.in("status", ["pending", "approved"]),
+			supabase
+				.from("duty_change_requests")
+				.select("id")
+				.eq("person_b_id", personBId)
+				.eq("month", month)
+				.in("status", ["pending", "approved"]),
+		]);
+
+		if (aError || bError) throw new Error("無法確認申請次數，請稍後再試");
+
+		const aUsed = aData?.length ?? 0;
+		const bUsed = bData?.length ?? 0;
+
+		// Warn when reaching or exceeding 3 (non-blocking — PDF still generated)
+		if (aUsed >= 3) {
+			toast("⚠️ 注意：您本月換班申請已達3次，請確認是否繼續", { duration: 6000, icon: "⚠️" });
+		}
+		if (bUsed >= 3) {
+			toast("⚠️ 注意：乙方本月換班申請已達3次，請確認是否繼續", { duration: 6000, icon: "⚠️" });
+		}
+
+		return {
+			personASubmissionNumber: aUsed + 1,
+			personBSubmissionNumber: bUsed + 1,
+		};
+	};
+
+	// ── Upload PDF blob to Supabase Storage ──────────────────────────────────
+	const uploadPdfToStorage = async (pdfBlob, personAId, month) => {
+		const timestamp = Date.now();
+		// Convert "2026年04月" → "2026-04" for a Storage-safe ASCII key
+		const monthMatch = month.match(/^(\d{4})年(\d{2})月$/);
+		const safeMonth = monthMatch ? `${monthMatch[1]}-${monthMatch[2]}` : "unknown";
+		const filePath = `${personAId}/${safeMonth}_${timestamp}.pdf`;
+
+		const { error } = await supabase.storage
+			.from("duty-change-pdfs")
+			.upload(filePath, pdfBlob, {
+				contentType: "application/pdf",
+				upsert: false,
+			});
+
+		if (error) {
+			console.error("Error uploading PDF to storage:", error);
+			throw new Error("PDF上傳失敗");
+		}
+
+		return filePath;
+	};
+
+	// ── Insert request record into DB ─────────────────────────────────────────
+	const insertDutyChangeRequest = async ({
+		personASubmissionNumber,
+		personBSubmissionNumber,
+		pdfStoragePath,
+		personADuties,
+		ftPersonA,
+		ftPersonB,
+		ftDeltaA,
+		ftDeltaB,
+	}) => {
+		const { error } = await supabase
+			.from("duty_change_requests")
+			.insert({
+				month:                    formData.selectedMonth,
+				person_a_id:              formData.firstID,
+				person_a_name:            formData.firstName,
+				person_b_id:              formData.secondID,
+				person_b_name:            formData.secondName,
+				// Person A's duties (date + duty code) built at submit time
+				person_a_duties:          personADuties,
+				// Person A's selected dates (kept for schedule overlay lookup)
+				selected_dates:           formData.selectedDates,
+				// Person B's duties (date + duty code, from selection)
+				all_duties:               formData.allDuties,
+				status:                   "pending",
+				// Separate submission counters for each party
+				submission_number:        personASubmissionNumber, // kept for backwards compat
+				person_a_submission_number: personASubmissionNumber,
+				person_b_submission_number: personBSubmissionNumber,
+				// FT data in minutes
+				ft_person_a:              ftPersonA ?? null,
+				ft_person_b:              ftPersonB ?? null,
+				ft_delta_a:               ftDeltaA ?? null,
+				ft_delta_b:               ftDeltaB ?? null,
+				pdf_storage_path:         pdfStoragePath,
+			});
+
+		if (error) {
+			console.error("Error inserting duty change request:", error);
+			throw new Error("申請紀錄儲存失敗");
+		}
+	};
+
 	const generatePDFFromTemplate = async () => {
 		try {
 			setIsLoading(true);
@@ -487,6 +591,23 @@ function DutyChangeContent() {
 			console.log("=== PDF Generation Start ===");
 			console.log("formData:", formData);
 			console.log("userSchedule:", userSchedule);
+
+			// ── Quota check (separate counters for A and B) ─────────────
+			let personASubmissionNumber, personBSubmissionNumber;
+			try {
+				const quota = await checkSubmissionQuota(
+					formData.firstID,
+					formData.secondID,
+					formData.selectedMonth
+				);
+				personASubmissionNumber = quota.personASubmissionNumber;
+				personBSubmissionNumber = quota.personBSubmissionNumber;
+			} catch (quotaErr) {
+				toast.error(quotaErr.message, { duration: 5000 });
+				return;
+			}
+			// submission_number on the PDF uses Person A's count (甲方 initiates)
+			const submissionNumber = personASubmissionNumber;
 
 			// First, create a canvas to render the form (same as original PNG approach)
 			const canvas = document.createElement("canvas");
@@ -680,6 +801,32 @@ function DutyChangeContent() {
 				false
 			);
 
+			// ── 本月申請次數 — tick the correct checkbox for both 甲方 and 乙方 ──
+			// The form has: 第1次 □  第2次 □  第3次 □  on both left and right halves.
+			// TWEAK: adjust x/y values to land on the correct checkbox position.
+			{
+				ctx.font = "52px Arial";
+				ctx.fillStyle = "#1d4ed8";
+				ctx.textBaseline = "middle";
+
+				// X positions for 第1次 / 第2次 / 第3次 checkboxes (甲方 left half)
+				const firstPersonCheckboxX = [98, 133, 168]; // ── TWEAK these x values
+				// X positions for 第1次 / 第2次 / 第3次 checkboxes (乙方 right half)
+				const secondPersonCheckboxX = [353, 388, 423]; // ── TWEAK these x values
+				// Y position of the 本月申請次數 row (shared for both halves)
+				const submissionRowY = 617; // ── TWEAK this y value
+
+				const checkIdx = Math.min(submissionNumber, 3) - 1; // 0-based index
+
+				// Tick 甲方 checkbox
+				const firstC = convertToCanvasCoords(firstPersonCheckboxX[checkIdx], submissionRowY);
+				ctx.fillText("X", firstC.x, firstC.y);
+
+				// Tick 乙方 checkbox (same submission number)
+				const secondC = convertToCanvasCoords(secondPersonCheckboxX[checkIdx], submissionRowY);
+				ctx.fillText("X", secondC.x, secondC.y);
+			}
+
 			// Render duties
 			if (formData.allDuties && formData.allDuties.length > 0) {
 				let currentUserSchedule = userSchedule;
@@ -840,6 +987,13 @@ function DutyChangeContent() {
 				renderTextOnCanvas(formData.applicationDate, coords.x, coords.y, 56);
 			}
 
+			// ── 告知同意日期 — right-side cell, same date as application date ──
+			// TWEAK: adjust x/y to land in the 告知同意日期 cell on the right.
+			if (formData.applicationDate) {
+				const consentCoords = convertToCanvasCoords(435, 461); // ── TWEAK x value
+				renderTextOnCanvas(formData.applicationDate, consentCoords.x, consentCoords.y, 56);
+			}
+
 			// Now convert canvas to PDF with compression
 			const { jsPDF } = await import("jspdf");
 
@@ -869,53 +1023,100 @@ function DutyChangeContent() {
 			);
 
 			// Generate filename - use proper names
-				// Generate filename - use proper names
-				const firstName = formData.firstName || "甲方";
-				const secondName = formData.secondName || "乙方";
-				const filename = `FMEF-06-04客艙組員任務互換申請單-${firstName}&${secondName}.pdf`;
+			const firstName = formData.firstName || "甲方";
+			const secondName = formData.secondName || "乙方";
+			const filename = `FMEF-06-04客艙組員任務互換申請單-${firstName}&${secondName}.pdf`;
 
-				// Get PDF as base64 for email attachment
-				const pdfBase64 = pdf.output("dataurlstring");
+			// Get PDF as base64 string for email
+			const pdfBase64 = pdf.output("dataurlstring");
 
-				const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
-				try {
-					const emailResponse = await fetch("/api/send-duty-change-email", {
-						method: "POST",
-						headers: { "Content-Type": "application/json" },
-						body: JSON.stringify({
-							pdfData: pdfBase64,
-							formData: {
-								firstID: formData.firstID,
-								firstName: formData.firstName,
-								firstRank: formData.firstRank,
-								firstDate: formData.firstDate,
-								firstTask: formData.firstTask,
-								secondID: formData.secondID,
-								secondName: formData.secondName,
-								secondRank: formData.secondRank,
-								secondDate: formData.secondDate,
-								secondTask: formData.secondTask,
-								selectedMonth: formData.selectedMonth,
-								applicationDate: formData.applicationDate,
-							},
-						}),
-					});
-					const emailResult = await emailResponse.json();
-					if (emailResult.success) {
-						if (isMobile) {
-							toast.success("✅ 換班單已成功寄送！請15分後確認信箱！");
-						} else {
-							pdf.save(filename);
-							setTimeout(() => toast.success("✅ 換班單已成功寄送並下載！"), 200);
-						}
+			// ── Get PDF as Blob for Storage upload ────────────────────────
+			const pdfBlob = pdf.output("blob");
+
+			const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+
+			// ── Send email ────────────────────────────────────────────────
+			try {
+				const emailResponse = await fetch("/api/send-duty-change-email", {
+					method: "POST",
+					headers: { "Content-Type": "application/json" },
+					body: JSON.stringify({
+						pdfData: pdfBase64,
+						formData: {
+							firstID: formData.firstID,
+							firstName: formData.firstName,
+							firstRank: formData.firstRank,
+							firstDate: formData.firstDate,
+							firstTask: formData.firstTask,
+							secondID: formData.secondID,
+							secondName: formData.secondName,
+							secondRank: formData.secondRank,
+							secondDate: formData.secondDate,
+							secondTask: formData.secondTask,
+							selectedMonth: formData.selectedMonth,
+							applicationDate: formData.applicationDate,
+						},
+					}),
+				});
+				const emailResult = await emailResponse.json();
+				if (emailResult.success) {
+					if (isMobile) {
+						toast.success("✅ 換班單已成功寄送！請15分後確認信箱！");
 					} else {
-						throw new Error(emailResult.error || "Email failed");
+						pdf.save(filename);
+						setTimeout(() => toast.success("✅ 換班單已成功寄送並下載！"), 200);
 					}
-				} catch (emailError) {
-					console.error("Error sending email:", emailError);
-					pdf.save(filename);
-					setTimeout(() => toast.error("⚠️ 郵件發送失敗，但PDF已下載。\n請手動發送至管派組信箱", { duration: 8000 }), 200);
+				} else {
+					throw new Error(emailResult.error || "Email failed");
 				}
+			} catch (emailError) {
+				console.error("Error sending email:", emailError);
+				pdf.save(filename);
+				setTimeout(() => toast.error("⚠️ 郵件發送失敗，但PDF已下載。\n請手動發送至管派組信箱", { duration: 8000 }), 200);
+			}
+
+
+			// ── Upload PDF to Storage + insert DB record ──────────────────
+			// Run after email so email failure still triggers download fallback above
+			try {
+				const pdfStoragePath = await uploadPdfToStorage(
+					pdfBlob,
+					formData.firstID,
+					formData.selectedMonth
+				);
+
+				// Build Person A's duties array from selectedDates × userSchedule
+				const personADuties = (formData.selectedDates || []).map(date => ({
+					date,
+					duty: userSchedule?.days?.[date] || "",
+				}));
+
+				// FT values in minutes for storage
+				const ftA = ftData.firstFt ?? null;
+				const ftB = ftData.secondFt ?? null;
+				// Compute delta whenever at least one party has FT data.
+				// Treat the other as 0 (e.g. swapping a flight for a day off).
+				const eitherHasFt = ftA !== null || ftB !== null;
+				const ftDeltaA = eitherHasFt ? ((ftB ?? 0) - (ftA ?? 0)) : null;
+				const ftDeltaB = eitherHasFt ? ((ftA ?? 0) - (ftB ?? 0)) : null;
+
+				await insertDutyChangeRequest({
+					personASubmissionNumber,
+					personBSubmissionNumber,
+					pdfStoragePath,
+					personADuties,
+					ftPersonA: ftA,
+					ftPersonB: ftB,
+					ftDeltaA,
+					ftDeltaB,
+				});
+				console.log("Duty change request saved. A#", personASubmissionNumber, "B#", personBSubmissionNumber);
+			} catch (dbErr) {
+				console.error("Error saving request record:", dbErr);
+				// Non-fatal: email already sent, just warn
+				toast.error("⚠️ 申請紀錄儲存失敗，請聯絡豪神", { duration: 6000 });
+			}
+
 		} catch (error) {
 			console.error("Error generating PDF:", error);
 			setError(`Failed to generate PDF: ${error.message}`);

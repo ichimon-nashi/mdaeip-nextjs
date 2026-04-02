@@ -60,6 +60,8 @@ export default function DashboardPage() {
 	
 	const tooltipRef = useRef(null);
 	const [scheduleData, setScheduleData] = useState([]);
+	// approved swap overlay: key = "YYYY-MM-DD", value = swapped duty string
+	const [approvedSwapMap, setApprovedSwapMap] = useState({});
 	const [isLoading, setIsLoading] = useState(true);
 	const [currentTime, setCurrentTime] = useState('');
 	const [activeDate, setActiveDate] = useState(null);
@@ -388,6 +390,44 @@ export default function DashboardPage() {
 			const scheduleArray = await Promise.all(dataPromises);
 			setScheduleData(scheduleArray);
 			setActiveDate(getLocalTodayStr());
+
+			// ── Fetch approved swap overlay for the current user ────────────
+			// Covers the case where DataRoster cache still holds pre-swap data.
+			// approvedSwapMap: { "YYYY-MM-DD": swappedDutyString }
+			try {
+				const { data: swapRecords } = await supabase
+					.from('duty_change_requests')
+					.select('person_a_id, person_b_id, selected_dates, all_duties, person_a_duties')
+					.in('month', monthsToLoad)
+					.eq('status', 'approved')
+					.or(`person_a_id.eq.${user.id},person_b_id.eq.${user.id}`);
+
+				if (swapRecords?.length) {
+					const swapMap = {};
+					swapRecords.forEach(req => {
+						const aDutyByDate = {};
+						(req.person_a_duties || []).forEach(d => { if (d?.date) aDutyByDate[d.date] = d.duty ?? ''; });
+						const bDutyByDate = {};
+						(req.all_duties || []).forEach(d => { if (d?.date) bDutyByDate[d.date] = d.duty ?? ''; });
+
+						if (String(req.person_a_id) === String(user.id)) {
+							// User is Person A — received B's duties on selected_dates
+							(req.selected_dates || []).forEach(date => {
+								if (bDutyByDate[date] != null) swapMap[date] = bDutyByDate[date];
+							});
+						} else {
+							// User is Person B — received A's duties on all_duties dates
+							(req.all_duties || []).forEach(d => {
+								if (d?.date && aDutyByDate[d.date] != null) swapMap[d.date] = aDutyByDate[d.date];
+							});
+						}
+					});
+					setApprovedSwapMap(swapMap);
+				}
+			} catch (swapErr) {
+				console.error('Error fetching approved swap overlay:', swapErr);
+				// Non-fatal — dashboard still shows correct data from mdaeip_schedules
+			}
 		} catch (error) {
 			console.error('Error fetching schedule:', error);
 			toast.error('載入班表時發生錯誤');
@@ -775,19 +815,27 @@ export default function DashboardPage() {
 								if (day === null) return <div key={`empty-${idx}`} className={styles.calendarCellEmpty} />;
 
 								const dateStr = `${calendarMonth.year}-${String(calendarMonth.month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-								const item       = getScheduleItem(dateStr);
-								const isToday    = dateStr === todayStr;
-								const isActive   = activeDate === dateStr;
-								const isSelected = tooltipDate === dateStr;
-								const isWeekend  = new Date(calendarMonth.year, calendarMonth.month, day).getDay() % 6 === 0;
-								const colors     = item ? getDutyColors(item) : null;
+								const item           = getScheduleItem(dateStr);
+								const isToday        = dateStr === todayStr;
+								const isActive       = activeDate === dateStr;
+								const isSelected     = tooltipDate === dateStr;
+								const isWeekend      = new Date(calendarMonth.year, calendarMonth.month, day).getDay() % 6 === 0;
+								// ── Approved swap overlay ────────────────────────────────────
+								const swappedDuty    = approvedSwapMap[dateStr] ?? null;
+								const isSwapApproved = swappedDuty !== null;
+								// Build a display item: if approved swap exists, override dutyCode for display
+								const displayItem = (isSwapApproved && item)
+									? { ...item, dutyCode: swappedDuty || '空', rawDuty: swappedDuty || '' }
+									: item;
+								const colors         = displayItem ? getDutyColors(displayItem) : null;
 
 								let dutyLabel = null;
-								if (item) {
-									if (item.isDutyOff)       dutyLabel = 'OFF';
-									else if (item.isResv)     dutyLabel = 'RESV';
-									else if (!item.hasData)   dutyLabel = item.dutyCode === '空' ? '空' : 'N/A';
-									else                      dutyLabel = item.dutyCode.split('\\')[0];
+								if (displayItem) {
+									if (displayItem.isDutyOff && !isSwapApproved) dutyLabel = 'OFF';
+									else if (displayItem.isResv && !isSwapApproved) dutyLabel = 'RESV';
+									else if (!displayItem.hasData && !isSwapApproved)
+										dutyLabel = displayItem.dutyCode === '空' ? '空' : 'N/A';
+									else dutyLabel = (displayItem.dutyCode || '空').split('\\')[0];
 								}
 
 								return (
@@ -795,18 +843,19 @@ export default function DashboardPage() {
 										key={dateStr}
 										className={[
 											styles.calendarCell,
-											isToday    ? styles.calendarCellToday    : '',
-											isActive   ? styles.calendarCellActive   : '',
-											isSelected ? styles.calendarCellSelected : '',
-											isWeekend  ? styles.calendarCellWeekend  : '',
-											!item      ? styles.calendarCellNoData   : '',
+											isToday        ? styles.calendarCellToday    : '',
+											isActive       ? styles.calendarCellActive   : '',
+											isSelected     ? styles.calendarCellSelected : '',
+											isWeekend      ? styles.calendarCellWeekend  : '',
+											!item          ? styles.calendarCellNoData   : '',
+											isSwapApproved ? styles.calendarCellSwapApproved : '',
 										].filter(Boolean).join(' ')}
 										onClick={(e) => handleDayClick(dateStr, e)}
 									>
 										<div className={`${styles.calendarDayNumber} ${isToday ? styles.calendarDayNumberToday : ''}`}>
 											{day}
 										</div>
-										{item && colors && (
+										{displayItem && colors && (
 											<div
 												className={styles.calendarDutyBadge}
 												style={{ backgroundColor: colors.bg, color: colors.text }}

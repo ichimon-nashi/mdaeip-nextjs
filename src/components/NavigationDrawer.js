@@ -28,6 +28,17 @@ const TurtleIcon = ({ size = 24 }) => (
   />
 );
 
+// Approved PNG icon wrapper
+const ApprovedIcon = ({ size = 24 }) => (
+  <Image
+    src="/assets/approved.png"
+    alt="Approved"
+    width={size}
+    height={size}
+    style={{ objectFit: "contain" }}
+  />
+);
+
 const NavigationDrawer = ({ isOpen, onClose, userDetails }) => {
   const router   = useRouter();
   const pathname = usePathname();
@@ -119,6 +130,15 @@ const NavigationDrawer = ({ isOpen, onClose, userDetails }) => {
       path:        "/dispatch",
       color:       "#0369a1",
       hasAccess:   hasAppAccess(user, "dispatch"),
+    },
+    {
+      id:          "duty-change-review",
+      title:       "換班審核",
+      description: "換班申請審核管理",
+      icon:        <ApprovedIcon size={24} />,
+      path:        "/duty-change-review",
+      color:       "#be185d",
+      hasAccess:   hasAppAccess(user, "duty_change_review"),
     },
     {
       id:          "turtle-ranking",
@@ -259,7 +279,7 @@ const NavigationDrawer = ({ isOpen, onClose, userDetails }) => {
 
         {/* Footer */}
         <div className={styles.drawerFooter}>
-          <div className={styles.appVersion}>豪神APP v3.5.4</div>
+          <div className={styles.appVersion}>豪神APP v3.6.1</div>
         </div>
 
       </div>
