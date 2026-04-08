@@ -671,68 +671,85 @@ const DatabaseManagement = () => {
 								<p>點選新增使用者按鈕開始新增</p>
 							</div>
 						) : (
-							<div className={styles.usersTable}>
-								<table>
-									<thead>
-										<tr>
-											<th>員編</th>
-											<th>姓名</th>
-											<th>職位</th>
-											<th>基地</th>
-											<th>權限等級</th>
-											<th>操作</th>
-										</tr>
-									</thead>
-									<tbody>
-										{users.map((userData) => (
-											<tr key={userData.id}>
-												<td>{userData.id}</td>
-												<td>{userData.name}</td>
-												<td>
-													{userData.rank && (
-														<span className={styles.rankBadge}>
-															{userData.rank}
-														</span>
-													)}
-												</td>
-												<td>
-													{userData.base && (
-														<span className={`${styles.baseBadge} ${styles['base' + userData.base]}`}>
-															{userData.base}
-														</span>
-													)}
-												</td>
-												<td>
-													<span 
-														className={`${styles.accessLevelBadge} ${styles[getAccessLevelClass(userData.access_level)]}`}
-													>
-														{userData.access_level}
+							<div className={styles.userCards}>
+								{users.map((userData) => {
+									const avatarUrl = `https://rhdpkxkmugimtlbdizfp.supabase.co/storage/v1/object/public/avatars/${userData.id}.png`;
+									const initials = userData.name ? userData.name.slice(0, 2) : userData.id.slice(0, 2);
+									const enabledPerms = [
+										{ key: "roster", label: "換班" },
+										{ key: "mrt_checker", label: "休時" },
+										{ key: "gday", label: "GDay" },
+										{ key: "etr_generator", label: "eTR" },
+										{ key: "dispatch", label: "派遣" },
+										{ key: "duty_change_review", label: "審核" },
+										{ key: "turtle_ranking", label: "🐢" },
+										{ key: "database_management", label: "DB" },
+									].filter(({ key }) => userData.app_permissions?.[key]?.access === true);
+
+									return (
+										<div key={userData.id} className={styles.userCard}>
+											<div className={styles.userCardTop}>
+												<div className={styles.userCardAvatar}>
+													<img
+														src={avatarUrl}
+														alt={userData.name}
+														className={styles.userCardAvatarImg}
+														onError={(e) => {
+															e.currentTarget.style.display = "none";
+															e.currentTarget.nextSibling.style.display = "flex";
+														}}
+													/>
+													<div className={styles.userCardAvatarInitials}>{initials}</div>
+												</div>
+												<div className={styles.userCardIdentity}>
+													<span className={styles.userCardName}>{userData.name}</span>
+													<span className={styles.userCardId}>#{userData.id}</span>
+												</div>
+											</div>
+
+											<div className={styles.userCardBadges}>
+												{userData.rank && (
+													<span className={styles.rankBadge}>{userData.rank}</span>
+												)}
+												{userData.base && (
+													<span className={`${styles.baseBadge} ${styles["base" + userData.base]}`}>
+														{userData.base}
 													</span>
-												</td>
-												<td>
-													<div className={styles.userActions}>
-														<button
-															className={styles.editButton}
-															onClick={() => handleEditUser(userData)}
-															title="編輯使用者"
-														>
-															<Edit size={16} />
-														</button>
-														<button
-															className={styles.deleteButton}
-															onClick={() =>
-																handleDeleteUser(userData.id, userData.name)
-															}
-															title="刪除使用者"
-														>
-															<Trash2 size={16} />
-														</button>
-													</div>
-												</td>
-											</tr>
-										))}
-									</tbody>
-								</table>
+												)}
+												<span className={`${styles.accessLevelBadge} ${styles[getAccessLevelClass(userData.access_level)]}`}>
+													Lv {userData.access_level}
+												</span>
+											</div>
+
+											{enabledPerms.length > 0 && (
+												<div className={styles.userCardPermissions}>
+													{enabledPerms.map(({ key, label }) => (
+														<span key={key} className={styles.userCardPermChip}>{label}</span>
+													))}
+												</div>
+											)}
+
+											<div className={styles.userCardActions}>
+												<button
+													className={styles.editButton}
+													onClick={() => handleEditUser(userData)}
+													title="編輯使用者"
+												>
+													<Edit size={15} />
+													編輯
+												</button>
+												<button
+													className={styles.deleteButton}
+													onClick={() => handleDeleteUser(userData.id, userData.name)}
+													title="刪除使用者"
+												>
+													<Trash2 size={15} />
+													刪除
+												</button>
+											</div>
+										</div>
+									);
+								})}
 							</div>
 						)}
 					</div>
@@ -845,7 +862,7 @@ const DatabaseManagement = () => {
 					onClick={() => setShowUserModal(false)}
 				>
 					<div
-						className={styles.modalContent}
+						className={`${styles.modalContent} ${styles.userModalContent}`}
 						onClick={(e) => e.stopPropagation()}
 					>
 						<div className={styles.modalHeader}>
@@ -862,115 +879,103 @@ const DatabaseManagement = () => {
 						</div>
 						<div className={styles.modalBody}>
 							<div className={styles.userForm}>
-								<div className={styles.formGroup}>
-									<label>員工編號 *</label>
-									<div className={styles.inputGroup}>
-										<input
-											type="text"
-											value={userFormData.id}
-											onChange={(e) =>
-												setUserFormData((prev) => ({
-													...prev,
-													id: e.target.value,
-												}))
-											}
-											placeholder="請輸入員工編號"
-											disabled={userModalMode === "edit"}
-										/>
-										{userModalMode === "add" && (
-											<button
-												className={styles.lookupButton}
-												onClick={handleLookupEmployee}
-												disabled={isLookingUp}
-												title="從員工名冊查詢"
+
+								{/* ── Section 1: 基本資料 ── */}
+								<div className={styles.formSection}>
+									<span className={styles.formSectionLabel}>基本資料</span>
+
+									<div className={styles.formGroup}>
+										<label>員工編號 *</label>
+										<div className={styles.inputGroup}>
+											<input
+												type="text"
+												value={userFormData.id}
+												onChange={(e) =>
+													setUserFormData((prev) => ({ ...prev, id: e.target.value }))
+												}
+												placeholder="請輸入員工編號"
+												disabled={userModalMode === "edit"}
+											/>
+											{userModalMode === "add" && (
+												<button
+													className={styles.lookupButton}
+													onClick={handleLookupEmployee}
+													disabled={isLookingUp}
+													title="從員工名冊查詢"
+												>
+													{isLookingUp ? <div className={styles.buttonSpinner}></div> : <Search size={16} />}
+												</button>
+											)}
+										</div>
+									</div>
+
+									<div className={styles.formRow}>
+										<div className={styles.formGroup}>
+											<label>姓名 *</label>
+											<input
+												type="text"
+												value={userFormData.name}
+												onChange={(e) =>
+													setUserFormData((prev) => ({ ...prev, name: e.target.value }))
+												}
+												placeholder="請輸入姓名"
+											/>
+										</div>
+										<div className={styles.formGroup}>
+											<label>職位</label>
+											<select
+												value={userFormData.rank}
+												onChange={(e) =>
+													setUserFormData((prev) => ({ ...prev, rank: e.target.value }))
+												}
 											>
-												{isLookingUp ? (
-													<div className={styles.buttonSpinner}></div>
-												) : (
-													<Search size={16} />
-												)}
-											</button>
-										)}
+												<option value="">請選擇職位</option>
+												<option value="經理">經理</option>
+												<option value="組長">組長</option>
+												<option value="FI">FI</option>
+												<option value="PR">PR</option>
+												<option value="LF">LF</option>
+												<option value="FS">FS</option>
+												<option value="FA">FA</option>
+											</select>
+										</div>
+									</div>
+
+									<div className={styles.formRow}>
+										<div className={styles.formGroup}>
+											<label>基地</label>
+											<select
+												value={userFormData.base}
+												onChange={(e) =>
+													setUserFormData((prev) => ({ ...prev, base: e.target.value }))
+												}
+											>
+												<option value="">請選擇基地</option>
+												<option value="TSA">TSA</option>
+												<option value="KHH">KHH</option>
+												<option value="RMQ">RMQ</option>
+											</select>
+										</div>
+										<div className={styles.formGroup}>
+											<label>權限等級</label>
+											<input
+												type="number"
+												value={userFormData.access_level}
+												onChange={(e) =>
+													setUserFormData((prev) => ({ ...prev, access_level: parseInt(e.target.value) || 1 }))
+												}
+												placeholder="1"
+												min="1"
+												max="99"
+											/>
+											<small className={styles.fieldHint}>1 = 一般，99 = 管理員</small>
+										</div>
 									</div>
 								</div>
 
-								<div className={styles.formGroup}>
-									<label>姓名 *</label>
-									<input
-										type="text"
-										value={userFormData.name}
-										onChange={(e) =>
-											setUserFormData((prev) => ({
-												...prev,
-												name: e.target.value,
-											}))
-										}
-										placeholder="請輸入姓名"
-									/>
-								</div>
-
-								<div className={styles.formGroup}>
-									<label>職位</label>
-									<select
-										value={userFormData.rank}
-										onChange={(e) =>
-											setUserFormData((prev) => ({
-												...prev,
-												rank: e.target.value,
-											}))
-										}
-									>
-										<option value="">請選擇職位</option>
-										<option value="經理">經理</option>
-										<option value="組長">組長</option>
-										<option value="FI">FI</option>
-										<option value="PR">PR</option>
-										<option value="LF">LF</option>
-										<option value="FS">FS</option>
-										<option value="FA">FA</option>
-									</select>
-								</div>
-
-								<div className={styles.formGroup}>
-									<label>基地</label>
-									<select
-										value={userFormData.base}
-										onChange={(e) =>
-											setUserFormData((prev) => ({
-												...prev,
-												base: e.target.value,
-											}))
-										}
-									>
-										<option value="">請選擇基地</option>
-										<option value="TSA">TSA</option>
-										<option value="KHH">KHH</option>
-										<option value="RMQ">RMQ</option>
-									</select>
-								</div>
-
-								<div className={styles.formGroup}>
-									<label>權限等級</label>
-									<input
-										type="number"
-										value={userFormData.access_level}
-										onChange={(e) =>
-											setUserFormData((prev) => ({
-												...prev,
-												access_level: parseInt(e.target.value) || 1,
-											}))
-										}
-										placeholder="1"
-										min="1"
-										max="99"
-									/>
-									<small className={styles.fieldHint}>
-										預設: 1 (一般使用者), 99 (管理員)
-									</small>
-								</div>
-
-								<div className={styles.formGroup}>
-									<label>應用程式權限</label>
+								{/* ── Section 2: 應用程式權限 ── */}
+								<div className={styles.formSection}>
+									<span className={styles.formSectionLabel}>應用程式權限</span>
 									<div className={styles.permissionsGrid}>
 										{[
 											{ key: "roster", label: "換班系統" },
@@ -989,10 +994,7 @@ const DatabaseManagement = () => {
 													onChange={(e) =>
 														setUserFormData((prev) => ({
 															...prev,
-															app_permissions: {
-																...prev.app_permissions,
-																[key]: { access: e.target.checked },
-															},
+															app_permissions: { ...prev.app_permissions, [key]: { access: e.target.checked } },
 														}))
 													}
 													className={styles.formCheckbox}
@@ -1003,35 +1005,33 @@ const DatabaseManagement = () => {
 									</div>
 								</div>
 
-								<div className={styles.formGroup}>
-									<label>
-										{userModalMode === "add" ? "密碼 *" : "新密碼"}
-									</label>
-									<div className={styles.passwordGroup}>
-										<input
-											type={showPassword ? "text" : "password"}
-											value={userFormData.password}
-											onChange={(e) =>
-												setUserFormData((prev) => ({
-													...prev,
-													password: e.target.value,
-												}))
-											}
-											placeholder={
-												userModalMode === "add"
-													? "請輸入密碼"
-													: "留空則不更改密碼"
-											}
-										/>
-										<button
-											type="button"
-											className={styles.passwordToggle}
-											onClick={() => setShowPassword(!showPassword)}
-										>
-											{showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
-										</button>
+								{/* ── Section 3: 密碼 ── */}
+								<div className={styles.formSection}>
+									<span className={styles.formSectionLabel}>
+										{userModalMode === "add" ? "密碼" : "變更密碼"}
+									</span>
+									<div className={styles.formGroup}>
+										<label>{userModalMode === "add" ? "密碼 *" : "新密碼"}</label>
+										<div className={styles.passwordGroup}>
+											<input
+												type={showPassword ? "text" : "password"}
+												value={userFormData.password}
+												onChange={(e) =>
+													setUserFormData((prev) => ({ ...prev, password: e.target.value }))
+												}
+												placeholder={userModalMode === "add" ? "請輸入密碼" : "留空則不更改密碼"}
+											/>
+											<button
+												type="button"
+												className={styles.passwordToggle}
+												onClick={() => setShowPassword(!showPassword)}
+											>
+												{showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+											</button>
+										</div>
 									</div>
 								</div>
+
 							</div>
 						</div>
 						<div className={styles.modalFooter}>

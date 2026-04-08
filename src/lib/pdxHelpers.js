@@ -361,6 +361,86 @@ export const pdxStatsHelpers = {
 	},
 };
 
+// ─── MRT CHECKER DATA ────────────────────────────────────────────────────────
+
+/**
+ * Load flight duty data for the MRT Checker from PDX tables.
+ *
+ * Returns a Map<duty_code, DutyRow[]> where each DutyRow is:
+ *   { id, duty_code, reporting_time, end_time, aircraft_type, base_code,
+ *     sector_count, date_from, date_to, active_weekdays, specific_dates }
+ *
+ * Multiple rows per code are preserved so callers can find the date-specific
+ * row (same logic as findPdxDuty in the schedule page).
+ *
+ * Returns null if no month row exists for year/month.
+ */
+export async function getFlightDutiesForMRTByMonth(year, month) {
+	try {
+		// 1. Find the month row (published preferred, draft accepted)
+		const { data: monthRow, error: monthError } = await supabase
+			.from("pdx_months")
+			.select("id")
+			.eq("year", year)
+			.eq("month", month)
+			.in("status", ["published", "draft"])
+			.order("status", { ascending: true })
+			.limit(1)
+			.single();
+
+		if (monthError || !monthRow) return null;
+
+		// 2. Fetch ALL duty rows for the month (need date fields for date matching)
+		const { data: duties, error: dutiesError } = await supabase
+			.from("pdx_duties")
+			.select("id, duty_code, reporting_time, duty_end_time, aircraft_type, base, date_from, date_to, active_weekdays, specific_dates")
+			.eq("month_id", monthRow.id);
+
+		if (dutiesError || !duties?.length) return null;
+
+		// 3. Fetch sector counts from pdx_duty_stats by duty ID
+		const dutyIds = duties.map((d) => d.id);
+		const { data: stats } = await supabase
+			.from("pdx_duty_stats")
+			.select("duty_id, sector_count")
+			.in("duty_id", dutyIds);
+
+		const statsMap = new Map();
+		if (stats?.length) {
+			stats.forEach((s) => {
+				if (s.sector_count) statsMap.set(s.duty_id, s.sector_count);
+			});
+		}
+
+		// 4. Build Map<duty_code, DutyRow[]> — preserve all rows per code
+		const result = new Map();
+		duties.forEach((duty) => {
+			const code = duty.duty_code?.trim();
+			if (!code) return;
+			const row = {
+				id:             duty.id,
+				duty_code:      code,
+				reporting_time: duty.reporting_time || "",
+				end_time:       duty.duty_end_time || "",
+				aircraft_type:  duty.aircraft_type || null,
+				base_code:      duty.base || null,
+				sector_count:   statsMap.get(duty.id) ?? null,
+				date_from:      duty.date_from || null,
+				date_to:        duty.date_to || null,
+				active_weekdays: duty.active_weekdays || [],
+				specific_dates:  duty.specific_dates || [],
+			};
+			if (!result.has(code)) result.set(code, []);
+			result.get(code).push(row);
+		});
+
+		return result;
+	} catch (error) {
+		console.error("getFlightDutiesForMRTByMonth:", error);
+		return null;
+	}
+}
+
 // ─── UTILITY FUNCTIONS ───────────────────────────────────────────────────────
 
 // Convert minutes to "Xh XXm" display string
