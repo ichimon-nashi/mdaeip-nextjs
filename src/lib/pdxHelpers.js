@@ -398,41 +398,83 @@ export async function getFlightDutiesForMRTByMonth(year, month) {
 
 		if (dutiesError || !duties?.length) return null;
 
-		// 3. Fetch sector counts from pdx_duty_stats by duty ID
+		// 3. Fetch sector counts and FT/FDP minutes from pdx_duty_stats by duty ID
 		const dutyIds = duties.map((d) => d.id);
 		const { data: stats } = await supabase
 			.from("pdx_duty_stats")
-			.select("duty_id, sector_count")
+			.select("duty_id, sector_count, ft_minutes, fdp_minutes")
 			.in("duty_id", dutyIds);
 
 		const statsMap = new Map();
 		if (stats?.length) {
-			stats.forEach((s) => {
-				if (s.sector_count) statsMap.set(s.duty_id, s.sector_count);
+			stats.forEach((s) => statsMap.set(s.duty_id, {
+				sector_count: s.sector_count ?? null,
+				ft_minutes:   s.ft_minutes   ?? null,
+				fdp_minutes:  s.fdp_minutes  ?? null,
+			}));
+		}
+
+		// 4. Fetch individual sector rows for partial-sector FT/FDP computation
+		const { data: sectorRows } = await supabase
+			.from("pdx_sectors")
+			.select("duty_id, seq, flight_number, dep_time, arr_time")
+			.in("duty_id", dutyIds)
+			.order("duty_id")
+			.order("seq", { ascending: true });
+
+		// Group sectors by duty_id
+		const sectorsMap = new Map();
+		if (sectorRows?.length) {
+			sectorRows.forEach((s) => {
+				if (!sectorsMap.has(s.duty_id)) sectorsMap.set(s.duty_id, []);
+				sectorsMap.get(s.duty_id).push({
+					seq:           s.seq,
+					flight_number: s.flight_number,
+					dep_time:      s.dep_time,
+					arr_time:      s.arr_time,
+				});
 			});
 		}
 
-		// 4. Build Map<duty_code, DutyRow[]> — preserve all rows per code
 		const result = new Map();
 		duties.forEach((duty) => {
 			const code = duty.duty_code?.trim();
 			if (!code) return;
+
+			const stat = statsMap.get(duty.id) || {};
+			const hasComplete = !!(duty.reporting_time && duty.duty_end_time);
+			const existing = result.get(code);
+
 			const row = {
-				id:             duty.id,
-				duty_code:      code,
 				reporting_time: duty.reporting_time || "",
-				end_time:       duty.duty_end_time || "",
-				aircraft_type:  duty.aircraft_type || null,
-				base_code:      duty.base || null,
-				sector_count:   statsMap.get(duty.id) ?? null,
-				date_from:      duty.date_from || null,
-				date_to:        duty.date_to || null,
+				end_time:       duty.duty_end_time  || "",
+				aircraft_type:  duty.aircraft_type  || null,
+				base_code:      duty.base           || null,
+				sector_count:   stat.sector_count   ?? null,
+				ft_minutes:     stat.ft_minutes     ?? null,
+				fdp_minutes:    stat.fdp_minutes    ?? null,
+				sectors_data:   sectorsMap.get(duty.id) || [],
+				date_from:      duty.date_from      || null,
+				date_to:        duty.date_to        || null,
 				active_weekdays: duty.active_weekdays || [],
-				specific_dates:  duty.specific_dates || [],
+				specific_dates:  duty.specific_dates  || [],
+				_complete: hasComplete,
 			};
-			if (!result.has(code)) result.set(code, []);
-			result.get(code).push(row);
+
+			if (!existing) {
+				result.set(code, [row]);
+			} else {
+				// Upgrade first incomplete entry if this one is complete
+				if (!existing[0]._complete && hasComplete) {
+					existing.unshift(row);
+				} else {
+					existing.push(row);
+				}
+			}
 		});
+
+		// Strip internal _complete flag
+		result.forEach((rows) => rows.forEach(r => delete r._complete));
 
 		return result;
 	} catch (error) {

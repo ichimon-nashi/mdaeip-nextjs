@@ -13,11 +13,20 @@ import {
 	Search,
 } from "lucide-react";
 import styles from "../../styles/MRTChecker.module.css";
-import { getEmployeeSchedule } from "../../lib/DataRoster";
+import { getEmployeeSchedule, employeeList } from "../../lib/DataRoster";
+import FleetTab from "./FleetTab";
 import { getFlightDutiesForMRTByMonth } from "../../lib/pdxHelpers";
-import { useAuth } from "../../contexts/AuthContext";
+import {
+	timeToMinutes, minutesToTime, formatTime, formatDuration,
+	calculateFDP, calculateMRT, getHsrOffset,
+	getEffectiveEndMinutes, getEffectiveStartMinutes,
+	hasConsecutive32HourRest, runFatigueCheck,
+	isoWeekday, pdxDutyAppliesToDate, findPdxDutyForDate,
+	normalizeDutyCode, parseScheduleEntry, computePartialDutyTimes,
+} from "../../lib/fatigueHelpers";import { useAuth } from "../../contexts/AuthContext";
 import { useRouter } from "next/navigation";
 import { hasAppAccess } from "../../lib/permissionHelpers";
+import toast from "react-hot-toast";
 
 const MRTChecker = () => {
 	const { user, loading: authLoading } = useAuth();
@@ -52,13 +61,17 @@ const MRTChecker = () => {
 	const [validationErrors, setValidationErrors] = useState([]);
 	const [violationDates, setViolationDates] = useState(new Set());
 	const [showValidation, setShowValidation] = useState(false);
+	const [activeMainTab, setActiveMainTab] = useState("fleet"); // "fleet" | "individual" | "swap"
+	const [originalDroppedItems, setOriginalDroppedItems] = useState(null); // non-null = unsaved changes
 	const [userScheduleLoading, setUserScheduleLoading] = useState(false);
 	const [loadingUserData, setLoadingUserData] = useState(true);
 	const [dutiesCollapsed, setDutiesCollapsed] = useState(false);
-	const [monthlyStats, setMonthlyStats] = useState({ fdpMin: 0, ftMin: 0 });
+	const [monthlyStats, setMonthlyStats] = useState({ fdpMin: 0, ftMin: 0, dpMin: 0 });
 	const [viewUserId, setViewUserId] = useState(null);
 	const [viewUserInput, setViewUserInput] = useState("");
-	const [viewUserName, setViewUserName] = useState(null); // name of imported user
+	const [viewUserName, setViewUserName] = useState(null);
+	const [cameFromFleet, setCameFromFleet] = useState(false);
+	const [adjDroppedItems, setAdjDroppedItems] = useState({ prev: {}, next: {} }); // adjacent month duties for display
 	const [expandedDuties, setExpandedDuties] = useState(new Set());
 	const [activeTab, setActiveTab] = useState("rest");
 	const [bottomSheetExpanded, setBottomSheetExpanded] = useState(false);
@@ -207,118 +220,19 @@ const MRTChecker = () => {
 
 	const [allDuties, setAllDuties] = useState(presetDuties);
 
-	const timeToMinutes = useCallback((timeString) => {
-		if (!timeString) return 0;
-		const cleanTime = timeString.split(":").slice(0, 2).join(":");
-		const [hours, minutes] = cleanTime.split(":").map(Number);
-		return hours * 60 + minutes;
-	}, []);
-
-	const minutesToTime = useCallback((minutes) => {
-		const hours = Math.floor(minutes / 60);
-		const mins = minutes % 60;
-		return `${hours.toString().padStart(2, "0")}:${mins
-			.toString()
-			.padStart(2, "0")}`;
-	}, []);
-
-	const formatTime = useCallback((timeString) => {
-		if (!timeString) return "";
-		const parts = timeString.split(":");
-		return `${parts[0]}:${parts[1]}`;
-	}, []);
-
-	const calculateFDP = useCallback(
-		(duty) => {
-			if (!duty.startTime || !duty.endTime) return 0;
-			if (!duty.isFlightDuty) return 0;
-
-			const startMinutes = timeToMinutes(duty.startTime);
-			const endMinutes = timeToMinutes(duty.endTime);
-
-			if (endMinutes < startMinutes) {
-				return 24 * 60 - startMinutes + endMinutes;
-			}
-			return endMinutes - startMinutes;
-		},
-		[timeToMinutes]
-	);
-
-	const calculateMRT = useCallback((fdpMinutes) => {
-		const fdpHours = fdpMinutes / 60;
-
-		if (fdpHours <= 8) return 11 * 60;
-		if (fdpHours <= 12) return 12 * 60;
-		if (fdpHours <= 16) return 20 * 60;
-		return 24 * 60;
-	}, []);
-
-	// HSR offset in minutes between two bases
-	// TSA↔RMQ = 120min, RMQ↔KHH = 120min, TSA↔KHH = 180min
-	const getHsrOffset = useCallback((dutyBase, userBase) => {
-		if (!dutyBase || !userBase || dutyBase === userBase) return 0;
-		const pair = [dutyBase, userBase].sort().join("-");
-		if (pair === "RMQ-TSA") return 120;
-		if (pair === "KHH-RMQ") return 120;
-		if (pair === "KHH-TSA") return 180;
-		return 0;
-	}, []);
-
-	// Effective end minutes for RP calculation:
-	// Flight: endTime + 30min DP + HSR_after offset
-	// Ground/rest: endTime + HSR_after offset (no DP)
-	const getEffectiveEndMinutes = useCallback(
-		(duty, dateKey) => {
-			if (!duty.endTime) return null;
-			const endMin = timeToMinutes(duty.endTime);
-
-			let dp = duty.isFlightDuty ? (duty.dutyPeriod || 30) : 0;
-
-			const hsr = hsrItems[dateKey];
-			if (hsr?.after && hsr?.afterTo) {
-				// For flight duties: offset from duty base to afterTo
-				// For ground/rest: offset from afterTo to afterTo (use afterFrom as origin)
-				const fromBase = duty.base_code || hsr.afterFrom || hsr.afterTo;
-				dp += getHsrOffset(fromBase, hsr.afterTo);
-			}
-
-			return endMin + dp;
-		},
-		[timeToMinutes, hsrItems, getHsrOffset]
-	);
-
-	// Effective start minutes for RP calculation:
-	// If T前 active: startTime - HSR offset (RP of prev duty ends when crew departs)
-	const getEffectiveStartMinutes = useCallback(
-		(duty, dateKey) => {
-			if (!duty.startTime) return null;
-			const startMin = timeToMinutes(duty.startTime);
-			const hsr = hsrItems[dateKey];
-			if (hsr?.before && hsr?.beforeFrom) {
-				const toBase = duty.base_code || hsr.beforeTo || hsr.beforeFrom;
-				const offset = getHsrOffset(hsr.beforeFrom, toBase);
-				return startMin - offset;
-			}
-			return startMin;
-		},
-		[timeToMinutes, hsrItems, getHsrOffset]
-	);
+	// Thin wrappers that bind hsrItems from component state
+	const effEndMin   = useCallback((duty, dateKey) => getEffectiveEndMinutes(duty, dateKey, hsrItems),   [hsrItems]);
+	const effStartMin = useCallback((duty, dateKey) => getEffectiveStartMinutes(duty, dateKey, hsrItems), [hsrItems]);
 
 	const getEffectiveEndTime = useCallback(
 		(duty, dateKey) => {
 			if (!duty.endTime) return duty.endTime;
-			const mins = getEffectiveEndMinutes(duty, dateKey);
+			const mins = effEndMin(duty, dateKey);
 			if (mins === null) return duty.endTime;
-			return minutesToTime(((mins % 1440) + 1440) % 1440);
+			return minutesToTime(mins);
 		},
-		[getEffectiveEndMinutes, minutesToTime]
+		[effEndMin]
 	);
-
-	const formatDuration = useCallback((minutes) => {
-		const hours = Math.floor(minutes / 60);
-		const mins = minutes % 60;
-		return mins > 0 ? `${hours}h ${mins}m` : `${hours}h`;
-	}, []);
 
 	const getDutyPeriod = useCallback((duty) => {
 		if (!duty.startTime) return null;
@@ -335,64 +249,35 @@ const MRTChecker = () => {
 		[getDutyPeriod]
 	);
 
-	// Fetch imported user's name when viewUserId changes
+	// Resolve imported user's name from employeeList (instant, no DB round-trip)
 	useEffect(() => {
 		if (!viewUserId) { setViewUserName(null); return; }
-		const fetchName = async () => {
-			try {
-				const { supabase } = await import("../../lib/supabase");
-				const { data } = await supabase
-					.from("mdaeip_users")
-					.select("name")
-					.eq("id", viewUserId)
-					.single();
-				setViewUserName(data?.name || viewUserId);
-			} catch { setViewUserName(viewUserId); }
-		};
-		fetchName();
+		const emp = employeeList.find(e => e.id === viewUserId);
+		setViewUserName(emp?.name || viewUserId);
 	}, [viewUserId]);
-	// Convert a YYYY-MM-DD string to ISO weekday (1=Mon … 7=Sun)
-	const isoWeekday = (dateStr) => {
-		const [y, m, d] = dateStr.split("-").map(Number);
-		const dow = new Date(y, m - 1, d).getDay();
-		return dow === 0 ? 7 : dow;
-	};
-
-	// Check if a PDX duty row applies to a given date
-	const pdxDutyAppliesToDate = (row, dateStr) => {
-		if (row.specific_dates?.length) return row.specific_dates.includes(dateStr);
-		if (!dateStr || dateStr < row.date_from || dateStr > row.date_to) return false;
-		return row.active_weekdays?.includes(isoWeekday(dateStr)) ?? false;
-	};
-
-	// Find the best-matching PDX duty row for a code on a specific date.
-	// Prefers rows with specific_dates (overrides) over general date-range rows.
-	const findPdxDutyForDate = (rows, dateStr) => {
-		if (!rows?.length) return null;
-		const matches = rows.filter((r) => pdxDutyAppliesToDate(r, dateStr));
-		if (!matches.length) return null;
-		const specific = matches.find((r) => r.specific_dates?.length);
-		return specific || matches[0];
-	};
 
 	const getCalendarData = useCallback(() => {
 		const firstDay = new Date(currentYear, currentMonth, 1);
 		const lastDay = new Date(currentYear, currentMonth + 1, 0);
 		const daysInMonth = lastDay.getDate();
 		const startDayOfWeek = (firstDay.getDay() + 6) % 7;
+		const prevMonthDays = new Date(currentYear, currentMonth, 0).getDate(); // days in prev month
 
 		const calendarDays = [];
 
+		// Leading nulls → prev month days
 		for (let i = 0; i < startDayOfWeek; i++) {
-			calendarDays.push(null);
+			calendarDays.push({ adj: "prev", day: prevMonthDays - startDayOfWeek + 1 + i });
 		}
 
 		for (let day = 1; day <= daysInMonth; day++) {
 			calendarDays.push(day);
 		}
 
+		// Trailing nulls → next month days
+		let nextDay = 1;
 		while (calendarDays.length < 42) {
-			calendarDays.push(null);
+			calendarDays.push({ adj: "next", day: nextDay++ });
 		}
 
 		return { calendarDays, startDayOfWeek, daysInMonth };
@@ -407,6 +292,8 @@ const MRTChecker = () => {
 			if (!targetUserId) return;
 
 			setUserScheduleLoading(true);
+			setOriginalDroppedItems(null); // clear unsaved changes on reload
+			setAdjDroppedItems({ prev: {}, next: {} }); // clear adjacent month data
 			try {
 				const monthStr = `${currentYear}年${(currentMonth + 1)
 					.toString()
@@ -420,13 +307,6 @@ const MRTChecker = () => {
 					currentYear,
 					currentMonth + 1
 				);
-				console.log("[MRT] pdxDutyMap result:", pdxDutyMap);
-				console.log("[MRT] pdxDutyMap size:", pdxDutyMap?.size ?? "null");
-				if (pdxDutyMap) {
-					pdxDutyMap.forEach((info, code) => {
-						console.log(`[MRT] PDX duty: ${code}`, info);
-					});
-				}
 
 				// Build flight palette entries from PDX only.
 				// pdxDutyMap is Map<code, DutyRow[]> — pick the best row per code
@@ -479,78 +359,122 @@ const MRTChecker = () => {
 				}
 
 				const flightDuties = Array.from(flightDutyMap.values());
-				console.log("[MRT] flightDuties built:", flightDuties.length, flightDuties);
 				setAllDuties([...presetDuties, ...flightDuties]);
 				setFlightDutyData({});
 
-				if (scheduleData?.days) {
-					const newDroppedItems = {};
-					const totalDays = new Date(
-						currentYear, currentMonth + 1, 0
-					).getDate();
+				// Build newDroppedItems atomically (schedule + weekend auto-populate)
+				const newDroppedItems = {};
+				const totalDays = new Date(currentYear, currentMonth + 1, 0).getDate();
 
-					for (let day = 1; day <= totalDays; day++) {
-						const dayStr = day.toString().padStart(2, "0");
-						const monthPadded = (currentMonth + 1).toString().padStart(2, "0");
-						const dateKey = `${currentYear}-${currentMonth}-${day}`;
-						const scheduleKey = `${currentYear}-${monthPadded}-${dayStr}`;
+				for (let day = 1; day <= totalDays; day++) {
+					const dayStr = day.toString().padStart(2, "0");
+					const monthPadded = (currentMonth + 1).toString().padStart(2, "0");
+					const dateKey = `${currentYear}-${currentMonth}-${day}`;
+					const scheduleKey = `${currentYear}-${monthPadded}-${dayStr}`;
 
-						const rawCode = scheduleData.days[scheduleKey];
-						if (!rawCode || !rawCode.trim() || rawCode === "-") continue;
+					const rawCode  = scheduleData?.days?.[scheduleKey];
+					const entry    = parseScheduleEntry(rawCode);
 
-						// Split on backslash or newline (DataRoster stores combined codes
-						// like "訓\SMS" or "M2\FAOT") — use the first segment as the base
-						const dutyCode = rawCode.split(/[\\n]/)[0].trim();
-						if (!dutyCode) continue;
-
-						let dutyData = [...presetDuties, ...flightDuties].find(
-							(d) => d.code === dutyCode || d.id === dutyCode
-						);
-
-						// If found in palette, override sectors with date-accurate count
-						if (dutyData && dutyData.isFlightDuty && pdxDutyMap) {
-							const dateStr = `${currentYear}-${String(currentMonth + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
-							const pdxRows = pdxDutyMap.get(dutyCode);
-							const pdxRow = findPdxDutyForDate(pdxRows, dateStr);
-							if (pdxRow) {
-								dutyData = {
-									...dutyData,
-									startTime: pdxRow.reporting_time || dutyData.startTime,
-									endTime:   pdxRow.end_time       || dutyData.endTime,
-									sectors:   pdxRow.sector_count   ?? dutyData.sectors,
-								};
-							}
+					if (!entry) {
+						// No duty in schedule — auto-populate weekends
+						const dow = new Date(currentYear, currentMonth, day).getDay();
+						if (dow === 0) {
+							const recessDuty = presetDuties.find(d => d.id === "recessday");
+							if (recessDuty) newDroppedItems[dateKey] = { ...recessDuty, isAutoPopulated: true };
+						} else if (dow === 6) {
+							const restDuty = presetDuties.find(d => d.id === "rest");
+							if (restDuty) newDroppedItems[dateKey] = { ...restDuty, isAutoPopulated: true };
 						}
-
-						if (!dutyData) {
-							const isRestDay = ["例", "休", "假"].includes(dutyCode);
-							// Date-accurate PDX lookup — matches the exact row for this date
-							const dateStr = `${currentYear}-${String(currentMonth + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
-							const pdxRows = pdxDutyMap?.get(dutyCode);
-							const pdxRow = findPdxDutyForDate(pdxRows, dateStr);
-							dutyData = {
-								id: `schedule_${dutyCode}_${day}`,
-								code: rawCode,
-								name: isRestDay ? dutyCode : `${dutyCode} Flight`,
-								startTime: pdxRow?.reporting_time || "",
-								endTime: pdxRow?.end_time || "",
-								color: getBaseColor(
-									pdxRow?.base_code || null,
-									isRestDay ? "rest" : "ground"
-								),
-								isDuty: !isRestDay,
-								isRest: isRestDay,
-								isFlightDuty: !isRestDay,
-								sectors: pdxRow?.sector_count || null,
-								base_code: pdxRow?.base_code || null,
-								isFromSchedule: true,
-							};
-						}
-
-						newDroppedItems[dateKey] = dutyData;
+						continue;
 					}
 
-					setDroppedItems(newDroppedItems);
+					const { dutyCode, flightNums } = entry;
+					const isRestDay = ["例", "休", "假", "G"].includes(dutyCode);
+					const dateStr = `${currentYear}-${String(currentMonth + 1).padStart(2, "0")}-${dayStr}`;
+					const pdxRow = !isRestDay
+						? findPdxDutyForDate(pdxDutyMap?.get(dutyCode), dateStr)
+						: null;
+					const partial = (!isRestDay && flightNums.length > 0 && pdxRow)
+						? computePartialDutyTimes(pdxRow, flightNums)
+						: null;
+
+					let dutyData = [...presetDuties, ...flightDuties].find(
+						(d) => d.code === dutyCode || d.id === dutyCode
+					);
+
+					if (dutyData && dutyData.isFlightDuty && pdxRow) {
+						dutyData = {
+							...dutyData,
+							startTime:   partial?.partialUnknown ? "" : (partial?.startTime  ?? pdxRow.reporting_time ?? dutyData.startTime),
+							endTime:     partial?.partialUnknown ? "" : (partial?.endTime    ?? pdxRow.end_time       ?? dutyData.endTime),
+							sectors:     flightNums.length > 0 ? flightNums.length : (pdxRow.sector_count ?? dutyData.sectors),
+							ft_minutes:  partial?.partialUnknown ? null : (partial?.ftMinutes  ?? pdxRow.ft_minutes  ?? null),
+							fdp_minutes: partial?.partialUnknown ? null : (partial?.fdpMinutes ?? pdxRow.fdp_minutes ?? null),
+							flightNums:  flightNums.length > 0 ? flightNums : null,
+							sectors_data: pdxRow?.sectors_data ?? [],
+						};
+					}
+
+					if (!dutyData) {
+						dutyData = {
+							id:           `schedule_${dutyCode}_${day}`,
+							code:         rawCode,
+							name:         isRestDay ? dutyCode : `${dutyCode} Flight`,
+							startTime:    partial?.partialUnknown ? "" : (partial?.startTime  ?? pdxRow?.reporting_time ?? ""),
+							endTime:      partial?.partialUnknown ? "" : (partial?.endTime    ?? pdxRow?.end_time       ?? ""),
+							color:        getBaseColor(pdxRow?.base_code || null, isRestDay ? "rest" : "ground"),
+							isDuty:       !isRestDay,
+							isRest:       isRestDay,
+							isFlightDuty: !isRestDay,
+							sectors:      flightNums.length > 0 ? flightNums.length : (pdxRow?.sector_count ?? null),
+							ft_minutes:   partial?.partialUnknown ? null : (partial?.ftMinutes  ?? pdxRow?.ft_minutes  ?? null),
+							fdp_minutes:  partial?.partialUnknown ? null : (partial?.fdpMinutes ?? pdxRow?.fdp_minutes ?? null),
+							flightNums:   flightNums.length > 0 ? flightNums : null,
+							sectors_data: pdxRow?.sectors_data ?? [],
+							base_code:    pdxRow?.base_code   ?? null,
+							isFromSchedule: true,
+						};
+					}
+					newDroppedItems[dateKey] = dutyData;
+				}
+
+				setDroppedItems(newDroppedItems);
+
+				// Load adjacent months for display in leading/trailing calendar cells
+				try {
+					const prevDate  = new Date(currentYear, currentMonth - 1, 1);
+					const nextDate  = new Date(currentYear, currentMonth + 1, 1);
+					const prevStr   = `${prevDate.getFullYear()}年${String(prevDate.getMonth() + 1).padStart(2, "0")}月`;
+					const nextStr   = `${nextDate.getFullYear()}年${String(nextDate.getMonth() + 1).padStart(2, "0")}月`;
+					const [prevData, nextData] = await Promise.all([
+						getEmployeeSchedule(targetUserId, prevStr),
+						getEmployeeSchedule(targetUserId, nextStr),
+					]);
+
+					const buildAdj = (sched, adjYear, adjMonth) => {
+						const result = {};
+						const hasData = !!(sched?.days);
+						if (!hasData) { result._hasData = false; return result; }
+						const adjMonthPadded = String(adjMonth).padStart(2, "0");
+						const adjTotalDays = new Date(adjYear, adjMonth, 0).getDate();
+						for (let d = 1; d <= adjTotalDays; d++) {
+							const schedKey = `${adjYear}-${adjMonthPadded}-${String(d).padStart(2, "0")}`;
+							const rawCode = sched.days[schedKey];
+							const dutyCode = normalizeDutyCode(rawCode);
+							if (!dutyCode) continue;
+							const isRest = ["例", "休", "假", "G"].includes(dutyCode);
+							result[d] = { code: rawCode, dutyCode, isRest };
+						}
+						result._hasData = true;
+						return result;
+					};
+
+					setAdjDroppedItems({
+						prev: buildAdj(prevData, prevDate.getFullYear(), prevDate.getMonth() + 1),
+						next: buildAdj(nextData, nextDate.getFullYear(), nextDate.getMonth() + 1),
+					});
+				} catch {
+					setAdjDroppedItems({ prev: {}, next: {} });
 				}
 			} catch (error) {
 				console.error("Error loading user schedule:", error);
@@ -569,232 +493,21 @@ const MRTChecker = () => {
 		getBaseColor,
 	]);
 
-	const hasConsecutive32HourRest = useCallback(
-		(sevenDayPeriod) => {
-			// Two consecutive rest/empty days always satisfy 32h
-			for (let i = 0; i < sevenDayPeriod.length - 1; i++) {
-				if (sevenDayPeriod[i].isRest && sevenDayPeriod[i + 1].isRest) return true;
-				if ((sevenDayPeriod[i].isRest && !sevenDayPeriod[i + 1].assignment) ||
-					(!sevenDayPeriod[i].assignment && sevenDayPeriod[i + 1].isRest)) return true;
-				if (!sevenDayPeriod[i].assignment && !sevenDayPeriod[i + 1].assignment) return true;
-			}
-
-			const duties = sevenDayPeriod
-				.map((day, index) => ({ ...day, originalIndex: index }))
-				.filter((day) => day.isDuty && day.assignment?.startTime && day.assignment?.endTime)
-				.sort((a, b) => a.originalIndex - b.originalIndex);
-
-			for (let i = 0; i < duties.length - 1; i++) {
-				const firstDuty  = duties[i];
-				const secondDuty = duties[i + 1];
-				const daysBetween = secondDuty.originalIndex - firstDuty.originalIndex - 1;
-
-				const firstEndMin   = getEffectiveEndMinutes(firstDuty.assignment, firstDuty.dateKey);
-				const secondStartMin = getEffectiveStartMinutes(secondDuty.assignment, secondDuty.dateKey);
-
-				if (firstEndMin === null || secondStartMin === null) continue;
-
-				let totalRestMinutes = 0;
-				if (daysBetween === 0) {
-					totalRestMinutes = secondStartMin >= firstEndMin
-						? secondStartMin - firstEndMin
-						: 24 * 60 - firstEndMin + secondStartMin;
-				} else {
-					totalRestMinutes = (24 * 60 - firstEndMin) + daysBetween * 24 * 60 + secondStartMin;
-				}
-
-				if (totalRestMinutes >= 32 * 60) return true;
-			}
-
-			return false;
-		},
-		[getEffectiveEndMinutes, getEffectiveStartMinutes]
-	);
-
-	const checkMinimumRestViolations = useCallback(() => {
-		const errors = [];
-		const violations = new Set();
-		const currentMonthDays = new Date(currentYear, currentMonth + 1, 0).getDate();
-
-		for (let day = 1; day < currentMonthDays; day++) {
-			const todayKey    = `${currentYear}-${currentMonth}-${day}`;
-			const tomorrowKey = `${currentYear}-${currentMonth}-${day + 1}`;
-
-			const todayDuty    = droppedItems[todayKey];
-			const tomorrowDuty = droppedItems[tomorrowKey];
-
-			if (!todayDuty?.isDuty || !tomorrowDuty?.isDuty) continue;
-			if (!todayDuty.endTime || !tomorrowDuty.startTime) continue;
-
-			const todayFDP    = calculateFDP(todayDuty);
-			const requiredMRT = calculateMRT(todayFDP);
-
-			// RP starts: today's effective end (end + DP + T後 HSR)
-			const rpStartMin = getEffectiveEndMinutes(todayDuty, todayKey);
-			// RP ends: tomorrow's effective start (start - T前 HSR)
-			const rpEndMin   = getEffectiveStartMinutes(tomorrowDuty, tomorrowKey);
-
-			if (rpStartMin === null || rpEndMin === null) continue;
-
-			// These are always consecutive calendar days, so rpEnd is always
-			// at least one full overnight ahead of rpStart.
-			// Correct rest = (1440 - rpStartMin) + rpEndMin
-			// But if rpEndMin < rpStartMin it still just means more rest, not less.
-			const actualRestMinutes = (24 * 60 - rpStartMin) + rpEndMin;
-
-			if (actualRestMinutes < requiredMRT) {
-				errors.push(
-					`Day ${day}-${day + 1}: 休息不足 (實際 ${formatDuration(actualRestMinutes)} < 規定 ${formatDuration(requiredMRT)})`
-				);
-				violations.add(todayKey);
-				violations.add(tomorrowKey);
-			}
-		}
-
-		return { errors, violations };
-	}, [
-		currentYear, currentMonth, droppedItems,
-		calculateFDP, calculateMRT,
-		getEffectiveEndMinutes, getEffectiveStartMinutes,
-		formatDuration,
-	]);
-
-	// Auto-populate weekends
+	// Validation logic — delegates to runFatigueCheck from fatigueHelpers
 	useEffect(() => {
-		if (loadingUserData || userScheduleLoading) return;
-
-		const currentMonthDays = new Date(
-			currentYear,
-			currentMonth + 1,
-			0
-		).getDate();
-
-		setDroppedItems((prevDroppedItems) => {
-			const newDroppedItems = { ...prevDroppedItems };
-			let hasChanges = false;
-
-			for (let day = 1; day <= currentMonthDays; day++) {
-				const dayDate = new Date(currentYear, currentMonth, day);
-				const dayOfWeek = dayDate.getDay();
-				const key = `${currentYear}-${currentMonth}-${day}`;
-
-				if (!prevDroppedItems[key]) {
-					if (dayOfWeek === 0) {
-						const recessDuty = presetDuties.find(
-							(d) => d.id === "recessday"
-						);
-						if (recessDuty) {
-							newDroppedItems[key] = {
-								...recessDuty,
-								isAutoPopulated: true,
-							};
-							hasChanges = true;
-						}
-					} else if (dayOfWeek === 6) {
-						const restDuty = presetDuties.find(
-							(d) => d.id === "rest"
-						);
-						if (restDuty) {
-							newDroppedItems[key] = {
-								...restDuty,
-								isAutoPopulated: true,
-							};
-							hasChanges = true;
-						}
-					}
-				}
+		const { errors, violations, monthlyFdpMin, monthlyFtMin, monthlyDpMin } = runFatigueCheck(
+			droppedItems, hsrItems, currentYear, currentMonth + 1,
+			{
+				prevAdjItems: adjDroppedItems.prev,
+				nextAdjItems: adjDroppedItems.next,
+				hasPrevData:  !!adjDroppedItems.prev._hasData,
+				hasNextData:  !!adjDroppedItems.next._hasData,
 			}
-
-			return hasChanges ? newDroppedItems : prevDroppedItems;
-		});
-	}, [currentMonth, currentYear, loadingUserData, userScheduleLoading]);
-
-	// Validation logic — all fatigue rules
-	useEffect(() => {
-		const validateRestRequirements = () => {
-			const errors = [];
-			const totalDays = new Date(currentYear, currentMonth + 1, 0).getDate();
-
-			// ── Rule 1: every calendar week must have ≥1 例 and ≥1 休 ──────────
-			for (let day = 1; day <= totalDays; day++) {
-				const dayDate  = new Date(currentYear, currentMonth, day);
-				const dayOfWeek = (dayDate.getDay() + 6) % 7; // 0=Mon
-				if (dayOfWeek !== 0) continue; // only process Monday starts
-
-				const weekDays = [];
-				for (let i = 0; i < 7 && day + i <= totalDays; i++) weekDays.push(day + i);
-				if (weekDays.length < 7) continue;
-
-				const weekAssignments = weekDays.map(d => droppedItems[`${currentYear}-${currentMonth}-${d}`]);
-				const recessCount = weekAssignments.filter(d => d?.code === "例" || d?.id === "recessday").length;
-				const restCount   = weekAssignments.filter(d => d?.code === "休" || d?.id === "rest").length;
-				const workCount   = weekAssignments.filter(d => d && !d.isRest).length;
-				const weekNum = Math.floor((day - 1) / 7) + 1;
-
-				if (workCount > 5) errors.push(`第${weekNum}週: 工作日超過5天 (${workCount}/5)`);
-				if (recessCount === 0) errors.push(`第${weekNum}週: 缺少例假`);
-				if (restCount === 0) errors.push(`第${weekNum}週: 缺少休假`);
-			}
-
-			// ── Rule 2: every rolling 7-day window must have ≥32h consecutive rest ──
-			for (let day = 1; day <= totalDays - 6; day++) {
-				const sevenDayPeriod = [];
-				for (let i = 0; i < 7; i++) {
-					const d   = day + i;
-					const dk  = `${currentYear}-${currentMonth}-${d}`;
-					const asgn = droppedItems[dk];
-					sevenDayPeriod.push({
-						day: d,
-						dateKey: dk,
-						assignment: asgn,
-						isRest: asgn?.isRest || false,
-						isDuty: asgn?.isDuty || false,
-					});
-				}
-				if (!hasConsecutive32HourRest(sevenDayPeriod)) {
-					errors.push(`Day ${day}–${day + 6}: 連續7日內缺少32小時連續休息`);
-				}
-			}
-
-			// ── Rules 3 & 4: MRT between consecutive duties (via checkMinimumRestViolations) ──
-			const dutyViolations = checkMinimumRestViolations();
-			errors.push(...dutyViolations.errors);
-			setViolationDates(dutyViolations.violations);
-
-			// ── Rules 5 & 6: 30-day FDP ≤ 210h, FT ≤ 90h ──────────────────────
-			let totalFdpMin = 0;
-			let totalFtMin  = 0;
-			for (let day = 1; day <= totalDays; day++) {
-				const dk   = `${currentYear}-${currentMonth}-${day}`;
-				const duty = droppedItems[dk];
-				if (!duty?.isFlightDuty || !duty.startTime || !duty.endTime) continue;
-
-				// FDP = end - start (handles overnight)
-				const startMin = timeToMinutes(duty.startTime);
-				const endMin   = timeToMinutes(duty.endTime);
-				const fdp = endMin >= startMin ? endMin - startMin : 24 * 60 - startMin + endMin;
-				totalFdpMin += fdp;
-				// FT ≈ FDP for now (no sector-level block times in this model)
-				totalFtMin += fdp;
-			}
-
-			const totalFdpH = totalFdpMin / 60;
-			const totalFtH  = totalFtMin  / 60;
-			if (totalFdpH > 210) errors.push(`本月FDP累計 ${totalFdpH.toFixed(1)}h 超過210小時限制`);
-			if (totalFtH  > 90)  errors.push(`本月FT累計 ${totalFtH.toFixed(1)}h 超過90小時限制`);
-
-			return { errors, totalFdpMin, totalFtMin };
-		};
-
-		const { errors, totalFdpMin, totalFtMin } = validateRestRequirements();
+		);
 		setValidationErrors(errors);
-		setMonthlyStats({ fdpMin: totalFdpMin, ftMin: totalFtMin });
-	}, [
-		droppedItems, hsrItems,
-		currentMonth, currentYear,
-		hasConsecutive32HourRest, checkMinimumRestViolations,
-		timeToMinutes,
-	]);
+		setViolationDates(violations);
+		setMonthlyStats({ fdpMin: monthlyFdpMin, ftMin: monthlyFtMin, dpMin: monthlyDpMin });
+	}, [droppedItems, hsrItems, currentMonth, currentYear, adjDroppedItems]);
 
 	const getDaySuggestion = useCallback(
 		(day) => {
@@ -854,7 +567,7 @@ const MRTChecker = () => {
 				if (yesterdayDuty?.isDuty && yesterdayDuty.endTime) {
 					const yesterdayFDP = calculateFDP(yesterdayDuty);
 					const requiredMRT = calculateMRT(yesterdayFDP);
-					const yesterdayEndMinutes = getEffectiveEndMinutes(yesterdayDuty, yesterdayKey);
+					const yesterdayEndMinutes = effEndMin(yesterdayDuty, yesterdayKey);
 
 					if (yesterdayEndMinutes !== null) {
 						const earliestStartMinutes = (yesterdayEndMinutes + requiredMRT) % (24 * 60);
@@ -876,7 +589,7 @@ const MRTChecker = () => {
 			droppedItems,
 			calculateFDP,
 			calculateMRT,
-			getEffectiveEndMinutes,
+			effEndMin,
 			minutesToTime,
 			formatDuration,
 			formatTime,
@@ -1026,17 +739,25 @@ const MRTChecker = () => {
 	);
 
 	// Dedicated remove handler — called by the ✕ button on each chip
+	// Snapshot current droppedItems before first dispatch edit
+	const snapshotIfNeeded = useCallback((currentItems) => {
+		if (hasAppAccess(user, "dispatch") && originalDroppedItems === null) {
+			setOriginalDroppedItems({ ...currentItems });
+		}
+	}, [user, originalDroppedItems]);
+
 	const handleRemoveDuty = useCallback(
 		(e, dateKey) => {
 			e.stopPropagation();
 			setPopoverDuty(null);
 			setDroppedItems((prev) => {
+				snapshotIfNeeded(prev);
 				const newItems = { ...prev };
 				delete newItems[dateKey];
 				return newItems;
 			});
 		},
-		[]
+		[snapshotIfNeeded]
 	);
 
 	// Open detail popover for a calendar duty chip
@@ -1057,6 +778,73 @@ const MRTChecker = () => {
 	const clearSelection = useCallback(() => {
 		setSelectedDuty(null);
 	}, []);
+
+	const cancelEditMode = useCallback(() => {
+		if (originalDroppedItems) setDroppedItems(originalDroppedItems);
+		setOriginalDroppedItems(null);
+	}, [originalDroppedItems]);
+
+	const saveSchedule = useCallback(async () => {
+		const targetUserId = viewUserId || user?.id;
+		if (!targetUserId) return;
+
+		try {
+			const monthStr = `${currentYear}年${String(currentMonth + 1).padStart(2, "0")}月`;
+			const totalDays = new Date(currentYear, currentMonth + 1, 0).getDate();
+			const monthPadded = String(currentMonth + 1).padStart(2, "0");
+
+			// Build duties array (one entry per day, 1-indexed)
+			const duties = [];
+			for (let day = 1; day <= totalDays; day++) {
+				const dateKey = `${currentYear}-${currentMonth}-${day}`;
+				const duty = droppedItems[dateKey];
+				// Store the raw code, or empty string if auto-populated or missing
+				if (!duty || duty.isAutoPopulated) {
+					duties.push("");
+				} else {
+					duties.push(duty.code || "");
+				}
+			}
+
+			// Get month_id from mdaeip_schedule_months
+			const { supabase } = await import("../../lib/supabase");
+			const { data: monthRow, error: monthErr } = await supabase
+				.from("mdaeip_schedule_months")
+				.select("id")
+				.eq("month", monthStr)
+				.single();
+
+			if (monthErr || !monthRow) {
+				toast.error("找不到對應月份資料");
+				return;
+			}
+
+			// Upsert the schedule row
+			const { error: upsertErr } = await supabase
+				.from("mdaeip_schedules")
+				.upsert({
+					month_id:    monthRow.id,
+					employee_id: targetUserId,
+					duties:      duties,
+				}, { onConflict: "month_id,employee_id" });
+
+			if (upsertErr) {
+				console.error("Save error:", upsertErr);
+				toast.error("儲存失敗");
+				return;
+			}
+
+			// Clear cache so next load fetches fresh data
+			const { clearScheduleCache } = await import("../../lib/DataRoster");
+			clearScheduleCache(monthStr);
+
+			setOriginalDroppedItems(null);
+			toast.success("班表已儲存");
+		} catch (err) {
+			console.error("saveSchedule error:", err);
+			toast.error("儲存失敗");
+		}
+	}, [droppedItems, viewUserId, user?.id, currentYear, currentMonth]);
 
 	const handleDragStart = useCallback(
 		(e, duty) => {
@@ -1099,22 +887,23 @@ const MRTChecker = () => {
 
 				if (draggedFromDate) {
 					setDroppedItems((prev) => {
+						snapshotIfNeeded(prev);
 						const newItems = { ...prev };
 						delete newItems[draggedFromDate];
 						newItems[key] = draggedItem;
 						return newItems;
 					});
 				} else {
-					setDroppedItems((prev) => ({
-						...prev,
-						[key]: draggedItem,
-					}));
+					setDroppedItems((prev) => {
+						snapshotIfNeeded(prev);
+						return { ...prev, [key]: draggedItem };
+					});
 				}
 			}
 			setDraggedItem(null);
 			setDraggedFromDate(null);
 		},
-		[isTouchDevice, draggedItem, currentYear, currentMonth, draggedFromDate]
+		[isTouchDevice, draggedItem, currentYear, currentMonth, draggedFromDate, snapshotIfNeeded]
 	);
 
 	const handleEmptyAreaDrop = useCallback(
@@ -1123,6 +912,7 @@ const MRTChecker = () => {
 			e.preventDefault();
 			if (draggedFromDate) {
 				setDroppedItems((prev) => {
+					snapshotIfNeeded(prev);
 					const newItems = { ...prev };
 					delete newItems[draggedFromDate];
 					return newItems;
@@ -1131,7 +921,7 @@ const MRTChecker = () => {
 			setDraggedItem(null);
 			setDraggedFromDate(null);
 		},
-		[isTouchDevice, draggedFromDate]
+		[isTouchDevice, draggedFromDate, snapshotIfNeeded]
 	);
 
 	const TABS = [
@@ -1246,7 +1036,15 @@ const MRTChecker = () => {
 		return (
 			<>
 				{/* Tab bar */}
-				<div className={styles.tabBar}>
+				<div
+					className={styles.tabBar}
+					onWheel={(e) => {
+						if (Math.abs(e.deltaY) > Math.abs(e.deltaX)) {
+							e.currentTarget.scrollLeft += e.deltaY;
+							e.preventDefault();
+						}
+					}}
+				>
 					{TABS.map((tab) => {
 						const count = buckets[tab.key]?.length || 0;
 						const hasAnyFlight = allDuties.some(d => d.isFlightDuty);
@@ -1286,11 +1084,11 @@ const MRTChecker = () => {
 
 							return (
 								<div key={duty.id}>
-									{/* Header row — draggable only when no variants (single pattern) */}
+									{/* Header row — draggable always; click also selects */}
 									<div
 										className={`${styles.dutyRow} ${!hasVariants && selectedDuty?.id === duty.id ? styles.selected : ""} ${hasVariants ? styles.dutyRowMulti : ""}`}
 										data-base={duty.base_code || duty.baseCategory || activeTab}
-										draggable={!isTouchDevice && !hasVariants}
+										draggable={!hasVariants}
 										onDragStart={!hasVariants ? (e) => handleDragStart(e, duty) : undefined}
 										onClick={() => { if (!hasVariants) handleDutyClick(duty); }}
 									>
@@ -1352,17 +1150,17 @@ const MRTChecker = () => {
 													<div
 														key={i}
 														className={`${styles.dutyVariantRow} ${v.isOverride ? styles.dutyVariantOverride : ""} ${isVariantSelected ? styles.dutyVariantSelected : ""}`}
-														draggable={!isTouchDevice}
+														draggable
 														onDragStart={(e) => handleDragStart(e, variantDuty)}
 														onClick={() => handleDutyClick(variantDuty)}
-														title={isTouchDevice ? "點選後拖到日期" : "拖到日期安排"}
+														title="拖到日期安排"
 													>
 														<span className={styles.dutyVariantLabel}>{v.label || "一般"}</span>
 														<span className={styles.dutyVariantTimes}>
-															{v.reporting_time ? `${formatTime(v.reporting_time)}–${formatTime(v.end_time)}` : "—"}
-															{v.sector_count ? ` · ${v.sector_count}段` : ""}
+															<span>{v.reporting_time ? `${formatTime(v.reporting_time)}–${formatTime(v.end_time)}` : "—"}
+															{v.sector_count ? ` · ${v.sector_count}段` : ""}</span>
+															<span className={styles.dutyVariantDrag}>⠿</span>
 														</span>
-														<span className={styles.dutyVariantDrag}>⠿</span>
 													</div>
 												);
 											})}
@@ -1384,8 +1182,8 @@ const MRTChecker = () => {
 						增加自訂任務
 					</button>
 				</div>
-			</>
-		);
+		</>
+	);
 	};
 
 	if (!user || !hasAppAccess(user, "mrt_checker")) return null;
@@ -1448,9 +1246,18 @@ const MRTChecker = () => {
 								onKeyDown={(e) => {
 									if (e.key === "Enter") {
 										const id = viewUserInput.trim();
-										setViewUserId(id || null);
-										setDroppedItems({});
+										if (!id) {
+											setViewUserId(null);
+											setDroppedItems({});
+											setHsrItems({});
+											setCameFromFleet(false);
+											return;
+										}
+										const emp = employeeList.find(x => x.id === id);
+										if (!emp) { toast.error(`找不到員工編號 ${id}`); return; }
+										setViewUserId(id);
 										setHsrItems({});
+										setCameFromFleet(false);
 									}
 								}}
 							/>
@@ -1458,9 +1265,17 @@ const MRTChecker = () => {
 								className={styles.topBarIdBtn}
 								onClick={() => {
 									const id = viewUserInput.trim();
-									setViewUserId(id || null);
-									setDroppedItems({});
+									if (!id) {
+										setViewUserId(null);
+										setDroppedItems({});
+										setHsrItems({});
+										return;
+									}
+									const emp = employeeList.find(x => x.id === id);
+									if (!emp) { toast.error(`找不到員工編號 ${id}`); return; }
+									setViewUserId(id);
 									setHsrItems({});
+									setCameFromFleet(false);
 								}}
 							><Search size={13} /></button>
 							{viewUserId && (
@@ -1471,6 +1286,7 @@ const MRTChecker = () => {
 										setViewUserInput("");
 										setDroppedItems({});
 										setHsrItems({});
+										setCameFromFleet(false);
 									}}
 									title="回到我的班表"
 								>✕</button>
@@ -1525,8 +1341,77 @@ const MRTChecker = () => {
 							<span className={styles.desktopOnly}>截圖</span>
 							{validationErrors.length > 0 && <span className={styles.blockedText}>(Blocked)</span>}
 						</button>
+
+						{/* Save/cancel — dispatch only, individual tab, when unsaved changes exist */}
+						{hasAppAccess(user, "dispatch") && activeMainTab === "individual" && originalDroppedItems !== null && (
+							<>
+								<button className={styles.editSaveBtn} onClick={saveSchedule}>
+									儲存班表
+								</button>
+								<button className={styles.editCancelBtn} onClick={cancelEditMode}>
+									取消
+								</button>
+							</>
+						)}
 					</div>
 				</div>
+
+				{/* ── Main tab bar ── */}
+				<div className={styles.mainTabBar}>
+					<button
+						className={`${styles.mainTab} ${activeMainTab === "fleet" ? styles.mainTabActive : ""}`}
+						onClick={() => setActiveMainTab("fleet")}
+					>全員檢測</button>
+					<button
+						className={`${styles.mainTab} ${activeMainTab === "individual" ? styles.mainTabActive : ""}`}
+						onClick={() => setActiveMainTab("individual")}
+					>個人查詢</button>
+					<button
+						className={`${styles.mainTab} ${activeMainTab === "swap" ? styles.mainTabActive : ""}`}
+						onClick={() => setActiveMainTab("swap")}
+					>換班檢視</button>
+				</div>
+
+				{/* ── Fleet tab — always mounted to preserve state ── */}
+				<div style={{ display: activeMainTab === "fleet" ? "block" : "none" }}>
+					<FleetTab
+						onViewCrew={(id) => {
+							setViewUserId(id);
+							setViewUserInput(id);
+							setHsrItems({});
+							setCameFromFleet(true);
+							setActiveMainTab("individual");
+						}}
+					/>
+				</div>
+
+				{/* ── Individual tab content ── */}
+				{activeMainTab === "individual" && (<>
+
+				{/* Back to fleet banner */}
+				{cameFromFleet && (
+					<div className={styles.backToFleetBanner}>
+						<button
+							className={styles.backToFleetBtn}
+							onClick={() => {
+								setCameFromFleet(false);
+								setActiveMainTab("fleet");
+							}}
+						>
+							← 返回全員檢測
+						</button>
+						<span className={styles.backToFleetLabel}>
+							查閱中: {viewUserName || viewUserId}
+						</span>
+					</div>
+				)}
+
+				{/* Unsaved changes banner — dispatch only */}
+				{hasAppAccess(user, "dispatch") && originalDroppedItems !== null && (
+					<div className={styles.editModeBanner}>
+						✏️ 班表已修改 — 確認無誤後點選「儲存班表」，或「取消」還原
+					</div>
+				)}
 
 				{/* ── Validation banner ── */}
 				{validationErrors.length > 0 && (
@@ -1583,6 +1468,24 @@ const MRTChecker = () => {
 						{/* Calendar grid */}
 						<div className={styles.calendarGrid}>
 							{calendarDays.map((day, index) => {
+								// Adjacent month cell
+								if (day && typeof day === "object" && day.adj) {
+									const adjEntry = adjDroppedItems[day.adj]?.[day.day];
+									return (
+										<div key={index} className={`${styles.calendarEmptyCell} ${styles.adjMonthCell}`}>
+											<div className={styles.adjDayNumber}>{day.day}</div>
+											{adjEntry && (
+												<div
+													className={styles.adjDutyChip}
+													style={{ backgroundColor: adjEntry.isRest ? "#e11d48" : "#64748b" }}
+												>
+													{adjEntry.dutyCode}
+												</div>
+											)}
+										</div>
+									);
+								}
+
 								if (!day) {
 									return <div key={index} className={styles.calendarEmptyCell} />;
 								}
@@ -1606,7 +1509,7 @@ const MRTChecker = () => {
 
 										{assignedDuty && (
 											<div
-												draggable={!isTouchDevice}
+												draggable
 												onDragStart={(e) => handleDutyDragStart(e, assignedDuty, key)}
 												onClick={(e) => handleDutyChipClick(e, assignedDuty, key)}
 												className={`${styles.assignedDuty} ${violationDates.has(key) ? styles.dutyViolation : ""} ${popoverDuty?.dateKey === key ? styles.assignedDutyActive : ""}`}
@@ -1687,20 +1590,20 @@ const MRTChecker = () => {
 						</div>
 
 						{/* Monthly FDP / FT totals */}
-						{(monthlyStats.fdpMin > 0 || monthlyStats.ftMin > 0) && (
+						{(monthlyStats.dpMin > 0 || monthlyStats.ftMin > 0) && (
 							<div className={styles.monthlyStats}>
-								<div className={`${styles.monthlyStat} ${monthlyStats.fdpMin / 60 > 210 ? styles.monthlyStatViolation : ""}`}>
-									<span className={styles.monthlyStatLabel}>本月 FDP</span>
+								<div className={`${styles.monthlyStat} ${monthlyStats.dpMin / 60 > 210 ? styles.monthlyStatViolation : ""}`}>
+									<span className={styles.monthlyStatLabel}>本月 DP</span>
 									<span className={styles.monthlyStatValue}>
-										{formatDuration(monthlyStats.fdpMin)}
+										{formatDuration(monthlyStats.dpMin)}
 										<span className={styles.monthlyStatLimit}> / 210h</span>
 									</span>
 									<div className={styles.monthlyStatBar}>
 										<div
 											className={styles.monthlyStatFill}
 											style={{
-												width: `${Math.min(monthlyStats.fdpMin / (210 * 60) * 100, 100)}%`,
-												backgroundColor: monthlyStats.fdpMin / 60 > 210 ? "#dc2626" : "#2563eb",
+												width: `${Math.min(monthlyStats.dpMin / (210 * 60) * 100, 100)}%`,
+												backgroundColor: monthlyStats.dpMin / 60 > 210 ? "#dc2626" : "#2563eb",
 											}}
 										/>
 									</div>
@@ -1846,7 +1749,7 @@ const MRTChecker = () => {
 					const mrtMin = calculateMRT(fdpMin);
 					// Position: clamp to viewport
 					const PAD = 12;
-					const W = 220;
+					const W = 420; // max width (two-column when sectors present)
 					const vw = typeof window !== "undefined" ? window.innerWidth : 800;
 					const left = Math.min(Math.max(popoverPos.x, PAD), vw - W - PAD);
 					return (
@@ -1863,135 +1766,140 @@ const MRTChecker = () => {
 								{/* colour strip */}
 								<div className={styles.dutyPopoverStrip} style={{ backgroundColor: duty.color }} />
 								<div className={styles.dutyPopoverBody}>
-									<div className={styles.dutyPopoverCode}>
-										{duty.isFlightDuty && <span style={{ color: "#fbbf24", marginRight: 4 }}>☆</span>}
-										{duty.code}
-									</div>
-									{duty.name && duty.name !== `Flight ${duty.code}` && (
-										<div className={styles.dutyPopoverName}>{duty.name}</div>
-									)}
-									{duty.startTime && duty.endTime && (
-										<div className={styles.dutyPopoverRow}>
-											<span className={styles.dutyPopoverLabel}>報到</span>
-											<span className={styles.dutyPopoverValue}>{formatTime(duty.startTime)}</span>
-										</div>
-									)}
-									{duty.endTime && (
-										<div className={styles.dutyPopoverRow}>
-											<span className={styles.dutyPopoverLabel}>結束</span>
-											<span className={styles.dutyPopoverValue}>{formatTime(duty.endTime)}</span>
-										</div>
-									)}
-									{duty.isFlightDuty && duty.startTime && duty.endTime && (
-										<>
-											<div className={styles.dutyPopoverRow}>
-												<span className={styles.dutyPopoverLabel}>FDP</span>
-												<span className={styles.dutyPopoverValue}>{formatDuration(fdpMin)}</span>
-											</div>
-											<div className={styles.dutyPopoverRow}>
-												<span className={styles.dutyPopoverLabel}>MRT</span>
-												<span className={styles.dutyPopoverValue}>{formatDuration(mrtMin)}</span>
-											</div>
-										</>
-									)}
-									{duty.sectors && (
-										<div className={styles.dutyPopoverRow}>
-											<span className={styles.dutyPopoverLabel}>航段</span>
-											<span className={styles.dutyPopoverValue}>{duty.sectors} 段</span>
-										</div>
-									)}
-									{duty.dutyType && (
-										<div className={styles.dutyPopoverRow}>
-											<span className={styles.dutyPopoverLabel}>機型</span>
-											<span className={styles.dutyPopoverValue}>{duty.dutyType}</span>
-										</div>
-									)}
-									{duty.base_code && (
-										<div className={styles.dutyPopoverRow}>
-											<span className={styles.dutyPopoverLabel}>基地</span>
-											<span className={styles.dutyPopoverValue}>{duty.base_code}</span>
-										</div>
-									)}
-
-									{/* T前/T後 HSR section — available for all assigned duties */}
-									{(() => {
-										const hsr = hsrItems[dateKey] || {};
-										const allBases = ["TSA", "RMQ", "KHH"];
-										// Exclude duty's own base from options (if known)
-										const otherBases = duty.base_code
-											? allBases.filter(b => b !== duty.base_code)
-											: allBases;
-
-										const setHsr = (field, val) => setHsrItems(prev => ({
+								{(() => {
+									const showSectors = hasAppAccess(user, "dispatch") && duty.isFlightDuty && duty.sectors_data?.length > 0;
+									const allFlights = showSectors ? duty.sectors_data.map(s => s.flight_number.replace(/^AE-/, "")) : [];
+									const isAll = !duty.flightNums;
+									const selected = new Set(duty.flightNums || allFlights);
+									const applySectors = (newNums) => {
+										const pdxRow = { ...duty };
+										const partial = newNums.length === allFlights.length ? null : computePartialDutyTimes(pdxRow, newNums);
+										const flightNums = newNums.length === allFlights.length ? null : newNums;
+										setDroppedItems(prev => ({
 											...prev,
-											[dateKey]: { ...prev[dateKey], [field]: val },
+											[dateKey]: {
+												...prev[dateKey],
+												flightNums,
+												startTime:   partial?.partialUnknown ? "" : (partial?.startTime  ?? duty.startTime),
+												endTime:     partial?.partialUnknown ? "" : (partial?.endTime    ?? duty.endTime),
+												ft_minutes:  partial?.partialUnknown ? null : (partial?.ftMinutes  ?? (flightNums ? null : duty.ft_minutes)),
+												fdp_minutes: partial?.partialUnknown ? null : (partial?.fdpMinutes ?? (flightNums ? null : duty.fdp_minutes)),
+												sectors:     newNums.length,
+											},
 										}));
-
-										return (
-											<div className={styles.dutyPopoverHsr}>
-												<div className={styles.dutyPopoverHsrLabel}>高鐵通勤</div>
-
-												{/* T前 */}
-												<div className={styles.dutyPopoverHsrRow}>
-													<button
-														className={`${styles.dutyPopoverHsrToggle} ${hsr.before ? styles.dutyPopoverHsrActive : ""}`}
-														onClick={() => {
-															setHsr("before", !hsr.before);
-															if (!hsr.before && !hsr.beforeFrom) setHsr("beforeFrom", otherBases[0]);
-														}}
-													>T前</button>
-													{hsr.before && (
-														<div className={styles.dutyPopoverHsrBasePicker}>
-															<span className={styles.dutyPopoverHsrFrom}>from</span>
-															{otherBases.map(b => (
-																<button
-																	key={b}
-																	className={`${styles.dutyPopoverHsrBase} ${hsr.beforeFrom === b ? styles.dutyPopoverHsrBaseActive : ""}`}
-																	style={hsr.beforeFrom === b ? { backgroundColor: BASE_COLORS[b], color: "white" } : {}}
-																	onClick={() => setHsr("beforeFrom", b)}
-																>{b}</button>
-															))}
-															{hsr.beforeFrom && duty.base_code && (
-																<span className={styles.dutyPopoverHsrOffset}>
-																	+{getHsrOffset(hsr.beforeFrom, duty.base_code) / 60}h
-																</span>
-															)}
-														</div>
-													)}
+										setPopoverDuty(prev => prev ? { ...prev, duty: { ...prev.duty, flightNums } } : null);
+									};
+									return (
+										<div className={showSectors ? styles.dutyPopoverTwoCol : undefined}>
+											{/* ── Left col: info + HSR ── */}
+											<div>
+												<div className={styles.dutyPopoverCode}>
+													{duty.isFlightDuty && <span style={{ color: "#fbbf24", marginRight: 4 }}>☆</span>}
+													{duty.code}
 												</div>
-
-												{/* T後 */}
-												<div className={styles.dutyPopoverHsrRow}>
-													<button
-														className={`${styles.dutyPopoverHsrToggle} ${hsr.after ? styles.dutyPopoverHsrActive : ""}`}
-														onClick={() => {
-															setHsr("after", !hsr.after);
-															if (!hsr.after && !hsr.afterTo) setHsr("afterTo", otherBases[0]);
-														}}
-													>T後</button>
-													{hsr.after && (
-														<div className={styles.dutyPopoverHsrBasePicker}>
-															<span className={styles.dutyPopoverHsrFrom}>to</span>
-															{otherBases.map(b => (
-																<button
-																	key={b}
-																	className={`${styles.dutyPopoverHsrBase} ${hsr.afterTo === b ? styles.dutyPopoverHsrBaseActive : ""}`}
-																	style={hsr.afterTo === b ? { backgroundColor: BASE_COLORS[b], color: "white" } : {}}
-																	onClick={() => setHsr("afterTo", b)}
-																>{b}</button>
-															))}
-															{hsr.afterTo && duty.base_code && (
-																<span className={styles.dutyPopoverHsrOffset}>
-																	+{getHsrOffset(duty.base_code, hsr.afterTo) / 60}h
-																</span>
-															)}
+												{duty.name && duty.name !== `Flight ${duty.code}` && (
+													<div className={styles.dutyPopoverName}>{duty.name}</div>
+												)}
+												{duty.startTime && duty.endTime && (
+													<div className={styles.dutyPopoverRow}>
+														<span className={styles.dutyPopoverLabel}>報到</span>
+														<span className={styles.dutyPopoverValue}>{formatTime(duty.startTime)}</span>
+													</div>
+												)}
+												{duty.endTime && (
+													<div className={styles.dutyPopoverRow}>
+														<span className={styles.dutyPopoverLabel}>結束</span>
+														<span className={styles.dutyPopoverValue}>{formatTime(duty.endTime)}</span>
+													</div>
+												)}
+												{duty.isFlightDuty && duty.startTime && duty.endTime && (<>
+													<div className={styles.dutyPopoverRow}>
+														<span className={styles.dutyPopoverLabel}>FDP</span>
+														<span className={styles.dutyPopoverValue}>{formatDuration(fdpMin)}</span>
+													</div>
+													<div className={styles.dutyPopoverRow}>
+														<span className={styles.dutyPopoverLabel}>MRT</span>
+														<span className={styles.dutyPopoverValue}>{formatDuration(mrtMin)}</span>
+													</div>
+												</>)}
+												{duty.sectors && (
+													<div className={styles.dutyPopoverRow}>
+														<span className={styles.dutyPopoverLabel}>航段</span>
+														<span className={styles.dutyPopoverValue}>{duty.sectors} 段</span>
+													</div>
+												)}
+												{duty.dutyType && (
+													<div className={styles.dutyPopoverRow}>
+														<span className={styles.dutyPopoverLabel}>機型</span>
+														<span className={styles.dutyPopoverValue}>{duty.dutyType}</span>
+													</div>
+												)}
+												{duty.base_code && (
+													<div className={styles.dutyPopoverRow}>
+														<span className={styles.dutyPopoverLabel}>基地</span>
+														<span className={styles.dutyPopoverValue}>{duty.base_code}</span>
+													</div>
+												)}
+												{/* HSR */}
+												{(() => {
+													const hsr = hsrItems[dateKey] || {};
+													const allBases = ["TSA","RMQ","KHH"];
+													const otherBases = duty.base_code ? allBases.filter(b => b !== duty.base_code) : allBases;
+													const setHsr = (field, val) => setHsrItems(prev => ({ ...prev, [dateKey]: { ...prev[dateKey], [field]: val } }));
+													return (
+														<div className={styles.dutyPopoverHsr}>
+															<div className={styles.dutyPopoverHsrLabel}>高鐵通勤</div>
+															<div className={styles.dutyPopoverHsrRow}>
+																<button className={`${styles.dutyPopoverHsrToggle} ${hsr.before ? styles.dutyPopoverHsrActive : ""}`} onClick={() => { setHsr("before", !hsr.before); if (!hsr.before && !hsr.beforeFrom) setHsr("beforeFrom", otherBases[0]); }}>T前</button>
+																{hsr.before && (<div className={styles.dutyPopoverHsrBasePicker}>
+																	<span className={styles.dutyPopoverHsrFrom}>from</span>
+																	{otherBases.map(b => (<button key={b} className={`${styles.dutyPopoverHsrBase} ${hsr.beforeFrom===b?styles.dutyPopoverHsrBaseActive:""}`} style={hsr.beforeFrom===b?{backgroundColor:BASE_COLORS[b],color:"white"}:{}} onClick={()=>setHsr("beforeFrom",b)}>{b}</button>))}
+																	{hsr.beforeFrom && duty.base_code && <span className={styles.dutyPopoverHsrOffset}>+{getHsrOffset(hsr.beforeFrom,duty.base_code)/60}h</span>}
+																</div>)}
+															</div>
+															<div className={styles.dutyPopoverHsrRow}>
+																<button className={`${styles.dutyPopoverHsrToggle} ${hsr.after ? styles.dutyPopoverHsrActive : ""}`} onClick={() => { setHsr("after", !hsr.after); if (!hsr.after && !hsr.afterTo) setHsr("afterTo", otherBases[0]); }}>T後</button>
+																{hsr.after && (<div className={styles.dutyPopoverHsrBasePicker}>
+																	<span className={styles.dutyPopoverHsrFrom}>to</span>
+																	{otherBases.map(b => (<button key={b} className={`${styles.dutyPopoverHsrBase} ${hsr.afterTo===b?styles.dutyPopoverHsrBaseActive:""}`} style={hsr.afterTo===b?{backgroundColor:BASE_COLORS[b],color:"white"}:{}} onClick={()=>setHsr("afterTo",b)}>{b}</button>))}
+																	{hsr.afterTo && duty.base_code && <span className={styles.dutyPopoverHsrOffset}>+{getHsrOffset(duty.base_code,hsr.afterTo)/60}h</span>}
+																</div>)}
+															</div>
 														</div>
-													)}
-												</div>
+													);
+												})()}
 											</div>
-										);
-									})()}
-
+											{/* ── Right col: sector selector ── */}
+											{showSectors && (
+												<div className={styles.dutyPopoverSectors}>
+													<div className={styles.dutyPopoverHsrLabel}>飛行航段</div>
+													<div className={styles.sectorToggleRow}>
+														<button className={`${styles.sectorAllBtn} ${isAll ? styles.sectorAllActive : ""}`} onClick={() => applySectors(allFlights)}>全段</button>
+													</div>
+													{duty.sectors_data.slice().sort((a,b)=>a.seq-b.seq).map(s => {
+														const fn = s.flight_number.replace(/^AE-/, "");
+														const checked = isAll || selected.has(fn);
+														return (
+															<div key={s.seq} className={styles.sectorRow}>
+																<input type="checkbox" checked={checked} onChange={(e) => {
+																	const current = isAll ? new Set(allFlights) : new Set(duty.flightNums);
+																	if (e.target.checked) current.add(fn); else current.delete(fn);
+																	if (current.size === 0) return;
+																	applySectors(allFlights.filter(f => current.has(f)));
+																}} />
+																<span className={styles.sectorInfo}>
+																	<span className={styles.sectorFlight}>AE-{fn}</span>
+																	<span className={styles.sectorRoute}>{s.dep_airport}→{s.arr_airport}</span>
+																	<span className={styles.sectorTime}>{s.dep_time?.slice(0,5)}–{s.arr_time?.slice(0,5)}</span>
+																</span>
+															</div>
+														);
+													})}
+												</div>
+											)}
+										</div>
+									);
+								})()}
 									<button
 										className={styles.dutyPopoverRemove}
 										onClick={(e) => handleRemoveDuty(e, dateKey)}
@@ -2106,6 +2014,7 @@ const MRTChecker = () => {
 						</div>
 					</div>
 				)}
+				</>)}
 			</div>
 		</>
 	);

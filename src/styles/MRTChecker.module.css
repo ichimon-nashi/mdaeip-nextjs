@@ -15,9 +15,6 @@
 /* ── Page shell ───────────────────────────────────────────────── */
 .dutyRosterContainer {
 	min-height: 100vh;
-	background: linear-gradient(120deg,
-		hsla(211, 96%, 62%, 1) 0%,
-		hsla(295, 94%, 76%, 1) 100%);
 	display: flex;
 	flex-direction: column;
 	overflow-x: hidden;
@@ -28,10 +25,8 @@
 	position: sticky;
 	top: 0;
 	z-index: 40;
-	background: rgba(30, 64, 175, 0.92);
-	backdrop-filter: blur(12px);
-	-webkit-backdrop-filter: blur(12px);
-	border-bottom: 1px solid rgba(255,255,255,0.15);
+	background: white;
+	border-bottom: 1px solid #e2e8f0;
 	padding: 0.625rem 1.25rem;
 	display: flex;
 	align-items: center;
@@ -44,7 +39,7 @@
 	display: flex;
 	align-items: center;
 	gap: 0.625rem;
-	color: white;
+	color: #1e293b;
 	min-width: 0;
 }
 
@@ -55,11 +50,12 @@
 	white-space: nowrap;
 	overflow: hidden;
 	text-overflow: ellipsis;
+	color: #1e293b;
 }
 
 .topBarUser {
 	font-size: 0.8rem;
-	opacity: 0.8;
+	color: #64748b;
 	white-space: nowrap;
 }
 
@@ -74,9 +70,9 @@
 .datePickerWrapper { position: relative; }
 
 .datePickerButton {
-	background: rgba(255,255,255,0.15);
-	color: white;
-	border: 1px solid rgba(255,255,255,0.3);
+	background: #f1f5f9;
+	color: #1e293b;
+	border: 1px solid #e2e8f0;
 	border-radius: 0.375rem;
 	padding: 0.375rem 0.75rem;
 	font-size: 0.875rem;
@@ -85,7 +81,7 @@
 	transition: background 0.15s;
 	white-space: nowrap;
 }
-.datePickerButton:hover { background: rgba(255,255,255,0.25); }
+.datePickerButton:hover { background: #e2e8f0; }
 
 .dropdownMenu {
 	position: absolute;
@@ -126,7 +122,7 @@
 	align-items: center;
 	gap: 0.375rem;
 	padding: 0.375rem 0.875rem;
-	background: #059669;
+	background: #ea580c;
 	color: white;
 	border: none;
 	border-radius: 0.375rem;
@@ -136,11 +132,11 @@
 	transition: background 0.15s;
 	white-space: nowrap;
 }
-.screenshotButton:hover:not(.disabled) { background: #047857; }
+.screenshotButton:hover:not(.disabled) { background: #c2410c; }
 .screenshotButton.disabled {
-	background: rgba(255,255,255,0.15);
+	background: #e2e8f0;
 	cursor: not-allowed;
-	color: rgba(255,255,255,0.45);
+	color: #94a3b8;
 }
 .blockedText { font-size: 0.7rem; opacity: 0.8; }
 .screenshotSection { display: none; }
@@ -228,10 +224,9 @@
 	min-width: 0;
 	max-width: 100%;
 	overflow: hidden;
-	background: rgba(255,255,255,0.93);
-	backdrop-filter: blur(10px);
+	background: white;
 	border-radius: 0.75rem;
-	box-shadow: 0 8px 24px rgba(0,0,0,0.12);
+	box-shadow: 0 2px 8px rgba(0,0,0,0.08);
 }
 
 /* Loading */
@@ -242,7 +237,7 @@
 	justify-content: center;
 	padding: 3rem;
 	color: #6b7280;
-	background: rgba(255,255,255,0.93);
+	background: white;
 	border-radius: 0.75rem;
 }
 .loadingSpinner {
@@ -303,6 +298,31 @@
 	background: #f8fafc;
 	border: 1px solid #f1f5f9;
 	min-width: 0;
+}
+.adjMonthCell {
+	background: #f1f5f9;
+	opacity: 0.55;
+	padding: 0.25rem;
+}
+.adjDayNumber {
+	font-size: 0.75rem;
+	color: #94a3b8;
+	font-weight: 500;
+	padding: 0.125rem 0.25rem;
+}
+.adjDutyChip {
+	margin-top: 0.25rem;
+	border-radius: 0.25rem;
+	padding: 0.1rem 0.35rem;
+	font-size: 0.65rem;
+	font-weight: 700;
+	color: white;
+	opacity: 0.7;
+	display: inline-block;
+	max-width: 100%;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
 }
 
 .calendarCell {
@@ -523,10 +543,21 @@
 	display: none; /* shown via desktop media query */
 	flex-direction: column;
 	background: rgba(255,255,255,0.95);
-	backdrop-filter: blur(10px);
 	border-radius: 0.75rem;
-	box-shadow: 0 8px 24px rgba(0,0,0,0.12);
+	box-shadow: 0 2px 8px rgba(0,0,0,0.08);
 	overflow: hidden;
+}
+
+/* Tab bar must scroll horizontally within sidebar */
+.tabBar {
+	display: flex;
+	gap: 0;
+	overflow-x: auto;
+	scrollbar-width: none;
+	border-bottom: 1px solid #f1f5f9;
+	-webkit-overflow-scrolling: touch;
+	/* Allow mouse drag-scroll on desktop */
+	cursor: default;
 }
 
 .sidebarHeader {
@@ -647,13 +678,15 @@
 	font-size: 0.9rem;
 	font-weight: 700;
 	color: #1e293b;
-	min-width: 2.75rem;
+	min-width: fit-content;
+	white-space: nowrap;
 	line-height: 1;
 }
 
 .dutyRowMeta {
 	flex: 1;
 	min-width: 0;
+	overflow: hidden;
 }
 
 .dutyRowTimes {
@@ -848,7 +881,9 @@ input[type="time"]::-webkit-inner-spin-button { display: none; }
 .dutyPopover {
 	position: fixed;
 	z-index: 95;
-	width: 220px;
+	width: auto;
+	min-width: 220px;
+	max-width: 420px;
 	background: white;
 	border-radius: 0.75rem;
 	box-shadow: 0 8px 32px rgba(0,0,0,0.18), 0 2px 8px rgba(0,0,0,0.1);
@@ -938,6 +973,92 @@ input[type="time"]::-webkit-inner-spin-button { display: none; }
 	color: #ea580c !important;
 }
 
+/* ── Sector selector ─────────────────────────────────────────── */
+.dutyPopoverSectors {
+	margin-top: 0.625rem;
+	padding-top: 0.625rem;
+	border-top: 1px solid #f1f5f9;
+}
+
+/* Two-column popover layout when sector selector is present */
+.dutyPopoverTwoCol {
+	display: flex;
+	gap: 0;
+	align-items: flex-start;
+}
+.dutyPopoverTwoCol > :first-child {
+	flex: 0 0 auto;
+	min-width: 160px;
+}
+.dutyPopoverTwoCol .dutyPopoverSectors {
+	flex: 0 0 auto;
+	min-width: 140px;
+	margin-top: 0;
+	padding-top: 0;
+	border-top: none;
+	border-left: 1px solid #f1f5f9;
+	padding-left: 0.625rem;
+}
+.sectorToggleRow {
+	display: flex;
+	gap: 0.375rem;
+	margin-bottom: 0.375rem;
+}
+.sectorAllBtn {
+	font-size: 0.68rem;
+	font-weight: 600;
+	padding: 0.2rem 0.5rem;
+	border: 1px solid #e2e8f0;
+	border-radius: 0.25rem;
+	background: #f8fafc;
+	color: #64748b;
+	cursor: pointer;
+	font-family: inherit;
+	transition: all 0.12s;
+}
+.sectorAllActive {
+	background: #dbeafe;
+	border-color: #2563eb;
+	color: #1d4ed8;
+}
+.sectorRow {
+	display: flex;
+	align-items: center;
+	gap: 0.375rem;
+	padding: 0.2rem 0;
+}
+.sectorRow input[type="checkbox"] {
+	width: 0.85rem;
+	height: 0.85rem;
+	flex-shrink: 0;
+	cursor: pointer;
+	accent-color: #2563eb;
+}
+.sectorInfo {
+	display: flex;
+	align-items: center;
+	gap: 0.3rem;
+	flex: 1;
+	min-width: 0;
+}
+.sectorFlight {
+	font-size: 0.7rem;
+	font-weight: 700;
+	color: #1e293b;
+	white-space: nowrap;
+}
+.sectorRoute {
+	font-size: 0.65rem;
+	color: #64748b;
+	white-space: nowrap;
+}
+.sectorTime {
+	font-size: 0.65rem;
+	color: #94a3b8;
+	white-space: nowrap;
+	margin-left: auto;
+}
+
 /* T前/T後 badges on calendar chip */
 .chipHsrBadges {
 	display: flex;
@@ -1005,46 +1126,46 @@ input[type="time"]::-webkit-inner-spin-button { display: none; }
 	display: flex;
 	align-items: center;
 	gap: 0;
-	background: rgba(255,255,255,0.12);
-	border: 1px solid rgba(255,255,255,0.25);
+	background: #f1f5f9;
+	border: 1px solid #e2e8f0;
 	border-radius: 0.375rem;
 	overflow: hidden;
 }
 .topBarIdField {
 	background: transparent;
 	border: none;
-	color: white;
+	color: #1e293b;
 	font-size: 0.8rem;
 	padding: 0.3rem 0.5rem;
 	width: 7rem;
 	outline: none;
 	font-family: inherit;
 }
-.topBarIdField::placeholder { color: rgba(255,255,255,0.45); }
+.topBarIdField::placeholder { color: #94a3b8; }
 .topBarIdBtn {
-	background: rgba(255,255,255,0.15);
+	background: #e2e8f0;
 	border: none;
-	border-left: 1px solid rgba(255,255,255,0.2);
-	color: white;
+	border-left: 1px solid #cbd5e1;
+	color: #475569;
 	font-size: 0.75rem;
 	padding: 0.3rem 0.5rem;
 	cursor: pointer;
 	font-family: inherit;
 	transition: background 0.15s;
 }
-.topBarIdBtn:hover { background: rgba(255,255,255,0.28); }
+.topBarIdBtn:hover { background: #cbd5e1; }
 .topBarIdClear {
 	background: none;
 	border: none;
-	border-left: 1px solid rgba(255,255,255,0.2);
-	color: rgba(255,255,255,0.6);
+	border-left: 1px solid #cbd5e1;
+	color: #94a3b8;
 	font-size: 0.7rem;
 	padding: 0.3rem 0.4rem;
 	cursor: pointer;
 	line-height: 1;
 	font-family: inherit;
 }
-.topBarIdClear:hover { color: white; }
+.topBarIdClear:hover { color: #475569; }
 
 /* ── Duty variant expansion ───────────────────────────────────── */
 .dutyRowMulti {
@@ -1078,11 +1199,10 @@ input[type="time"]::-webkit-inner-spin-button { display: none; }
 }
 .dutyVariantRow {
 	display: flex;
-	justify-content: space-between;
-	align-items: center;
-	padding: 0.35rem 0.625rem;
+	flex-direction: column;
+	gap: 0.15rem;
+	padding: 0.4rem 0.625rem;
 	border-bottom: 1px solid #f1f5f9;
-	gap: 0.5rem;
 	cursor: grab;
 	transition: background 0.12s;
 }
@@ -1102,14 +1222,17 @@ input[type="time"]::-webkit-inner-spin-button { display: none; }
 	font-size: 0.68rem;
 	color: #64748b;
 	font-weight: 500;
-	flex-shrink: 0;
+	white-space: normal;
+	word-break: break-word;
+	line-height: 1.3;
 }
 .dutyVariantTimes {
-	font-size: 0.72rem;
+	font-size: 0.75rem;
 	color: #1e293b;
 	font-weight: 600;
-	text-align: right;
-	flex: 1;
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
 }
 .dutyVariantDrag {
 	font-size: 0.7rem;
@@ -1194,6 +1317,106 @@ input[type="time"]::-webkit-inner-spin-button { display: none; }
 @media (min-width: 769px) {
 	.sidebar     { display: flex; }
 	.bottomSheet { display: none !important; }
+}
+
+/* ── Main tab bar (個人查詢 / 全員檢測 / 換班檢視) ──────────── */
+.mainTabBar {
+	display: flex;
+	background: #fdf6ec;
+	border-bottom: 1px solid #e9ddd0;
+	padding: 0 1.25rem;
+	position: sticky;
+	top: 56px;
+	z-index: 8;
+}
+.mainTab {
+	padding: 0.7rem 1.1rem;
+	font-size: 0.875rem;
+	font-weight: 500;
+	color: #78716c;
+	background: none;
+	border: none;
+	border-bottom: 2px solid transparent;
+	cursor: pointer;
+	font-family: inherit;
+	transition: color 0.15s, border-color 0.15s;
+	white-space: nowrap;
+}
+.mainTab:hover:not(:disabled) { color: #1e293b; }
+.mainTab:disabled { opacity: 0.38; cursor: not-allowed; }
+.mainTabActive {
+	color: #1e293b !important;
+	border-bottom-color: #1e293b !important;
+	font-weight: 700;
+}
+
+/* ── Back to fleet banner ────────────────────────────────────── */
+.backToFleetBanner {
+	display: flex;
+	align-items: center;
+	gap: 1rem;
+	padding: 0.5rem 1.25rem;
+	background: #eff6ff;
+	border-bottom: 1px solid #bfdbfe;
+}
+.backToFleetBtn {
+	padding: 0.3rem 0.75rem;
+	background: #2563eb;
+	color: white;
+	border: none;
+	border-radius: 0.375rem;
+	font-size: 0.78rem;
+	font-weight: 600;
+	cursor: pointer;
+	font-family: inherit;
+	transition: background 0.15s;
+	white-space: nowrap;
+}
+.backToFleetBtn:hover { background: #1d4ed8; }
+.backToFleetLabel {
+	font-size: 0.78rem;
+	color: #1d4ed8;
+	font-weight: 500;
+}
+
+/* ── Edit mode buttons ────────────────────────────────────────── */
+.editSaveBtn {
+	padding: 0.35rem 0.875rem;
+	background: #16a34a;
+	color: white;
+	border: none;
+	border-radius: 0.375rem;
+	font-size: 0.78rem;
+	font-weight: 600;
+	cursor: pointer;
+	font-family: inherit;
+	transition: background 0.15s;
+	white-space: nowrap;
+}
+.editSaveBtn:hover { background: #15803d; }
+
+.editCancelBtn {
+	padding: 0.35rem 0.75rem;
+	background: white;
+	color: #64748b;
+	border: 1px solid #e2e8f0;
+	border-radius: 0.375rem;
+	font-size: 0.78rem;
+	font-weight: 500;
+	cursor: pointer;
+	font-family: inherit;
+	transition: background 0.15s;
+	white-space: nowrap;
+}
+.editCancelBtn:hover { background: #f8fafc; }
+
+.editModeBanner {
+	background: #fffbeb;
+	border-bottom: 1px solid #fde68a;
+	color: #92400e;
+	font-size: 0.8rem;
+	font-weight: 500;
+	padding: 0.5rem 1.25rem;
 }
 
 /* ── Mobile layout ────────────────────────────────────────────── */
