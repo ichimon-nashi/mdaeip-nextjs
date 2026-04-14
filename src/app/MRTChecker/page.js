@@ -389,7 +389,8 @@ const MRTChecker = () => {
 					}
 
 					const { dutyCode, flightNums } = entry;
-					const isRestDay = ["例", "休", "假", "G"].includes(dutyCode);
+					const LEAVE_CODES_PAGE = new Set(["A/L","S/L","P/L","福補","補休","喪","婚","空"]);
+					const isRestDay = ["例","休","假","G"].includes(dutyCode) || LEAVE_CODES_PAGE.has(dutyCode);
 					const dateStr = `${currentYear}-${String(currentMonth + 1).padStart(2, "0")}-${dayStr}`;
 					const pdxRow = !isRestDay
 						? findPdxDutyForDate(pdxDutyMap?.get(dutyCode), dateStr)
@@ -459,7 +460,7 @@ const MRTChecker = () => {
 						const adjTotalDays = new Date(adjYear, adjMonth, 0).getDate();
 						for (let d = 1; d <= adjTotalDays; d++) {
 							const schedKey = `${adjYear}-${adjMonthPadded}-${String(d).padStart(2, "0")}`;
-							const rawCode = sched.days[schedKey];
+							const rawCode  = sched.days[schedKey];
 							const dutyCode = normalizeDutyCode(rawCode);
 							if (!dutyCode) continue;
 							const isRest = ["例", "休", "假", "G"].includes(dutyCode);
@@ -1751,7 +1752,11 @@ const MRTChecker = () => {
 					const PAD = 12;
 					const W = 420; // max width (two-column when sectors present)
 					const vw = typeof window !== "undefined" ? window.innerWidth : 800;
+					const vh = typeof window !== "undefined" ? window.innerHeight : 600;
 					const left = Math.min(Math.max(popoverPos.x, PAD), vw - W - PAD);
+					// Estimate popover height — clamp so it doesn't go below viewport
+					const estH = 480;
+					const top  = Math.min(popoverPos.y, vh - estH - PAD);
 					return (
 						<>
 							{/* backdrop — click outside closes */}
@@ -1761,7 +1766,7 @@ const MRTChecker = () => {
 							/>
 							<div
 								className={styles.dutyPopover}
-								style={{ top: popoverPos.y, left }}
+								style={{ top, left }}
 							>
 								{/* colour strip */}
 								<div className={styles.dutyPopoverStrip} style={{ backgroundColor: duty.color }} />
@@ -1840,6 +1845,50 @@ const MRTChecker = () => {
 														<span className={styles.dutyPopoverValue}>{duty.base_code}</span>
 													</div>
 												)}
+												{/* Ground duty time editor — dispatch only, non-flight duties */}
+												{hasAppAccess(user, "dispatch") && duty.isDuty && !duty.isFlightDuty && (
+													<div className={styles.dutyPopoverTimeEditor}>
+														<div className={styles.dutyPopoverHsrLabel}>調整時間</div>
+														<div className={styles.groundTimeRow}>
+															<span className={styles.groundTimeLabel}>開始</span>
+															<input
+																type="time"
+																className={styles.groundTimeInput}
+																value={duty.startTime ? duty.startTime.slice(0,5) : ""}
+																onChange={(e) => {
+																	snapshotIfNeeded(droppedItems);
+																	setDroppedItems(prev => ({
+																		...prev,
+																		[dateKey]: { ...prev[dateKey], startTime: e.target.value },
+																	}));
+																	setPopoverDuty(prev => prev ? {
+																		...prev,
+																		duty: { ...prev.duty, startTime: e.target.value },
+																	} : null);
+																}}
+															/>
+														</div>
+														<div className={styles.groundTimeRow}>
+															<span className={styles.groundTimeLabel}>結束</span>
+															<input
+																type="time"
+																className={styles.groundTimeInput}
+																value={duty.endTime ? duty.endTime.slice(0,5) : ""}
+																onChange={(e) => {
+																	snapshotIfNeeded(droppedItems);
+																	setDroppedItems(prev => ({
+																		...prev,
+																		[dateKey]: { ...prev[dateKey], endTime: e.target.value },
+																	}));
+																	setPopoverDuty(prev => prev ? {
+																		...prev,
+																		duty: { ...prev.duty, endTime: e.target.value },
+																	} : null);
+																}}
+															/>
+														</div>
+													</div>
+												)}
 												{/* HSR */}
 												{(() => {
 													const hsr = hsrItems[dateKey] || {};
@@ -1849,22 +1898,20 @@ const MRTChecker = () => {
 													return (
 														<div className={styles.dutyPopoverHsr}>
 															<div className={styles.dutyPopoverHsrLabel}>高鐵通勤</div>
-															<div className={styles.dutyPopoverHsrRow}>
+															<div className={styles.dutyPopoverHsrSameRow}>
 																<button className={`${styles.dutyPopoverHsrToggle} ${hsr.before ? styles.dutyPopoverHsrActive : ""}`} onClick={() => { setHsr("before", !hsr.before); if (!hsr.before && !hsr.beforeFrom) setHsr("beforeFrom", otherBases[0]); }}>T前</button>
-																{hsr.before && (<div className={styles.dutyPopoverHsrBasePicker}>
-																	<span className={styles.dutyPopoverHsrFrom}>from</span>
-																	{otherBases.map(b => (<button key={b} className={`${styles.dutyPopoverHsrBase} ${hsr.beforeFrom===b?styles.dutyPopoverHsrBaseActive:""}`} style={hsr.beforeFrom===b?{backgroundColor:BASE_COLORS[b],color:"white"}:{}} onClick={()=>setHsr("beforeFrom",b)}>{b}</button>))}
-																	{hsr.beforeFrom && duty.base_code && <span className={styles.dutyPopoverHsrOffset}>+{getHsrOffset(hsr.beforeFrom,duty.base_code)/60}h</span>}
-																</div>)}
-															</div>
-															<div className={styles.dutyPopoverHsrRow}>
 																<button className={`${styles.dutyPopoverHsrToggle} ${hsr.after ? styles.dutyPopoverHsrActive : ""}`} onClick={() => { setHsr("after", !hsr.after); if (!hsr.after && !hsr.afterTo) setHsr("afterTo", otherBases[0]); }}>T後</button>
-																{hsr.after && (<div className={styles.dutyPopoverHsrBasePicker}>
-																	<span className={styles.dutyPopoverHsrFrom}>to</span>
-																	{otherBases.map(b => (<button key={b} className={`${styles.dutyPopoverHsrBase} ${hsr.afterTo===b?styles.dutyPopoverHsrBaseActive:""}`} style={hsr.afterTo===b?{backgroundColor:BASE_COLORS[b],color:"white"}:{}} onClick={()=>setHsr("afterTo",b)}>{b}</button>))}
-																	{hsr.afterTo && duty.base_code && <span className={styles.dutyPopoverHsrOffset}>+{getHsrOffset(duty.base_code,hsr.afterTo)/60}h</span>}
-																</div>)}
 															</div>
+															{hsr.before && (<div className={styles.dutyPopoverHsrBasePicker}>
+																<span className={styles.dutyPopoverHsrFrom}>T前 from</span>
+																{otherBases.map(b => (<button key={b} className={`${styles.dutyPopoverHsrBase} ${hsr.beforeFrom===b?styles.dutyPopoverHsrBaseActive:""}`} style={hsr.beforeFrom===b?{backgroundColor:BASE_COLORS[b],color:"white"}:{}} onClick={()=>setHsr("beforeFrom",b)}>{b}</button>))}
+																{hsr.beforeFrom && duty.base_code && <span className={styles.dutyPopoverHsrOffset}>+{getHsrOffset(hsr.beforeFrom,duty.base_code)/60}h</span>}
+															</div>)}
+															{hsr.after && (<div className={styles.dutyPopoverHsrBasePicker}>
+																<span className={styles.dutyPopoverHsrFrom}>T後 to</span>
+																{otherBases.map(b => (<button key={b} className={`${styles.dutyPopoverHsrBase} ${hsr.afterTo===b?styles.dutyPopoverHsrBaseActive:""}`} style={hsr.afterTo===b?{backgroundColor:BASE_COLORS[b],color:"white"}:{}} onClick={()=>setHsr("afterTo",b)}>{b}</button>))}
+																{hsr.afterTo && duty.base_code && <span className={styles.dutyPopoverHsrOffset}>+{getHsrOffset(duty.base_code,hsr.afterTo)/60}h</span>}
+															</div>)}
 														</div>
 													);
 												})()}

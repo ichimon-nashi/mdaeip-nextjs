@@ -271,6 +271,14 @@ export function runFatigueCheck(droppedItems, hsrItems = {}, year, month, option
 	const dk = (day) => `${year}-${monthIndex}-${day}`;
 
 	// ── Rule 1: every calendar week needs ≥1 例 and ≥1 休 ─────────────────────
+	// Codes NOT counted as work days, but 例/休 still required per week
+	const NON_WORK_CODES = new Set([
+		"A/L", "P/L", "福補", "補休", "喪", "婚",
+		"公出", "公差", "陪訓", "體檢", "職醫", "空",
+	]);
+	// Only S/L exempts the entire week from 例/休 requirement
+	const SL_EXEMPT = "S/L";
+
 	// Only check if there are actual assignments (not just auto-populated weekends)
 	const hasRealData = Object.values(droppedItems).some(d => d && !d.isAutoPopulated);
 	if (hasRealData) {
@@ -305,15 +313,46 @@ export function runFatigueCheck(droppedItems, hsrItems = {}, year, month, option
 			if (lastOfWeek > totalDays && !hasNextData) continue;
 
 			const assignments  = weekDays.map(d => getAssignment(d));
-			const recessCount  = assignments.filter(d => d?.isRest && (d?.code === "例" || d?.code?.startsWith("例"))).length;
-			const restCount    = assignments.filter(d => d?.isRest && (d?.code === "休" || d?.code?.startsWith("休"))).length;
-			const workCount    = assignments.filter(d => d && !d.isRest).length;
+
+			// Helper: get normalized duty code for an assignment
+			const getCode = (d) => d?.dutyCode || normalizeDutyCode(d?.code) || d?.code || "";
+
+			// If entire week is S/L (sick leave), skip 例/休 check
+			const nonNullDays = assignments.filter(Boolean);
+			const allSL = nonNullDays.length > 0 &&
+				nonNullDays.every(d => d.isRest || getCode(d) === SL_EXEMPT);
+			if (allSL) continue;
+
+			const recessCount  = assignments.filter(d => {
+				if (!d?.isRest) return false;
+				const code = getCode(d);
+				return code === "例" || code.startsWith("例");
+			}).length;
+			const restCount    = assignments.filter(d => {
+				if (!d?.isRest) return false;
+				const code = getCode(d);
+				return code === "休" || code.startsWith("休");
+			}).length;
+			// Consecutive work days — must not exceed 5 in a row
+			// A rest/leave day resets the streak; null (empty) days also reset
+			const isWorkDay = (d) => {
+				if (!d) return false;
+				if (d.isRest) return false;
+				const code = getCode(d);
+				return !NON_WORK_CODES.has(code) && code !== SL_EXEMPT;
+			};
+			let maxConsecutiveWork = 0;
+			let streak = 0;
+			for (const d of assignments) {
+				if (isWorkDay(d)) { streak++; maxConsecutiveWork = Math.max(maxConsecutiveWork, streak); }
+				else streak = 0;
+			}
 			const mondayInMonth = Math.max(start, 1);
 			const weekNum      = Math.ceil(mondayInMonth / 7);
 
-			if (workCount > 5)    errors.push(`第${weekNum}週: 工作日超過5天 (${workCount}/5)`);
-			if (recessCount === 0) errors.push(`第${weekNum}週: 缺少例假`);
-			if (restCount === 0)   errors.push(`第${weekNum}週: 缺少休假`);
+			if (maxConsecutiveWork > 5) errors.push(`第${weekNum}週: 連續工作日超過5天 (${maxConsecutiveWork}天連續)`);
+			if (recessCount === 0)       errors.push(`第${weekNum}週: 缺少例假`);
+			if (restCount === 0)         errors.push(`第${weekNum}週: 缺少休假`);
 		}
 	} // end hasRealData check
 
@@ -613,8 +652,10 @@ export function buildDroppedItemsFromSchedule(scheduleData, pdxDutyMap, year, mo
 	const monthPadded = String(month).padStart(2, "0");
 
 	const REST_CODES  = ["例", "休", "假"];
-	const RECESS_CODE = "例";
-	const REST_CODE   = "休";
+	// Leave codes treated as rest in droppedItems (no FT/FDP/DP accrual, no MRT check)
+	const LEAVE_CODES_SET = new Set([
+		"A/L", "S/L", "P/L", "福補", "補休", "喪", "婚", "空",
+	]);
 
 	for (let day = 1; day <= totalDays; day++) {
 		const dayStr     = String(day).padStart(2, "0");
@@ -647,7 +688,7 @@ export function buildDroppedItemsFromSchedule(scheduleData, pdxDutyMap, year, mo
 		}
 
 		const { dutyCode, flightNums } = entry;
-		const isRestDay = REST_CODES.includes(dutyCode) || dutyCode === "G";
+		const isRestDay = REST_CODES.includes(dutyCode) || dutyCode === "G" || LEAVE_CODES_SET.has(dutyCode);
 
 		// Look up PDX row for date-accurate times and sectors
 		const pdxRows = pdxDutyMap?.get(dutyCode);
@@ -713,12 +754,12 @@ export function buildAdjItems(scheduleData, year, month) {
 		const dutyCode = rawCode ? normalizeDutyCode(rawCode) : null;
 
 		if (dutyCode) {
-			result[d] = { code: rawCode || dutyCode, isRest: REST_CODES.includes(dutyCode) };
+			result[d] = { code: rawCode || dutyCode, dutyCode, isRest: REST_CODES.includes(dutyCode) };
 		} else {
-			// Auto-populate weekends (same as buildDroppedItemsFromSchedule)
+			// Auto-populate weekends
 			const dow = new Date(year, month - 1, d).getDay();
-			if (dow === 0) result[d] = { code: "例", isRest: true };
-			else if (dow === 6) result[d] = { code: "休", isRest: true };
+			if (dow === 0) result[d] = { code: "例", dutyCode: "例", isRest: true };
+			else if (dow === 6) result[d] = { code: "休", dutyCode: "休", isRest: true };
 		}
 	}
 	// _hasData = true means real schedule was found in DB, not just auto-populated

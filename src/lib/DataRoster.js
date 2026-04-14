@@ -37,7 +37,7 @@ export const employeeList = [
 	{ id: "21972", name: "黃佩玄", rank: "PR", base: "TSA", typeRating: ["ATR", "B738"] },
 	{ id: "22055", name: "李懿婷", rank: "PR", base: "TSA", typeRating: ["ATR", "B738"] },
 	{ id: "30444", name: "徐慧真", rank: "PR", base: "TSA", typeRating: ["ATR", "B738"] },
-	{ id: "36639", name: "李盈瑤", rank: "PR", base: "TSA", typeRating: ["ATR", "B738"] },
+	{ id: "36639", name: "李盈瑤", rank: "FI", base: "TSA", typeRating: ["ATR", "B738"] },
 	{ id: "21600", name: "林涵茵", rank: "LF", base: "TSA", typeRating: ["ATR", "B738"] },
 	{ id: "21650", name: "陳嘉珮", rank: "LF", base: "TSA", typeRating: ["ATR"] },
 	{ id: "21802", name: "粘瀞文", rank: "LF", base: "TSA", typeRating: ["ATR", "B738"] },
