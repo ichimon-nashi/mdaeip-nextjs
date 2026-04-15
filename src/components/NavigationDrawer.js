@@ -97,8 +97,8 @@ const NavigationDrawer = ({ isOpen, onClose, userDetails }) => {
     },
     {
       id:          "mrt-checker",
-      title:       "休時檢視系統",
-      description: "排班模擬器&休時檢視",
+      title:       "疲勞管理系統",
+      description: "疲勞管理檢視＆調班系統",
       icon:        <Clock size={24} />,
       path:        "/MRTChecker",
       color:       "#059669",

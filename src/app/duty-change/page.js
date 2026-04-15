@@ -79,6 +79,9 @@ function DutyChangeContent() {
 			.padStart(2, "0")}`;
 	};
 
+	// Strip everything after the first backslash or newline — keep only the primary duty code
+	const stripDutyCode = (raw) => (raw || "").split(/[\\n]/)[0].trim();
+
 	const groupConsecutiveDates = (duties) => {
 		if (!duties || duties.length === 0) return [];
 
@@ -116,10 +119,11 @@ function DutyChangeContent() {
 				let task;
 
 				if (isUserDuties) {
-					const userDuty = userSchedule?.days?.[duty.date] || "";
+					const userDuty = stripDutyCode(userSchedule?.days?.[duty.date] || "");
 					task = userDuty === "" ? "空" : userDuty;
 				} else {
-					task = duty.duty === "" ? "空" : duty.duty;
+					const stripped = stripDutyCode(duty.duty);
+					task = stripped === "" ? "空" : stripped;
 				}
 
 				formattedEntries.push({
@@ -135,13 +139,14 @@ function DutyChangeContent() {
 				let tasks;
 				if (isUserDuties) {
 					tasks = group.map((duty) => {
-						const userDuty = userSchedule?.days?.[duty.date] || "";
+						const userDuty = stripDutyCode(userSchedule?.days?.[duty.date] || "");
 						return userDuty === "" ? "空" : userDuty;
 					});
 				} else {
-					tasks = group.map((duty) =>
-						duty.duty === "" ? "空" : duty.duty
-					);
+					tasks = group.map((duty) => {
+						const stripped = stripDutyCode(duty.duty);
+						return stripped === "" ? "空" : stripped;
+					});
 				}
 
 				if (tasks.length > 5) {
@@ -178,7 +183,7 @@ function DutyChangeContent() {
 			if (group.length === 1) {
 				const duty = group[0];
 				const formattedDate = formatDateForForm(duty.date);
-				const userDuty = schedule?.days?.[duty.date] || "";
+				const userDuty = stripDutyCode(schedule?.days?.[duty.date] || "");
 				const task = userDuty === "" ? "空" : userDuty;
 
 				formattedEntries.push({
@@ -192,7 +197,7 @@ function DutyChangeContent() {
 				const dateRange = `${startDate} - ${endDate}`;
 
 				const tasks = group.map((duty) => {
-					const userDuty = schedule?.days?.[duty.date] || "";
+					const userDuty = stripDutyCode(schedule?.days?.[duty.date] || "");
 					return userDuty === "" ? "空" : userDuty;
 				});
 
@@ -470,8 +475,8 @@ function DutyChangeContent() {
 			}
 
 			setFtData({
-				firstFt: firstFt || null,
-				secondFt: secondFt || null,
+				firstFt: firstFt,
+				secondFt: secondFt,
 			});
 		};
 

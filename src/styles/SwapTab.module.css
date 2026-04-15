@@ -1,0 +1,473 @@
+/* SwapTab.module.css */
+
+.container {
+	display: flex;
+	flex-direction: column;
+	min-height: 0;
+	padding: 1rem 1rem 2rem;
+	max-width: none;
+	width: 100%;
+	box-sizing: border-box;
+}
+
+/* ── Month bar ────────────────────────────────────────────────── */
+.monthBar {
+	display: flex;
+	align-items: center;
+	gap: 0.75rem;
+	margin-bottom: 1rem;
+}
+.monthNav {
+	background: rgba(255,255,255,0.15);
+	border: 1px solid rgba(255,255,255,0.35);
+	border-radius: 0.375rem;
+	width: 2rem;
+	height: 2rem;
+	font-size: 1.1rem;
+	cursor: pointer;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	color: white;
+	transition: background 0.12s;
+}
+.monthNav:hover { background: rgba(255,255,255,0.25); }
+.monthLabel {
+	font-size: 1.05rem;
+	font-weight: 700;
+	color: white;
+	min-width: 8rem;
+	text-align: center;
+}
+.monthHint {
+	font-size: 0.85rem;
+	color: rgba(255,255,255,0.65);
+	margin-left: 0.5rem;
+}
+
+/* Import button */
+.importBtn {
+	margin-left: auto;
+	display: flex;
+	align-items: center;
+	gap: 0.375rem;
+	padding: 0.35rem 0.75rem;
+	background: rgba(255,255,255,0.15);
+	color: white;
+	border: 1px solid rgba(255,255,255,0.35);
+	border-radius: 0.375rem;
+	font-size: 0.88rem;
+	font-weight: 600;
+	cursor: pointer;
+	font-family: inherit;
+	transition: background 0.15s;
+	white-space: nowrap;
+}
+.importBtn:hover { background: rgba(255,255,255,0.25); }
+
+/* Import dropdown */
+.importDropdown {
+	position: absolute;
+	top: calc(100% + 6px);
+	right: 0;
+	background: white;
+	border: 1px solid #e2e8f0;
+	border-radius: 0.5rem;
+	box-shadow: 0 8px 24px rgba(0,0,0,0.14);
+	min-width: 280px;
+	max-height: 320px;
+	overflow-y: auto;
+	z-index: 60;
+}
+.importHeader {
+	padding: 0.625rem 0.875rem;
+	font-size: 0.92rem;
+	font-weight: 700;
+	text-transform: uppercase;
+	letter-spacing: 0.06em;
+	color: #94a3b8;
+	border-bottom: 1px solid #f1f5f9;
+}
+.importItem {
+	display: flex;
+	flex-direction: column;
+	gap: 0.15rem;
+	padding: 0.5rem 0.875rem;
+	border-bottom: 1px solid #f8fafc;
+	cursor: pointer;
+	transition: background 0.1s;
+	text-align: left;
+	width: 100%;
+	border: none;
+	background: none;
+	font-family: inherit;
+}
+.importItem:hover { background: #f1f5f9; }
+.importItemMain {
+	font-size: 0.92rem;
+	font-weight: 600;
+	color: #1e293b;
+}
+.importItemSub {
+	font-size: 0.9rem;
+	color: #94a3b8;
+}
+.importEmpty {
+	padding: 1rem 0.875rem;
+	font-size: 0.9rem;
+	color: #94a3b8;
+	text-align: center;
+}
+.importWrapper {
+	position: relative;
+}
+
+/* ── Two-column layout ────────────────────────────────────────── */
+.columns {
+	display: grid;
+	grid-template-columns: 1fr auto 1fr;
+	gap: 1rem;
+	align-items: start;
+}
+
+/* ── Single crew column ────────────────────────────────────────── */
+.column {
+	background: white;
+	border-radius: 0.75rem;
+	box-shadow: 0 1px 4px rgba(0,0,0,0.07);
+	border: 1px solid #e2e8f0;
+	overflow: visible;
+	display: flex;
+	flex-direction: column;
+}
+
+.columnHeader {
+	padding: 0.875rem 1rem 0.75rem;
+	border-bottom: 1px solid #f1f5f9;
+	display: flex;
+	flex-direction: column;
+	gap: 0.375rem;
+	position: relative;
+}
+.columnLabelRow {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+}
+.columnLabel {
+	font-size: 0.92rem;
+	font-weight: 700;
+	text-transform: uppercase;
+	letter-spacing: 0.08em;
+	color: #475569;
+}
+.crewInfo { display: flex; flex-direction: column; gap: 0.1rem; }
+.crewName { font-size: 1.1rem; font-weight: 700; color: #1e293b; }
+.crewMeta { font-size: 0.92rem; color: #64748b; }
+
+/* Search */
+.searchBox {
+	display: flex;
+	align-items: center;
+	gap: 0.4rem;
+	border: 1px solid #e2e8f0;
+	border-radius: 0.4rem;
+	padding: 0.3rem 0.5rem;
+	background: #f8fafc;
+}
+.searchIcon { color: #94a3b8; flex-shrink: 0; }
+.searchInput {
+	border: none;
+	background: none;
+	font-size: 0.9rem;
+	color: #1e293b;
+	width: 100%;
+	outline: none;
+	font-family: inherit;
+}
+.searchDropdown {
+	position: absolute;
+	top: calc(100% - 4px);
+	left: 1rem;
+	right: 1rem;
+	background: white;
+	border: 1px solid #e2e8f0;
+	border-radius: 0.5rem;
+	box-shadow: 0 4px 16px rgba(0,0,0,0.12);
+	z-index: 50;
+	overflow: hidden;
+}
+.searchResult {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	width: 100%;
+	padding: 0.5rem 0.75rem;
+	border: none;
+	background: none;
+	cursor: pointer;
+	font-size: 0.92rem;
+	font-weight: 600;
+	color: #1e293b;
+	text-align: left;
+	transition: background 0.1s;
+	font-family: inherit;
+}
+.searchResult:hover { background: #f1f5f9; }
+.searchResultMeta { font-size: 0.88rem; color: #64748b; font-weight: 400; }
+/* Clear crew button */
+.clearCrewBtn {
+	background: none;
+	border: none;
+	color: #94a3b8;
+	font-size: 0.85rem;
+	cursor: pointer;
+	padding: 0 0.125rem;
+	line-height: 1;
+	transition: color 0.1s;
+}
+.clearCrewBtn:hover { color: #dc2626; }
+
+
+/* ── Calendar ─────────────────────────────────────────────────── */
+.calendar { padding: 0.5rem; }
+.calDayNames {
+	display: grid;
+	grid-template-columns: repeat(7, 1fr);
+	margin-bottom: 0.25rem;
+}
+.calDayName {
+	text-align: center;
+	font-size: 0.85rem;
+	font-weight: 600;
+	color: #94a3b8;
+	padding: 0.2rem 0;
+}
+.calGrid {
+	display: grid;
+	grid-template-columns: repeat(7, 1fr);
+	gap: 2px;
+}
+.calEmpty { min-height: 3.2rem; }
+.calCell {
+	min-height: 3.2rem;
+	border-radius: 0.375rem;
+	border: 2px solid transparent;
+	padding: 0.25rem;
+	cursor: pointer;
+	transition: background 0.1s, border-color 0.1s;
+	display: flex;
+	flex-direction: column;
+	gap: 0.15rem;
+	background: #f8fafc;
+}
+.calCell:hover { background: #f1f5f9; border-color: #cbd5e1; }
+.calSelected { border-color: #2563eb !important; background: #eff6ff !important; }
+.calViolation { background: #fef2f2 !important; }
+.calSwapped { background: #f0fdf4 !important; border-color: #16a34a !important; }
+.calDay { font-size: 0.9rem; font-weight: 600; color: #64748b; }
+.calChip {
+	border-radius: 0.2rem;
+	padding: 0.1rem 0.25rem;
+	font-size: 0.85rem;
+	font-weight: 700;
+	color: white;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	max-width: 100%;
+}
+
+/* Loading / empty */
+.loading, .empty {
+	padding: 2rem 1rem;
+	text-align: center;
+	font-size: 0.9rem;
+	color: #475569;
+}
+
+/* Error list */
+.errorList {
+	padding: 0.5rem 0.875rem 0.875rem;
+	display: flex;
+	flex-direction: column;
+	gap: 0.25rem;
+}
+.errorItem {
+	display: flex;
+	align-items: flex-start;
+	gap: 0.375rem;
+	font-size: 0.92rem;
+	color: #dc2626;
+	line-height: 1.4;
+}
+
+/* ── Centre panel ─────────────────────────────────────────────── */
+.centre {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: 0.75rem;
+	padding: 1rem 0.5rem;
+	min-width: 120px;
+}
+.swapIcon { color: rgba(255,255,255,0.7); }
+
+/* Swap summary box */
+.summaryBox {
+	background: white;
+	border: 1px solid #e2e8f0;
+	border-radius: 0.5rem;
+	padding: 0.625rem 0.75rem;
+	width: 100%;
+	max-width: 140px;
+}
+.summaryTitle {
+	font-size: 0.85rem;
+	font-weight: 700;
+	text-transform: uppercase;
+	letter-spacing: 0.06em;
+	color: #475569;
+	margin-bottom: 0.375rem;
+}
+.summaryRow {
+	display: flex;
+	align-items: center;
+	gap: 0.25rem;
+	padding: 0.15rem 0;
+	font-size: 0.92rem;
+}
+.summaryDay { color: #374151; min-width: 2.5rem; }
+.summaryA, .summaryB { font-weight: 700; color: #1e293b; flex: 1; text-align: center; }
+.summaryArrow { color: #64748b; font-size: 0.85rem; }
+.summaryFtRow {
+	display: flex;
+	align-items: center;
+	gap: 0.5rem;
+	padding-top: 0.375rem;
+	margin-top: 0.25rem;
+	border-top: 1px solid #f1f5f9;
+}
+.summaryFtLabel {
+	font-size: 0.85rem;
+	font-weight: 700;
+	text-transform: uppercase;
+	letter-spacing: 0.06em;
+	color: #475569;
+	flex: 1;
+}
+
+/* Buttons */
+.swapBtn {
+	width: 100%;
+	padding: 0.5rem 0.875rem;
+	background: #2563eb;
+	color: white;
+	border: none;
+	border-radius: 0.5rem;
+	font-size: 0.92rem;
+	font-weight: 700;
+	cursor: pointer;
+	font-family: inherit;
+	transition: background 0.15s;
+	white-space: nowrap;
+}
+.swapBtn:hover:not(.swapBtnDisabled) { background: #1d4ed8; }
+.swapBtnDisabled { background: #e2e8f0; color: #94a3b8; cursor: not-allowed; }
+
+.resetBtn {
+	display: flex;
+	align-items: center;
+	gap: 0.375rem;
+	padding: 0.35rem 0.75rem;
+	background: rgba(255,255,255,0.1);
+	color: white;
+	border: 1px solid rgba(255,255,255,0.3);
+	border-radius: 0.375rem;
+	font-size: 0.85rem;
+	font-weight: 500;
+	cursor: pointer;
+	font-family: inherit;
+	transition: all 0.12s;
+}
+.resetBtn:hover { background: rgba(255,255,255,0.2); }
+
+/* Result badge */
+.resultBadge {
+	display: flex;
+	align-items: center;
+	gap: 0.375rem;
+	padding: 0.4rem 0.75rem;
+	border-radius: 0.5rem;
+	font-size: 0.88rem;
+	font-weight: 700;
+	white-space: nowrap;
+}
+.resultOk  { background: #dcfce7; color: #16a34a; }
+.resultFail { background: #fee2e2; color: #dc2626; }
+
+
+/* ── Calendar chip tooltip ──────────────────────────────────── */
+.calChipWrap {
+	position: relative;
+	width: 100%;
+}
+.calTooltip {
+	position: absolute;
+	bottom: calc(100% + 6px);
+	left: 50%;
+	transform: translateX(-50%);
+	background: #1e293b;
+	color: white;
+	font-size: 0.82rem;
+	font-weight: 400;
+	padding: 0.45rem 0.65rem;
+	border-radius: 0.4rem;
+	white-space: nowrap;
+	z-index: 100;
+	pointer-events: none;
+	opacity: 0;
+	transition: opacity 0.15s;
+	box-shadow: 0 4px 12px rgba(0,0,0,0.25);
+	text-align: left;
+	min-width: 120px;
+}
+.calChipWrap:hover .calTooltip { opacity: 1; }
+.calTooltipLine {
+	display: flex;
+	gap: 0.5rem;
+	line-height: 1.6;
+	font-variant-numeric: tabular-nums;
+}
+.calTooltipLine + .calTooltipLine {
+	border-top: 1px solid rgba(255,255,255,0.1);
+	padding-top: 0.1rem;
+	margin-top: 0.1rem;
+}
+.calTooltip::after {
+	content: "";
+	position: absolute;
+	top: 100%;
+	left: 50%;
+	transform: translateX(-50%);
+	border: 5px solid transparent;
+	border-top-color: #1e293b;
+}
+
+/* ── Responsive ───────────────────────────────────────────────── */
+@media (max-width: 900px) {
+	.columns {
+		grid-template-columns: 1fr;
+	}
+	.centre {
+		flex-direction: row;
+		flex-wrap: wrap;
+		justify-content: center;
+		border-top: 1px solid #f1f5f9;
+		border-bottom: 1px solid #f1f5f9;
+		padding: 0.75rem 1rem;
+		min-width: unset;
+	}
+	.swapIcon { display: none; }
+	.summaryBox { max-width: unset; }
+}

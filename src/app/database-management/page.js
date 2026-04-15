@@ -979,7 +979,7 @@ const DatabaseManagement = () => {
 									<div className={styles.permissionsGrid}>
 										{[
 											{ key: "roster", label: "換班系統" },
-											{ key: "mrt_checker", label: "休時檢視" },
+											{ key: "mrt_checker", label: "疲勞管理系統" },
 											{ key: "gday", label: "GDay劃假" },
 											{ key: "etr_generator", label: "eTR產生器" },
 											{ key: "dispatch", label: "派遣表系統" },

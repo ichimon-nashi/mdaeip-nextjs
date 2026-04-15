@@ -45,6 +45,24 @@ const buildRouteString = (sectors) => {
 	return airports.join('→');
 };
 
+// ─── Ground duty default times (PDX only has flight duties) ────────────────
+const GROUND_DUTY_TIMES = {
+	"OD":   { start: "08:00", end: "17:00" },
+	"OFC":  { start: "08:00", end: "17:00" },
+	"訓":   { start: "08:00", end: "17:00" },
+	"課":   { start: "08:00", end: "17:00" },
+	"會":   { start: "08:00", end: "17:00" },
+	"公差": { start: "08:00", end: "17:00" },
+	"公出": { start: "08:00", end: "17:00" },
+	"體檢": { start: "08:00", end: "17:00" },
+	"職醫": { start: "08:00", end: "17:00" },
+	"陪訓": { start: "08:00", end: "17:00" },
+	"SA":   { start: "06:35", end: "12:00" },
+	"SP":   { start: "12:00", end: "17:00" },
+	"SH1":  { start: "06:00", end: "14:00" },
+	"SH2":  { start: "12:00", end: "20:00" },
+};
+
 const useIsMobile = () => {
 	const [isMobile, setIsMobile] = useState(() => {
 		if (typeof window !== 'undefined') {
@@ -108,6 +126,9 @@ export default function SchedulePage() {
 	// Key: "employeeId|date"  Value: "pending" | "approved"
 	// Populated for BOTH person_a and person_b of each request so both rows light up.
 	const [swapRequestMap, setSwapRequestMap] = useState({});
+
+	// Override map: { 'employeeId|YYYY-MM-DD': overrideRow } from schedule_day_overrides
+	const [overrideMap, setOverrideMap] = useState({});
 
 	// Flight duty data state - REMOVED for performance
 	// const [flightDutyData, setFlightDutyData] = useState(new Map());
@@ -526,6 +547,22 @@ export default function SchedulePage() {
 			});
 
 			pdxMonthDataRef.current = { duties: mergedDuties, sectorsById };
+
+			// ── Fetch schedule_day_overrides for this month ──────────────────
+			try {
+				const { data: ovs } = await supabase
+					.from('schedule_day_overrides')
+					.select('employee_id, day, start_time, end_time, extra_sectors, additional_tasks')
+					.eq('month_id', monthRow.id);
+				const newOverrideMap = {};
+				(ovs || []).forEach(ov => {
+					const dateStr = `${yr}-${String(mo).padStart(2,'0')}-${String(ov.day).padStart(2,'0')}`;
+					newOverrideMap[`${ov.employee_id}|${dateStr}`] = ov;
+				});
+				setOverrideMap(newOverrideMap);
+			} catch (ovErr) {
+				console.error('Error fetching overrides:', ovErr);
+			}
 		};
 
 		loadPdx();
@@ -696,6 +733,35 @@ export default function SchedulePage() {
 			}
 		}
 
+		// Q3: Ground duty time fallback (OD, 課, 訓, etc. are not in PDX)
+		if (!reportingTime && !endTime && GROUND_DUTY_TIMES[baseDutyCode]) {
+			reportingTime = GROUND_DUTY_TIMES[baseDutyCode].start;
+			endTime       = GROUND_DUTY_TIMES[baseDutyCode].end;
+		}
+
+		// Apply schedule_day_overrides times if present
+		let overrideEntry = null;
+		if (overrideMap[`${employeeId}|${date}`]) {
+			overrideEntry = overrideMap[`${employeeId}|${date}`];
+			if (overrideEntry.start_time) reportingTime = overrideEntry.start_time.substring(0, 5);
+			if (overrideEntry.end_time)   endTime       = overrideEntry.end_time.substring(0, 5);
+			// Q1: Filter pdxSectors to only kept flights from override
+			if (pdxSectors?.length) {
+				// Extract kept flight numbers from duty string e.g. "I4\7931.2" → ["7931","7932"]
+				const dutyParts = (duty || "").split(/[\\\n]/);
+				if (dutyParts.length > 1) {
+					const keptNums = new Set(
+						dutyParts.slice(1).join("").split("/").map(s => s.trim()).filter(Boolean)
+					);
+					if (keptNums.size > 0) {
+						pdxSectors = pdxSectors.filter(s =>
+							keptNums.has(s.flight_number.replace(/^AE-/, ""))
+						);
+					}
+				}
+			}
+		}
+
 		// Position: flip above if near bottom
 		const rect = e.currentTarget.getBoundingClientRect();
 		const tooltipHeight = 320;
@@ -722,9 +788,10 @@ export default function SchedulePage() {
 			pdxSectors,
 			sameEmployees,
 			isUserSchedule,
+			override: overrideEntry,
 			x, y, above,
 		});
-	}, [tooltipData.visible, tooltipData.date, tooltipData.employeeId, getFlightDutyDetails]);
+	}, [tooltipData.visible, tooltipData.date, tooltipData.employeeId, getFlightDutyDetails, overrideMap]);
 
 	const getDayOfWeek = useCallback((dateStr) => {
 		const date = new Date(dateStr);
@@ -930,10 +997,15 @@ export default function SchedulePage() {
 				// For approved swaps: display the received duty instead of the original.
 				// Fall back to original if swappedDuty is null (e.g. old records without person_a_duties).
 				// Keep original `duty` for click handler so PDX tooltip still works correctly.
-				const displayedDuty = (isSwapApproved && swapEntry?.swappedDuty != null)
+				// For overridden duties: show base code + * to avoid messy encoded string display
+				const rawDisplayDuty = (isSwapApproved && swapEntry?.swappedDuty != null)
 					? swapEntry.swappedDuty
 					: (duty || '空');
-				const formattedDisplayDuty = formatDutyText(displayedDuty);
+				const hasOverrideStar = !!overrideMap[`${schedule.employeeID}|${date}`];
+				const displayedDuty = hasOverrideStar
+					? (rawDisplayDuty.split(/[\\\n]/)[0].trim() || rawDisplayDuty) + '*'
+					: rawDisplayDuty;
+				const formattedDisplayDuty = hasOverrideStar ? displayedDuty : formatDutyText(rawDisplayDuty);
 				const displayFontSizeClass = getDutyFontSize(displayedDuty);
 				// Background color follows the displayed duty so colours stay meaningful
 				const displayBgClass = isSwapApproved && swapEntry?.swappedDuty != null
@@ -944,6 +1016,7 @@ export default function SchedulePage() {
 				if (!isUserSchedule) className += ' ' + styles.selectable;
 				if (displayBgClass) className += ' ' + displayBgClass;
 				if (isSelected) className += ' ' + styles.selected;
+					if (hasOverrideStar) className += ' ' + styles.dutyCellOverride;
 				if (isSwapApproved) className += ' ' + styles.dutyCellApproved;
 				else if (isSwapPending) className += ' ' + styles.dutyCellPending;
 
@@ -967,7 +1040,7 @@ export default function SchedulePage() {
 			})}
 		</tr>
 	// ── swapRequestMap added to dependency array ──────────────────────────────
-	), [scheduleData.allDates, selectedDuties, swapRequestMap, formatDutyText, getDutyBackgroundColor, getDutyFontSize, getEmployeesWithSameDuty, handleDutyCellClick, handleNameCellClick, isMobile]);
+	), [scheduleData.allDates, selectedDuties, swapRequestMap, overrideMap, formatDutyText, getDutyBackgroundColor, getDutyFontSize, getEmployeesWithSameDuty, handleDutyCellClick, handleNameCellClick, isMobile]);
 
 	// Table sync effects
 	useEffect(() => {
@@ -1133,7 +1206,12 @@ export default function SchedulePage() {
 								<span className={styles.schedTooltipIcon}><Plane size={14} /></span>
 								<div>
 									<div className={styles.schedTooltipDate}>{dateDisplay}</div>
-									<div className={styles.schedTooltipDutyCode}>{baseDuty}</div>
+									<div className={styles.schedTooltipDutyCode}>
+										{baseDuty}
+										{td.override && (
+											<span style={{ marginLeft: 5, fontSize: '0.75rem', color: '#7c3aed' }} title="航段已修改">✎</span>
+										)}
+									</div>
 								</div>
 							</div>
 							<button
@@ -1196,7 +1274,7 @@ export default function SchedulePage() {
 										onClick={() => setSectorsExpanded(v => !v)}
 									>
 										<span style={{ fontSize: '0.7rem' }}>✈</span>
-										<span>航段明細 ({sectors.length} 段)</span>
+										<span>航段明細 ({sectors.length + (td.override?.extra_sectors?.length || 0)} 段){td.override?.extra_sectors?.length > 0 && ' ✎'}</span>
 										{sectorsExpanded ? <ChevronUp size={11} /> : <ChevronDown size={11} />}
 									</button>
 									{sectorsExpanded && (
@@ -1214,10 +1292,38 @@ export default function SchedulePage() {
 													</span>
 												</div>
 											))}
+											{/* Extra sectors from dispatch overrides */}
+											{(td.override?.extra_sectors || []).map((s, idx) => (
+												<div key={`ex-${idx}`} className={styles.schedTooltipSectorRow} style={{ borderLeft: '2px solid #7c3aed', paddingLeft: '4px' }}>
+													<span className={styles.schedTooltipSectorFlight} style={{ color: '#7c3aed' }}>AE-{s.flight_number}</span>
+													<span className={styles.schedTooltipSectorRoute}>
+														{s.dep_airport}
+														<span className={styles.schedTooltipSectorArrow}>→</span>
+														{s.arr_airport}
+													</span>
+													<span className={styles.schedTooltipSectorTimes}>{s.dep_time} – {s.arr_time}</span>
+												</div>
+											))}
 										</div>
 									)}
 								</div>
 							)}
+							{/* Additional tasks */}
+							{(td.override?.additional_tasks || []).filter(t => t.title).map((t, i) => {
+								const baseDutyEnd = td.endTime || "";
+								const isBefore = t.start_time && td.reportingTime && t.start_time < td.reportingTime;
+								const isAfter  = t.end_time && baseDutyEnd && t.end_time > baseDutyEnd;
+								const tag = isBefore ? "前" : isAfter ? "後" : "中";
+								return (
+									<div key={i} className={styles.schedTooltipAdditionalTask}>
+										<span className={styles.schedTooltipAdditionalTag}>{tag}</span>
+										<span className={styles.schedTooltipAdditionalTitle}>{t.title}</span>
+										{t.start_time && t.end_time && (
+											<span className={styles.schedTooltipAdditionalTime}>{t.start_time}–{t.end_time}</span>
+										)}
+									</div>
+								);
+							})}
 							{/* 加入換班 button — only for crew rows, not user's own schedule */}
 							{!td.isUserSchedule && (
 								<button

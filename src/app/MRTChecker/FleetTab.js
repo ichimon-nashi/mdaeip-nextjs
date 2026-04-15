@@ -17,6 +17,7 @@ import {
 	getDpMinutes,
 } from "../../lib/fatigueHelpers";
 import styles from "../../styles/FleetTab.module.css";
+import { supabase } from "../../lib/supabase";
 
 // BASE_COLORS — matches MRT Checker color scheme
 const BASE_COLORS = {
@@ -89,6 +90,26 @@ export default function FleetTab({ onViewCrew, onBack }) {
 				pdxByMonth[monthStr]       = pdx;
 			}));
 
+			// Fetch schedule_day_overrides for the pivot month
+			const overridesByEmployee = {};
+			try {
+				const pivotStr = `${pivotYear}年${String(pivotMonth).padStart(2, "0")}月`;
+				const { data: monthRow } = await supabase
+					.from("mdaeip_schedule_months").select("id").eq("month", pivotStr).single();
+				if (monthRow) {
+					const { data: overrides } = await supabase
+						.from("schedule_day_overrides")
+						.select("employee_id, day, start_time, end_time, extra_sectors")
+						.eq("month_id", monthRow.id);
+					(overrides || []).forEach(ov => {
+						if (!overridesByEmployee[ov.employee_id]) overridesByEmployee[ov.employee_id] = {};
+						overridesByEmployee[ov.employee_id][ov.day] = ov;
+					});
+				}
+			} catch (e) {
+				console.error("FleetTab: failed to fetch overrides", e);
+			}
+
 			// For each crew member, build droppedItems for the pivot month
 			// and run the fatigue check scoped to the window days
 			const pivotMonthStr = `${pivotYear}年${String(pivotMonth).padStart(2, "0")}月`;
@@ -108,8 +129,9 @@ export default function FleetTab({ onViewCrew, onBack }) {
 				}
 
 				const pdxMap       = pdxByMonth[pivotMonthStr] || null;
+				const empOverrides = overridesByEmployee[emp.id] || {};
 				const droppedItems = buildDroppedItemsFromSchedule(
-					scheduleData, pdxMap, pivotYear, pivotMonth, BASE_COLORS
+					scheduleData, pdxMap, pivotYear, pivotMonth, BASE_COLORS, empOverrides
 				);
 
 				// Build adjacent month items for cross-month week Rule 1

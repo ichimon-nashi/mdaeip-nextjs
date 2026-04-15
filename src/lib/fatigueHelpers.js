@@ -40,6 +40,42 @@ export function formatDuration(minutes) {
 	return mins > 0 ? `${hours}h ${mins}m` : `${hours}h`;
 }
 
+// ─── Additional tasks effective time helpers ─────────────────────────────────
+
+/**
+ * Given a duty with optional duty.additional_tasks array, returns:
+ *   effectiveStart: earliest start across duty.startTime + any before-tasks
+ *   effectiveEnd:   latest end across duty.endTime + any after-tasks (whichever ends last wins)
+ *
+ * "Before" task: task.start_time < duty.startTime (starts before duty)
+ * "After" task: task.end_time > duty.endTime (ends after duty)
+ * Overlap tasks (fully within duty window): ignored for time calculation
+ */
+export function getAdditionalTaskTimes(duty) {
+	const tasks = duty?.additional_tasks || [];
+	const dutyStart = duty?.startTime ? timeToMinutes(duty.startTime) : null;
+	const dutyEnd   = duty?.endTime   ? timeToMinutes(duty.endTime)   : null;
+
+	let effectiveStart = dutyStart;
+	let effectiveEnd   = dutyEnd;
+
+	tasks.forEach(t => {
+		if (!t.start_time || !t.end_time) return;
+		const ts = timeToMinutes(t.start_time);
+		const te = timeToMinutes(t.end_time);
+		// Before task: starts before duty start → extends FDP/DP backward
+		if (dutyStart !== null && ts < dutyStart) {
+			if (effectiveStart === null || ts < effectiveStart) effectiveStart = ts;
+		}
+		// After/overlap: whichever ends last wins for RP start
+		if (dutyEnd !== null && te > dutyEnd) {
+			if (effectiveEnd === null || te > effectiveEnd) effectiveEnd = te;
+		}
+	});
+
+	return { effectiveStart, effectiveEnd };
+}
+
 // ─── Duty period calculations ─────────────────────────────────────────────────
 
 /**
@@ -93,8 +129,16 @@ export function getHsrOffset(baseA, baseB) {
  */
 export function getEffectiveEndMinutes(duty, dateKey, hsrItems = {}) {
 	if (!duty.endTime) return null;
-	const endMin = timeToMinutes(duty.endTime);
-	let dp = duty.isFlightDuty ? (duty.dutyPeriod || 30) : 0;
+
+	// Apply additional tasks: whichever ends last (duty or any task) sets the RP start
+	const { effectiveEnd } = getAdditionalTaskTimes(duty);
+	const baseEnd = effectiveEnd !== null ? effectiveEnd : timeToMinutes(duty.endTime);
+
+	// 30min post-flight buffer — only applies if no after-task extends beyond duty end
+	// (if a task extends past duty + 30min, the task end IS the RP start, no buffer needed)
+	const dutyEndMin = timeToMinutes(duty.endTime);
+	const afterTaskExtendsBuffer = effectiveEnd !== null && effectiveEnd > dutyEndMin;
+	let dp = (duty.isFlightDuty && !afterTaskExtendsBuffer) ? (duty.dutyPeriod || 30) : 0;
 
 	const hsr = hsrItems[dateKey];
 	if (hsr?.after && hsr?.afterTo) {
@@ -102,7 +146,7 @@ export function getEffectiveEndMinutes(duty, dateKey, hsrItems = {}) {
 		dp += getHsrOffset(fromBase, hsr.afterTo);
 	}
 
-	return endMin + dp;
+	return baseEnd + dp;
 }
 
 /**
@@ -116,14 +160,18 @@ export function getEffectiveEndMinutes(duty, dateKey, hsrItems = {}) {
  */
 export function getEffectiveStartMinutes(duty, dateKey, hsrItems = {}) {
 	if (!duty.startTime) return null;
-	const startMin = timeToMinutes(duty.startTime);
+
+	// Before-tasks extend duty start backward
+	const { effectiveStart } = getAdditionalTaskTimes(duty);
+	const baseStart = effectiveStart !== null ? effectiveStart : timeToMinutes(duty.startTime);
+
 	const hsr = hsrItems[dateKey];
 	if (hsr?.before && hsr?.beforeFrom) {
 		const toBase = duty.base_code || hsr.beforeTo || hsr.beforeFrom;
 		const offset = getHsrOffset(hsr.beforeFrom, toBase);
-		return startMin - offset;
+		return baseStart - offset;
 	}
-	return startMin;
+	return baseStart;
 }
 
 /**
@@ -143,6 +191,17 @@ export function getFtMinutes(duty) {
  */
 export function getFdpMinutes(duty) {
 	if (!duty?.isFlightDuty) return 0;
+	// Before-tasks extend FDP start: ground duty before flight counts toward FDP+DP
+	const { effectiveStart } = getAdditionalTaskTimes(duty);
+	if (effectiveStart !== null && duty.startTime) {
+		const dutyStart = timeToMinutes(duty.startTime);
+		if (effectiveStart < dutyStart) {
+			// FDP extended by before-task duration
+			const extensionMin = dutyStart - effectiveStart;
+			const baseFdp = duty.fdp_minutes != null ? duty.fdp_minutes : calculateFDP(duty);
+			return baseFdp + extensionMin;
+		}
+	}
 	if (duty.fdp_minutes != null) return duty.fdp_minutes;
 	return calculateFDP(duty);
 }
@@ -643,7 +702,7 @@ export function findPdxDutyForDate(rows, dateStr) {
  * @param {object} BASE_COLORS   - { TSA, RMQ, KHH, ground, rest, custom }
  * @returns {object}             - droppedItems { [dateKey]: dutyObject }
  */
-export function buildDroppedItemsFromSchedule(scheduleData, pdxDutyMap, year, month, BASE_COLORS) {
+export function buildDroppedItemsFromSchedule(scheduleData, pdxDutyMap, year, month, BASE_COLORS, overridesMap = {}) {
 	const droppedItems = {};
 	if (!scheduleData?.days) return droppedItems;
 
@@ -656,6 +715,24 @@ export function buildDroppedItemsFromSchedule(scheduleData, pdxDutyMap, year, mo
 	const LEAVE_CODES_SET = new Set([
 		"A/L", "S/L", "P/L", "福補", "補休", "喪", "婚", "空",
 	]);
+
+	// Default times for known ground duties (not in PDX — PDX only has flight duties)
+	const GROUND_DUTY_TIMES = {
+		"OD":   { startTime: "08:00", endTime: "17:00" },
+		"OFC":  { startTime: "08:00", endTime: "17:00" },
+		"訓":   { startTime: "08:00", endTime: "17:00" },
+		"課":   { startTime: "08:00", endTime: "17:00" },
+		"會":   { startTime: "08:00", endTime: "17:00" },
+		"公差": { startTime: "08:00", endTime: "17:00" },
+		"公出": { startTime: "08:00", endTime: "17:00" },
+		"體檢": { startTime: "08:00", endTime: "17:00" },
+		"職醫": { startTime: "08:00", endTime: "17:00" },
+		"陪訓": { startTime: "08:00", endTime: "17:00" },
+		"SA":   { startTime: "06:35", endTime: "12:00" },
+		"SP":   { startTime: "12:00", endTime: "17:00" },
+		"SH1":  { startTime: "06:00", endTime: "14:00" },
+		"SH2":  { startTime: "12:00", endTime: "20:00" },
+	};
 
 	for (let day = 1; day <= totalDays; day++) {
 		const dayStr     = String(day).padStart(2, "0");
@@ -704,25 +781,27 @@ export function buildDroppedItemsFromSchedule(scheduleData, pdxDutyMap, year, mo
 			return BASE_COLORS?.[category] || "#64748b";
 		};
 
+		// Apply schedule_day_overrides if present for this employee+day
+		const override = overridesMap[day];
 		droppedItems[dateKey] = {
 			id:            `schedule_${dutyCode}_${day}`,
 			code:          rawCode,
 			name:          isRestDay ? dutyCode : `${dutyCode} Flight`,
-			// If partial is unknown (flightNums specified but no sector data), leave times empty
-			// so the duty is treated as no-times (free) in rest period calculations
-			startTime:     partial?.partialUnknown ? "" : (partial?.startTime ?? pdxRow?.reporting_time ?? ""),
-			endTime:       partial?.partialUnknown ? "" : (partial?.endTime   ?? pdxRow?.end_time       ?? ""),
+			startTime:     override ? (override.start_time?.slice(0,5) ?? "") : (partial?.partialUnknown ? "" : (partial?.startTime ?? pdxRow?.reporting_time ?? GROUND_DUTY_TIMES[dutyCode]?.startTime ?? "")),
+			endTime:       override ? (override.end_time?.slice(0,5)   ?? "") : (partial?.partialUnknown ? "" : (partial?.endTime   ?? pdxRow?.end_time       ?? GROUND_DUTY_TIMES[dutyCode]?.endTime   ?? "")),
 			color:         baseColor(pdxRow?.base_code, isRestDay ? "rest" : "ground"),
 			isDuty:        !isRestDay,
 			isRest:        isRestDay,
-			isFlightDuty:  !isRestDay,
-			sectors:       flightNums.length > 0 ? flightNums.length : (pdxRow?.sector_count ?? null),
-			ft_minutes:    partial?.partialUnknown ? null : (partial?.ftMinutes  ?? pdxRow?.ft_minutes  ?? null),
-			fdp_minutes:   partial?.partialUnknown ? null : (partial?.fdpMinutes ?? pdxRow?.fdp_minutes ?? null),
+			isFlightDuty:  !isRestDay && !!pdxRow,
+			sectors:       override ? ((flightNums.length || 0) + (override.extra_sectors?.length || 0)) : (flightNums.length > 0 ? flightNums.length : (pdxRow?.sector_count ?? null)),
+			ft_minutes:    override ? null : (partial?.partialUnknown ? null : (partial?.ftMinutes  ?? pdxRow?.ft_minutes  ?? null)),
+			fdp_minutes:   override ? null : (partial?.partialUnknown ? null : (partial?.fdpMinutes ?? pdxRow?.fdp_minutes ?? null)),
 			flightNums:    flightNums.length > 0 ? flightNums : null,
 			sectors_data:  pdxRow?.sectors_data  ?? [],
 			base_code:     pdxRow?.base_code     ?? null,
 			aircraft_type: pdxRow?.aircraft_type ?? null,
+			extra_sectors: override?.extra_sectors ?? [],
+			isOverride:    !!override,
 			isFromSchedule: true,
 		};
 	}

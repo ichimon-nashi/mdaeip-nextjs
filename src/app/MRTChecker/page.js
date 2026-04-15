@@ -15,6 +15,7 @@ import {
 import styles from "../../styles/MRTChecker.module.css";
 import { getEmployeeSchedule, employeeList } from "../../lib/DataRoster";
 import FleetTab from "./FleetTab";
+import SwapTab from "./SwapTab";
 import { getFlightDutiesForMRTByMonth } from "../../lib/pdxHelpers";
 import {
 	timeToMinutes, minutesToTime, formatTime, formatDuration,
@@ -79,7 +80,15 @@ const MRTChecker = () => {
 	const [hsrItems, setHsrItems] = useState({});   // { [dateKey]: { before: bool, after: bool } }
 	const [popoverDuty, setPopoverDuty] = useState(null);   // { duty, dateKey }
 	const [popoverPos, setPopoverPos] = useState({ x: 0, y: 0 });
+	// Inline add-duty form for empty cells (dispatch only)
+	const [addDutyCell, setAddDutyCell] = useState(null);   // { dateKey, day, pos:{x,y} }
+	const [addDutyForm, setAddDutyForm] = useState({ code: "", startTime: "", endTime: "", note: "", isSpecial: true });
+	// Extra custom sectors per dateKey — { [dateKey]: [{ id, flight_number, dep_airport, arr_airport, dep_time, arr_time }] }
+	const [extraSectors, setExtraSectors] = useState({});
+	// Additional tasks after duty (training, meetings) per dateKey
+	const [additionalTasks, setAdditionalTasks] = useState({}); // { [dateKey]: [{ id, title, start_time, end_time }] }
 	const rosterRef = useRef(null);
+	const tabBarRef = useRef(null);
 
 	const monthNames = [
 		"1月",
@@ -441,6 +450,75 @@ const MRTChecker = () => {
 
 				setDroppedItems(newDroppedItems);
 
+				// ── Load one-off duty overrides (dispatch-added special duties) ──
+				try {
+					const { supabase } = await import("../../lib/supabase");
+					const monthStr = `${currentYear}年${String(currentMonth + 1).padStart(2, "0")}月`;
+					const { data: monthRow } = await supabase
+						.from("mdaeip_schedule_months").select("id").eq("month", monthStr).single();
+					if (monthRow) {
+						const { data: overrides } = await supabase
+							.from("schedule_day_overrides")
+							.select("day, duty_code, start_time, end_time, is_special, note, extra_sectors, additional_tasks")
+							.eq("employee_id", targetUserId)
+							.eq("month_id", monthRow.id);
+						if (overrides?.length) {
+							// Populate extraSectors and additionalTasks from saved DB data
+							const loadedExtra = {};
+							const loadedTasks = {};
+							overrides.forEach(ov => {
+								const dk = `${currentYear}-${currentMonth}-${ov.day}`;
+								if (ov.extra_sectors?.length) loadedExtra[dk] = ov.extra_sectors;
+								if (ov.additional_tasks?.length) loadedTasks[dk] = ov.additional_tasks;
+							});
+							if (Object.keys(loadedExtra).length) setExtraSectors(prev => ({ ...prev, ...loadedExtra }));
+							if (Object.keys(loadedTasks).length) setAdditionalTasks(prev => ({ ...prev, ...loadedTasks }));
+						setDroppedItems(prev => {
+							const merged = { ...prev };
+							overrides.forEach(ov => {
+								const dateKey = `${currentYear}-${currentMonth}-${ov.day}`;
+								const existing = merged[dateKey];
+								// If existing entry is a flight duty, only update times + mark override.
+								// This preserves sectors_data, isFlightDuty, PDX metadata.
+								if (existing?.isFlightDuty) {
+									merged[dateKey] = {
+										...existing,
+										startTime:        ov.start_time?.slice(0, 5) ?? existing.startTime,
+										endTime:          ov.end_time?.slice(0, 5)   ?? existing.endTime,
+										extra_sectors:    ov.extra_sectors ?? [],
+										additional_tasks: ov.additional_tasks ?? [],
+										isOverride:       true,
+										isSpecial:        ov.is_special,
+									};
+								} else {
+									// New duty added by dispatch on previously empty/ground cell
+									merged[dateKey] = {
+										id:              `override_${ov.duty_code}_${ov.day}`,
+										code:            ov.duty_code,
+										name:            ov.duty_code,
+										startTime:       ov.start_time?.slice(0, 5) ?? "",
+										endTime:         ov.end_time?.slice(0, 5)   ?? "",
+										color:           getBaseColor(null, "custom"),
+										isDuty:          true,
+										isRest:          false,
+										isFlightDuty:    false,
+										isOverride:      true,
+										isSpecial:       ov.is_special,
+										note:            ov.note ?? "",
+										extra_sectors:   ov.extra_sectors ?? [],
+										additional_tasks: ov.additional_tasks ?? [],
+										isFromSchedule:  true,
+									};
+								}
+							});
+							return merged;
+						});
+						}
+					}
+				} catch (err) {
+					console.error("loadOverrides error:", err);
+				}
+
 				// Load adjacent months for display in leading/trailing calendar cells
 				try {
 					const prevDate  = new Date(currentYear, currentMonth - 1, 1);
@@ -748,7 +826,7 @@ const MRTChecker = () => {
 	}, [user, originalDroppedItems]);
 
 	const handleRemoveDuty = useCallback(
-		(e, dateKey) => {
+		async (e, dateKey) => {
 			e.stopPropagation();
 			setPopoverDuty(null);
 			setDroppedItems((prev) => {
@@ -757,8 +835,46 @@ const MRTChecker = () => {
 				delete newItems[dateKey];
 				return newItems;
 			});
+			// Also clear extra/task state for this day
+			setExtraSectors(prev => { const n = { ...prev }; delete n[dateKey]; return n; });
+			setAdditionalTasks(prev => { const n = { ...prev }; delete n[dateKey]; return n; });
+			// Persist removal: write "" to mdaeip_schedules and delete override row
+			try {
+				const targetUserId = viewUserId || user?.id;
+				if (!targetUserId) return;
+				const [, , dayStr] = dateKey.split("-");
+				const day = parseInt(dayStr);
+				const monthStr = `${currentYear}年${String(currentMonth + 1).padStart(2, "0")}月`;
+				const { supabase } = await import("../../lib/supabase");
+				const { data: monthRow } = await supabase
+					.from("mdaeip_schedule_months").select("id").eq("month", monthStr).single();
+				if (!monthRow) return;
+				// Delete override row
+				await supabase.from("schedule_day_overrides")
+					.delete()
+					.eq("employee_id", targetUserId)
+					.eq("month_id", monthRow.id)
+					.eq("day", day);
+				// Write "" to mdaeip_schedules for this day
+				const totalDays = new Date(currentYear, currentMonth + 1, 0).getDate();
+				const { data: schedRow } = await supabase
+					.from("mdaeip_schedules").select("duties")
+					.eq("employee_id", targetUserId).eq("month_id", monthRow.id).single();
+				if (schedRow) {
+					const duties = [...(schedRow.duties || Array(totalDays).fill(""))];
+					duties[day - 1] = "";
+					await supabase.from("mdaeip_schedules")
+						.upsert({ employee_id: targetUserId, month_id: monthRow.id, duties },
+							{ onConflict: "month_id,employee_id" });
+				}
+				// Clear cache so schedule/dashboard pages see the deletion
+				const { clearScheduleCache } = await import("../../lib/DataRoster");
+				clearScheduleCache(monthStr);
+			} catch (err) {
+				console.error("handleRemoveDuty DB error:", err);
+			}
 		},
-		[snapshotIfNeeded]
+		[snapshotIfNeeded, viewUserId, user, currentYear, currentMonth]
 	);
 
 	// Open detail popover for a calendar duty chip
@@ -799,11 +915,36 @@ const MRTChecker = () => {
 			for (let day = 1; day <= totalDays; day++) {
 				const dateKey = `${currentYear}-${currentMonth}-${day}`;
 				const duty = droppedItems[dateKey];
-				// Store the raw code, or empty string if auto-populated or missing
 				if (!duty || duty.isAutoPopulated) {
 					duties.push("");
 				} else {
-					duties.push(duty.code || "");
+					// If sector selection was changed, encode flightNums back into the raw code
+					// e.g. base code "N4" with flightNums ["1271","1272"] → "N4\\1271.2\\S" style
+					// We re-use the duty.code but replace any existing flight number segment
+					if (duty.flightNums?.length > 0) {
+						// Build encoded code: dutyCode\XXXX.YYY (using last digits of adjacent pairs)
+						const baseCode = normalizeDutyCode(duty.code) || duty.code.split("\\")[0];
+						const nums = duty.flightNums;
+						// Format: if consecutive pair, use abbreviation (e.g. 1271.2 for 1271+1272)
+						let flightPart;
+						if (nums.length === 2) {
+							const a = nums[0], b = nums[1];
+							// Find shortest abbreviation: b's last digits that differ from a
+							let abbrev = b;
+							for (let len = 1; len <= b.length; len++) {
+								const candidate = a.slice(0, a.length - len) + b.slice(-len);
+								if (candidate === b) { abbrev = b.slice(-len); break; }
+							}
+							flightPart = `${a}.${abbrev}`;
+						} else {
+							flightPart = nums.join("/");
+						}
+						// Preserve inspection flag if original had S
+						const hasS = /\\S(?:\\|$)/.test(duty.code) || /\\.+S$/.test(duty.code);
+						duties.push(hasS ? `${baseCode}\\${flightPart}\\S` : `${baseCode}\\${flightPart}`);
+					} else {
+						duties.push(duty.code || "");
+					}
 				}
 			}
 
@@ -847,6 +988,183 @@ const MRTChecker = () => {
 		}
 	}, [droppedItems, viewUserId, user?.id, currentYear, currentMonth]);
 
+	const saveOverride = useCallback(async (dateKey, day, form) => {
+		const targetUserId = viewUserId || user?.id;
+		if (!targetUserId || !form.code || !form.startTime || !form.endTime) return;
+		try {
+			const { supabase } = await import("../../lib/supabase");
+			const monthStr = `${currentYear}年${String(currentMonth + 1).padStart(2, "0")}月`;
+			const { data: monthRow, error: mErr } = await supabase
+				.from("mdaeip_schedule_months").select("id").eq("month", monthStr).single();
+			if (mErr || !monthRow) { toast.error("找不到對應月份"); return; }
+
+			const { error } = await supabase
+				.from("schedule_day_overrides")
+				.upsert({
+					employee_id: targetUserId,
+					month_id:    monthRow.id,
+					day,
+					duty_code:   form.code,
+					start_time:  form.startTime,
+					end_time:    form.endTime,
+					is_special:  form.isSpecial,
+					note:        form.note || null,
+					created_by:  user?.name || user?.id || null,
+				}, { onConflict: "employee_id,month_id,day" });
+
+			if (error) { toast.error("儲存失敗"); return; }
+
+			// Also write the duty code into mdaeip_schedules so the dashboard sees it
+			const totalDays = new Date(currentYear, currentMonth + 1, 0).getDate();
+			const { data: schedRow } = await supabase
+				.from("mdaeip_schedules")
+				.select("duties")
+				.eq("employee_id", targetUserId)
+				.eq("month_id", monthRow.id)
+				.single();
+			if (schedRow) {
+				const duties = [...(schedRow.duties || Array(totalDays).fill(""))];
+				duties[day - 1] = form.code;
+				await supabase.from("mdaeip_schedules")
+					.upsert({ employee_id: targetUserId, month_id: monthRow.id, duties },
+						{ onConflict: "month_id,employee_id" });
+			}
+
+			// Clear DataRoster cache so schedule/dashboard pages reload fresh data
+			const { clearScheduleCache } = await import("../../lib/DataRoster");
+			clearScheduleCache(monthStr);
+
+			// Update droppedItems in place
+			const overrideDuty = {
+				id: `override_${form.code}_${day}`,
+				code: form.code, name: form.code,
+				startTime: form.startTime, endTime: form.endTime,
+				color: getBaseColor(null, "custom"),
+				isDuty: true, isRest: false, isFlightDuty: false,
+				isOverride: true, isSpecial: form.isSpecial, note: form.note,
+				isFromSchedule: true,
+			};
+			setDroppedItems(prev => ({ ...prev, [dateKey]: overrideDuty }));
+			setAddDutyCell(null);
+			setAddDutyForm({ code: "", startTime: "", endTime: "", note: "", isSpecial: true });
+			toast.success("特殊任務已儲存");
+		} catch (err) {
+			console.error("saveOverride:", err);
+			toast.error("儲存失敗");
+		}
+	}, [viewUserId, user, currentYear, currentMonth, getBaseColor]);
+
+	// Save extra custom sectors for a flight duty day
+	const saveExtraSectors = useCallback(async (dateKey, day, keptPdxNums, extras) => {
+		const targetUserId = viewUserId || user?.id;
+		if (!targetUserId) return;
+		const duty = droppedItems[dateKey];
+		if (!duty) return;
+		try {
+			const { supabase } = await import("../../lib/supabase");
+			const monthStr = `${currentYear}年${String(currentMonth + 1).padStart(2, "0")}月`;
+			const { data: monthRow } = await supabase
+				.from("mdaeip_schedule_months").select("id").eq("month", monthStr).single();
+			if (!monthRow) { toast.error("找不到對應月份"); return; }
+
+			// Compute combined start/end:
+			// startTime = duty's PDX reporting time (or existing override time)
+			// endTime   = latest arr_time across kept PDX sectors + extra sectors + 30min DP
+			const keptSectors = (duty.sectors_data || [])
+				.filter(s => keptPdxNums.includes(s.flight_number.replace(/^AE-/, "")));
+			const allEndTimes = [
+				...keptSectors.map(s => s.arr_time?.slice(0,5)).filter(Boolean),
+				...extras.map(s => s.arr_time).filter(Boolean),
+			];
+			// Store RAW duty end time — no 30min buffer here.
+			// The buffer is applied dynamically by getEffectiveEndMinutes at fatigue-check time.
+			// Storing the buffered time would corrupt reload (double-buffer on next load).
+			let endTime = "";
+			if (allEndTimes.length) {
+				// Use latest arrival time across kept PDX sectors + extra flight sectors (raw, no buffer)
+				endTime = allEndTimes.reduce((max, t) => t > max ? t : max, "00:00");
+			} else {
+				// No flight sectors — use the duty's PDX end time directly
+				// Fall back to stored override end if droppedItems already has it
+				endTime = duty.endTime || "";
+			}
+			// For additional tasks: if a task ends later than the duty, that task end IS the stored end
+			// (no buffer needed — tasks define their own end time)
+			const tasks = (additionalTasks[dateKey] || []).filter(t => t.title && t.start_time && t.end_time);
+			tasks.forEach(t => {
+				if (t.end_time > endTime) endTime = t.end_time;
+			});
+			// startTime: earliest of duty start and any before-tasks
+			let startTime = duty.startTime || "";
+			tasks.forEach(t => {
+				if (t.start_time && startTime && t.start_time < startTime) startTime = t.start_time;
+			});
+
+			// Build code for mdaeip_schedules — only kept PDX flights (extras stored in overrides table)
+			const dutyBase = normalizeDutyCode(duty.code) || duty.code.split("\\")[0];
+			const allNums = [...keptPdxNums, ...extras.map(s => s.flight_number)]; // total for sector count
+			const newCode = keptPdxNums.length > 0 ? `${dutyBase}\\${keptPdxNums.join("/")}` : dutyBase;
+
+			// Upsert override row with extra_sectors + additional_tasks
+			const { error } = await supabase
+				.from("schedule_day_overrides")
+				.upsert({
+					employee_id:       targetUserId,
+					month_id:          monthRow.id,
+					day,
+					duty_code:         dutyBase,
+					start_time:        startTime || "08:00", // safe fallback for ground duties
+					end_time:          endTime   || "17:00", // safe fallback for ground duties
+					is_special:        true,
+					extra_sectors:     extras,
+					additional_tasks:  tasks,
+					created_by:        user?.name || user?.id || null,
+				}, { onConflict: "employee_id,month_id,day" });
+
+			if (error) { toast.error("儲存失敗"); console.error(error); return; }
+
+			// Also update mdaeip_schedules so dashboard sees the new code
+			const totalDays = new Date(currentYear, currentMonth + 1, 0).getDate();
+			const { data: schedRow } = await supabase
+				.from("mdaeip_schedules").select("duties")
+				.eq("employee_id", targetUserId).eq("month_id", monthRow.id).single();
+			if (schedRow) {
+				const duties = [...(schedRow.duties || Array(totalDays).fill(""))];
+				duties[day - 1] = newCode;
+				await supabase.from("mdaeip_schedules")
+					.upsert({ employee_id: targetUserId, month_id: monthRow.id, duties },
+						{ onConflict: "month_id,employee_id" });
+			}
+
+			// Clear DataRoster cache so schedule/dashboard pages reload fresh data
+			const { clearScheduleCache: clearCache } = await import("../../lib/DataRoster");
+			clearCache(monthStr);
+
+			// Update local state — keep duty.code as base code so sector_data lookup stays valid
+			setExtraSectors(prev => ({ ...prev, [dateKey]: extras }));
+			setDroppedItems(prev => ({
+				...prev,
+				[dateKey]: {
+					...prev[dateKey],
+					startTime,
+					endTime,
+					flightNums: keptPdxNums.length > 0 ? keptPdxNums : null,
+					sectors: allNums.length,
+					extra_sectors: extras,
+					isOverride: true,
+				},
+			}));
+			setPopoverDuty(prev => prev?.dateKey === dateKey ? {
+				...prev,
+				duty: { ...prev.duty, startTime, endTime, flightNums: keptPdxNums.length > 0 ? keptPdxNums : null, sectors: allNums.length, extra_sectors: extras, isOverride: true },
+			} : prev);
+			toast.success("航段已儲存");
+		} catch (err) {
+			console.error("saveExtraSectors:", err);
+			toast.error("儲存失敗");
+		}
+	}, [droppedItems, viewUserId, user, currentYear, currentMonth]);
+
 	const handleDragStart = useCallback(
 		(e, duty) => {
 			if (isTouchDevice) return;
@@ -885,19 +1203,41 @@ const MRTChecker = () => {
 
 			if (draggedItem && day) {
 				const key = `${currentYear}-${currentMonth}-${day}`;
+				const monthPadded = String(currentMonth + 1).padStart(2, "0");
+				const dayStr = String(day).padStart(2, "0");
+				const dateStr = `${currentYear}-${monthPadded}-${dayStr}`;
+
+				// If this is a palette flight duty with pdxRows, resolve the correct
+				// PDX row for this specific date and attach sectors_data so the
+				// sector selector works in the popover
+				const enrichWithPdx = (item) => {
+					if (!item.isFlightDuty || !item.pdxRows?.length || item.sectors_data?.length > 0) return item;
+					const pdxRow = findPdxDutyForDate(item.pdxRows, dateStr);
+					if (!pdxRow) return item;
+					return {
+						...item,
+						startTime:    pdxRow.reporting_time || item.startTime,
+						endTime:      pdxRow.end_time       || item.endTime,
+						sectors:      pdxRow.sector_count   ?? item.sectors,
+						ft_minutes:   pdxRow.ft_minutes     ?? item.ft_minutes,
+						fdp_minutes:  pdxRow.fdp_minutes    ?? item.fdp_minutes,
+						base_code:    pdxRow.base_code      ?? item.base_code,
+						sectors_data: pdxRow.sectors_data   ?? [],
+					};
+				};
 
 				if (draggedFromDate) {
 					setDroppedItems((prev) => {
 						snapshotIfNeeded(prev);
 						const newItems = { ...prev };
 						delete newItems[draggedFromDate];
-						newItems[key] = draggedItem;
+						newItems[key] = enrichWithPdx(draggedItem);
 						return newItems;
 					});
 				} else {
 					setDroppedItems((prev) => {
 						snapshotIfNeeded(prev);
-						return { ...prev, [key]: draggedItem };
+						return { ...prev, [key]: enrichWithPdx(draggedItem) };
 					});
 				}
 			}
@@ -1036,34 +1376,41 @@ const MRTChecker = () => {
 
 		return (
 			<>
-				{/* Tab bar */}
-				<div
-					className={styles.tabBar}
-					onWheel={(e) => {
-						if (Math.abs(e.deltaY) > Math.abs(e.deltaX)) {
-							e.currentTarget.scrollLeft += e.deltaY;
-							e.preventDefault();
-						}
-					}}
-				>
-					{TABS.map((tab) => {
-						const count = buckets[tab.key]?.length || 0;
-						const hasAnyFlight = allDuties.some(d => d.isFlightDuty);
-						// Always show rest/ground/custom; show base tabs if they have duties OR any flight duties exist
-						const flightBaseTab = tab.key === "TSA" || tab.key === "RMQ" || tab.key === "KHH";
-						if (flightBaseTab && count === 0 && !hasAnyFlight) return null;
-						return (
-							<button
-								key={tab.key}
-								className={`${styles.tab} ${activeTab === tab.key ? styles.active : ""}`}
-								style={activeTab === tab.key ? { borderBottomColor: tab.color, color: tab.color } : {}}
-								onClick={() => setActiveTab(tab.key)}
-							>
-								{tab.label}
-								{count > 0 && <span style={{ marginLeft: "0.25rem", opacity: 0.6, fontSize: "0.65rem" }}>({count})</span>}
-							</button>
-						);
-					})}
+				{/* Tab bar with scroll arrows */}
+				<div className={styles.tabBarWrap}>
+					<button
+						className={styles.tabBarScrollBtn}
+						onClick={() => { if (tabBarRef.current) tabBarRef.current.scrollLeft -= 72; }}
+						aria-label="scroll left"
+					>‹</button>
+					<div
+						ref={tabBarRef}
+						className={styles.tabBar}
+					>
+						{TABS.map((tab) => {
+							const count = buckets[tab.key]?.length || 0;
+							const hasAnyFlight = allDuties.some(d => d.isFlightDuty);
+							// Always show rest/ground/custom; show base tabs if they have duties OR any flight duties exist
+							const flightBaseTab = tab.key === "TSA" || tab.key === "RMQ" || tab.key === "KHH";
+							if (flightBaseTab && count === 0 && !hasAnyFlight) return null;
+							return (
+								<button
+									key={tab.key}
+									className={`${styles.tab} ${activeTab === tab.key ? styles.active : ""}`}
+									style={activeTab === tab.key ? { borderBottomColor: tab.color, color: tab.color } : {}}
+									onClick={() => setActiveTab(tab.key)}
+								>
+									{tab.label}
+									{count > 0 && <span style={{ marginLeft: "0.25rem", opacity: 0.6, fontSize: "0.65rem" }}>({count})</span>}
+								</button>
+							);
+						})}
+					</div>
+					<button
+						className={styles.tabBarScrollBtn}
+						onClick={() => { if (tabBarRef.current) tabBarRef.current.scrollLeft += 72; }}
+						aria-label="scroll right"
+					>›</button>
 				</div>
 
 				{/* Duty list */}
@@ -1540,6 +1887,9 @@ const MRTChecker = () => {
 														{hsrItems[key].after  && <span className={styles.chipHsrBadge}>T後</span>}
 													</div>
 												)}
+															{(additionalTasks[key] || []).some(t => t.title) && (
+																<span className={styles.chipTaskBadge}>＋附加</span>
+															)}
 											</div>
 										)}
 
@@ -1551,6 +1901,20 @@ const MRTChecker = () => {
 													))}
 												</div>
 											</div>
+										)}
+
+										{!assignedDuty && hasAppAccess(user, "dispatch") && (
+											<button
+												className={styles.addDutyCellBtn}
+												onClick={(e) => {
+													e.stopPropagation();
+													const rect = e.currentTarget.closest(`.${styles.calendarCell}`)?.getBoundingClientRect();
+													setAddDutyCell({ dateKey: key, day, pos: { x: rect?.left ?? 0, y: (rect?.bottom ?? 0) + 4 } });
+													setAddDutyForm({ code: "", startTime: "", endTime: "", note: "", isSpecial: true });
+													setPopoverDuty(null);
+												}}
+												title="新增特殊任務"
+											>＋</button>
 										)}
 
 										{!assignedDuty && suggestion && (
@@ -1755,8 +2119,10 @@ const MRTChecker = () => {
 					const vh = typeof window !== "undefined" ? window.innerHeight : 600;
 					const left = Math.min(Math.max(popoverPos.x, PAD), vw - W - PAD);
 					// Estimate popover height — clamp so it doesn't go below viewport
-					const estH = 480;
-					const top  = Math.min(popoverPos.y, vh - estH - PAD);
+					// Dynamic height: fit in viewport, flip above if needed
+					const estH = Math.min(640, vh - PAD * 2);
+					const fitsBelow = (popoverPos.y + estH + PAD) <= vh;
+					const top = fitsBelow ? popoverPos.y : Math.max(PAD, vh - estH - PAD);
 					return (
 						<>
 							{/* backdrop — click outside closes */}
@@ -1766,13 +2132,14 @@ const MRTChecker = () => {
 							/>
 							<div
 								className={styles.dutyPopover}
-								style={{ top, left }}
+								style={{ top, left, maxHeight: `calc(100vh - ${PAD * 2}px)`, overflowY: "auto" }}
 							>
 								{/* colour strip */}
 								<div className={styles.dutyPopoverStrip} style={{ backgroundColor: duty.color }} />
 								<div className={styles.dutyPopoverBody}>
 								{(() => {
 									const showSectors = hasAppAccess(user, "dispatch") && duty.isFlightDuty && duty.sectors_data?.length > 0;
+									const showFlightEditor = hasAppAccess(user, "dispatch") && duty.isFlightDuty && !showSectors;
 									const allFlights = showSectors ? duty.sectors_data.map(s => s.flight_number.replace(/^AE-/, "")) : [];
 									const isAll = !duty.flightNums;
 									const selected = new Set(duty.flightNums || allFlights);
@@ -1780,27 +2147,31 @@ const MRTChecker = () => {
 										const pdxRow = { ...duty };
 										const partial = newNums.length === allFlights.length ? null : computePartialDutyTimes(pdxRow, newNums);
 										const flightNums = newNums.length === allFlights.length ? null : newNums;
-										setDroppedItems(prev => ({
-											...prev,
-											[dateKey]: {
-												...prev[dateKey],
-												flightNums,
-												startTime:   partial?.partialUnknown ? "" : (partial?.startTime  ?? duty.startTime),
-												endTime:     partial?.partialUnknown ? "" : (partial?.endTime    ?? duty.endTime),
-												ft_minutes:  partial?.partialUnknown ? null : (partial?.ftMinutes  ?? (flightNums ? null : duty.ft_minutes)),
-												fdp_minutes: partial?.partialUnknown ? null : (partial?.fdpMinutes ?? (flightNums ? null : duty.fdp_minutes)),
-												sectors:     newNums.length,
-											},
-										}));
+										setDroppedItems(prev => {
+											snapshotIfNeeded(prev); // mark as unsaved so save button appears
+											return {
+												...prev,
+												[dateKey]: {
+													...prev[dateKey],
+													flightNums,
+													startTime:   partial?.partialUnknown ? "" : (partial?.startTime  ?? duty.startTime),
+													endTime:     partial?.partialUnknown ? "" : (partial?.endTime    ?? duty.endTime),
+													ft_minutes:  partial?.partialUnknown ? null : (partial?.ftMinutes  ?? (flightNums ? null : duty.ft_minutes)),
+													fdp_minutes: partial?.partialUnknown ? null : (partial?.fdpMinutes ?? (flightNums ? null : duty.fdp_minutes)),
+													sectors:     newNums.length,
+												},
+											};
+										});
 										setPopoverDuty(prev => prev ? { ...prev, duty: { ...prev.duty, flightNums } } : null);
 									};
 									return (
-										<div className={showSectors ? styles.dutyPopoverTwoCol : undefined}>
+										<div className={(showSectors || showFlightEditor) ? styles.dutyPopoverTwoCol : undefined}>
 											{/* ── Left col: info + HSR ── */}
 											<div>
 												<div className={styles.dutyPopoverCode}>
 													{duty.isFlightDuty && <span style={{ color: "#fbbf24", marginRight: 4 }}>☆</span>}
-													{duty.code}
+													{normalizeDutyCode(duty.code) || duty.code.split("\\")[0]}
+													{duty.isOverride && <span style={{ color: "#7c3aed", marginLeft: 6, fontSize: "0.85rem" }} title="已修改">✎</span>}
 												</div>
 												{duty.name && duty.name !== `Flight ${duty.code}` && (
 													<div className={styles.dutyPopoverName}>{duty.name}</div>
@@ -1845,6 +2216,23 @@ const MRTChecker = () => {
 														<span className={styles.dutyPopoverValue}>{duty.base_code}</span>
 													</div>
 												)}
+												{/* Additional tasks summary */}
+												{(additionalTasks[dateKey] || []).filter(t => t.title).map((t, i) => {
+													const dutyEnd   = duty.endTime   ? duty.endTime.slice(0,5)   : "";
+													const dutyStart = duty.startTime ? duty.startTime.slice(0,5) : "";
+													const isBefore = t.start_time && dutyStart && t.start_time < dutyStart;
+													const isAfter  = t.end_time   && dutyEnd   && t.end_time   > dutyEnd;
+													const tag = isBefore ? "前" : isAfter ? "後" : "中";
+													return (
+													<div key={i} className={styles.additionalTaskSummary}>
+														<span className={styles.additionalTaskTag}>{tag}</span>
+														<span className={styles.additionalTaskSummaryTitle}>{t.title}</span>
+														{t.start_time && t.end_time && (
+															<span className={styles.additionalTaskSummaryTime}>{t.start_time}–{t.end_time}</span>
+														)}
+													</div>
+													);
+												})}
 												{/* Ground duty time editor — dispatch only, non-flight duties */}
 												{hasAppAccess(user, "dispatch") && duty.isDuty && !duty.isFlightDuty && (
 													<div className={styles.dutyPopoverTimeEditor}>
@@ -1942,11 +2330,121 @@ const MRTChecker = () => {
 															</div>
 														);
 													})}
+													{/* Extra custom sectors */}
+													{hasAppAccess(user, "dispatch") && (<>
+														<div className={styles.extraSectorHeader}>
+															<span className={styles.dutyPopoverHsrLabel}>額外航段</span>
+															<button className={styles.extraSectorAddBtn} onClick={() => {
+																const cur = extraSectors[dateKey] || [];
+																setExtraSectors(prev => ({
+																	...prev,
+																	[dateKey]: [...cur, { id: Date.now(), flight_number: "", dep_airport: "", arr_airport: "", dep_time: "", arr_time: "" }],
+																}));
+															}}>＋</button>
+														</div>
+													{(extraSectors[dateKey] || []).map((es, idx) => {
+														const upd = (f, v) => setExtraSectors(prev => ({ ...prev, [dateKey]: prev[dateKey].map((x,i) => i===idx ? {...x, [f]: v} : x) }));
+														return (
+														<div key={es.id} className={styles.extraSectorRow}>
+															<div className={styles.extraSectorRowTop}>
+																<input className={styles.extraSectorInput} style={{width:"4rem"}} placeholder="班號" value={es.flight_number} onChange={e => upd("flight_number", e.target.value)} />
+																<button className={styles.extraSectorDelBtn} onClick={() => setExtraSectors(prev => ({ ...prev, [dateKey]: prev[dateKey].filter((_,i) => i !== idx) }))}>✕</button>
+															</div>
+															<div className={styles.extraSectorRowBottom}>
+																<input className={styles.extraSectorInput} style={{width:"3rem"}} placeholder="出發" value={es.dep_airport} onChange={e => upd("dep_airport", e.target.value.toUpperCase())} />
+																<span style={{color:"#94a3b8",fontSize:"0.65rem"}}>→</span>
+																<input className={styles.extraSectorInput} style={{width:"3rem"}} placeholder="到達" value={es.arr_airport} onChange={e => upd("arr_airport", e.target.value.toUpperCase())} />
+																<input type="time" className={styles.extraSectorInput} value={es.dep_time} onChange={e => upd("dep_time", e.target.value)} />
+																<span style={{color:"#94a3b8",fontSize:"0.65rem"}}>–</span>
+																<input type="time" className={styles.extraSectorInput} value={es.arr_time} onChange={e => upd("arr_time", e.target.value)} />
+															</div>
+														</div>
+														);
+													})}
+														<button
+															className={styles.extraSectorSaveBtn}
+															onClick={() => {
+																const keptNums = isAll ? allFlights : [...selected];
+																const extras = (extraSectors[dateKey] || []).filter(e => e.flight_number && e.dep_time && e.arr_time);
+																const day = parseInt(dateKey.split("-")[2]);
+																saveExtraSectors(dateKey, day, keptNums, extras);
+															}}
+														>儲存航段</button>
+													</>)}
+												</div>
+											)}
+											{/* Free-text flight number editor — dispatch only, flight duties */}
+											{hasAppAccess(user, "dispatch") && duty.isFlightDuty && !showSectors && (
+												<div className={styles.dutyPopoverSectors}>
+													<div className={styles.dutyPopoverHsrLabel}>飛行航班</div>
+													<div className={styles.flightNumEditor}>
+														<input
+															className={styles.flightNumInput}
+															placeholder="例: 1271,1272,1273"
+															defaultValue={(duty.flightNums || []).join(",")}
+															onBlur={(e) => {
+																const nums = e.target.value.split(",").map(s => s.trim()).filter(Boolean);
+																if (nums.length > 0) applySectors(nums);
+															}}
+															onKeyDown={(e) => {
+																if (e.key === "Enter") {
+																	const nums = e.target.value.split(",").map(s => s.trim()).filter(Boolean);
+																	if (nums.length > 0) applySectors(nums);
+																}
+															}}
+														/>
+														<div className={styles.flightNumHint}>逗號分隔，Enter 或失焦後套用</div>
+													</div>
 												</div>
 											)}
 										</div>
 									);
 								})()}
+									{/* ── 附加任務 section (dispatch only, all duties) ── */}
+									{hasAppAccess(user, "dispatch") && (
+										<div className={styles.additionalTasksSection}>
+											<div className={styles.extraSectorHeader}>
+												<span className={styles.dutyPopoverHsrLabel}>附加任務</span>
+												<button className={styles.extraSectorAddBtn} onClick={() => {
+													const cur = additionalTasks[dateKey] || [];
+													setAdditionalTasks(prev => ({ ...prev, [dateKey]: [...cur, { id: Date.now(), title: "", start_time: "", end_time: "" }] }));
+												}}>＋</button>
+											</div>
+											{(additionalTasks[dateKey] || []).map((task, idx) => {
+												const updTask = (f, v) => setAdditionalTasks(prev => ({ ...prev, [dateKey]: prev[dateKey].map((x,i) => i===idx ? {...x, [f]: v} : x) }));
+												return (
+												<div key={task.id} className={styles.additionalTaskRow}>
+													<div className={styles.additionalTaskRowTop}>
+														<input className={styles.extraSectorInput} style={{flex:1}} placeholder="任務名稱（例：訓練、會議）" value={task.title}
+															onChange={e => updTask("title", e.target.value)} />
+														<button className={styles.extraSectorDelBtn} onClick={() =>
+															setAdditionalTasks(prev => ({ ...prev, [dateKey]: prev[dateKey].filter((_,i) => i !== idx) }))
+														}>✕</button>
+													</div>
+													<div className={styles.additionalTaskRowBottom}>
+														<input type="time" className={styles.extraSectorInput} value={task.start_time}
+															onChange={e => updTask("start_time", e.target.value)} />
+														<span style={{color:"#94a3b8",fontSize:"0.65rem"}}>–</span>
+														<input type="time" className={styles.extraSectorInput} value={task.end_time}
+															onChange={e => updTask("end_time", e.target.value)} />
+													</div>
+												</div>
+												);
+											})}
+											{(additionalTasks[dateKey] || []).length > 0 && (
+												<button className={styles.extraSectorSaveBtn} onClick={() => {
+														// keptNums: for flight duties use kept PDX flights from droppedItems;
+														// for ground duties (no sectors_data) use empty array
+														const keptNums = (duty.isFlightDuty && duty.sectors_data?.length > 0)
+															? (duty.flightNums || duty.sectors_data.map(s => s.flight_number.replace(/^AE-/, "")))
+															: (duty.flightNums || []);
+													const extras = (extraSectors[dateKey] || []).filter(e => e.flight_number && e.dep_time && e.arr_time);
+													const day = parseInt(dateKey.split("-")[2]);
+													saveExtraSectors(dateKey, day, keptNums, extras);
+												}}>儲存附加任務</button>
+											)}
+										</div>
+									)}
 									<button
 										className={styles.dutyPopoverRemove}
 										onClick={(e) => handleRemoveDuty(e, dateKey)}
@@ -1957,6 +2455,73 @@ const MRTChecker = () => {
 							</div>
 						</>
 					);
+				})()}
+
+				{/* ── Add special duty popover (dispatch only) ── */}
+				{addDutyCell && hasAppAccess(user, "dispatch") && (() => {
+					const PAD = 12;
+					const vw = typeof window !== "undefined" ? window.innerWidth : 800;
+					const vh = typeof window !== "undefined" ? window.innerHeight : 600;
+					const W = 280;
+					const left = Math.min(Math.max(addDutyCell.pos.x, PAD), vw - W - PAD);
+					const top  = Math.min(addDutyCell.pos.y, vh - 320 - PAD);
+					return (<>
+						<div style={{ position: "fixed", inset: 0, zIndex: 90 }}
+							onClick={() => setAddDutyCell(null)} />
+						<div className={styles.addDutyPopover} style={{ top, left, width: W }}>
+							<div className={styles.addDutyPopoverTitle}>新增特殊任務</div>
+							<div className={styles.addDutyField}>
+								<label className={styles.addDutyLabel}>任務代號</label>
+								<input
+									className={styles.addDutyInput}
+									placeholder="例: 特勤、加班"
+									value={addDutyForm.code}
+									onChange={e => setAddDutyForm(p => ({ ...p, code: e.target.value }))}
+									autoFocus
+								/>
+							</div>
+							<div className={styles.addDutyRow}>
+								<div className={styles.addDutyField}>
+									<label className={styles.addDutyLabel}>開始時間</label>
+									<input type="time" className={styles.addDutyInput}
+										value={addDutyForm.startTime}
+										onChange={e => setAddDutyForm(p => ({ ...p, startTime: e.target.value }))} />
+								</div>
+								<div className={styles.addDutyField}>
+									<label className={styles.addDutyLabel}>結束時間</label>
+									<input type="time" className={styles.addDutyInput}
+										value={addDutyForm.endTime}
+										onChange={e => setAddDutyForm(p => ({ ...p, endTime: e.target.value }))} />
+								</div>
+							</div>
+							<div className={styles.addDutyField}>
+								<label className={styles.addDutyLabel}>備註（選填）</label>
+								<input
+									className={styles.addDutyInput}
+									placeholder="原因或說明"
+									value={addDutyForm.note}
+									onChange={e => setAddDutyForm(p => ({ ...p, note: e.target.value }))}
+								/>
+							</div>
+							<div className={styles.addDutyCheckRow}>
+								<input type="checkbox" id="isSpecialChk"
+									checked={addDutyForm.isSpecial}
+									onChange={e => setAddDutyForm(p => ({ ...p, isSpecial: e.target.checked }))} />
+								<label htmlFor="isSpecialChk" className={styles.addDutyCheckLabel}>
+									特殊案例（可篩選）
+								</label>
+							</div>
+							<div className={styles.addDutyActions}>
+								<button className={styles.addDutyCancelBtn}
+									onClick={() => setAddDutyCell(null)}>取消</button>
+								<button
+									className={styles.addDutySaveBtn}
+									disabled={!addDutyForm.code || !addDutyForm.startTime || !addDutyForm.endTime}
+									onClick={() => saveOverride(addDutyCell.dateKey, addDutyCell.day, addDutyForm)}
+								>儲存</button>
+							</div>
+						</div>
+					</>);
 				})()}
 
 				{/* ── Custom duty modal ── */}
@@ -2062,6 +2627,11 @@ const MRTChecker = () => {
 					</div>
 				)}
 				</>)}
+
+				{/* ── Swap tab ── */}
+				{activeMainTab === "swap" && (
+					<SwapTab />
+				)}
 			</div>
 		</>
 	);

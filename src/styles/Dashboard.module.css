@@ -616,6 +616,39 @@
 .tooltipRowLabel { font-size: 0.75rem; color: #9ca3af; font-weight: 600; min-width: 2.5rem; flex-shrink: 0; }
 .tooltipRowValue { font-size: 0.875rem; color: #111827; font-weight: 600; font-variant-numeric: tabular-nums; }
 
+/* Additional task rows in dashboard tooltip */
+.tooltipAdditionalTask {
+	display: flex;
+	align-items: center;
+	gap: 0.3rem;
+	padding: 0.2rem 0.25rem;
+	font-size: 0.8rem;
+	border-left: 2px solid #f59e0b;
+	padding-left: 0.4rem;
+	margin: 0.15rem 0;
+	border-radius: 0 0.25rem 0.25rem 0;
+	background: rgba(245,158,11,0.06);
+}
+.tooltipAdditionalTag {
+	flex-shrink: 0;
+	font-size: 0.65rem;
+	font-weight: 700;
+	padding: 0.05rem 0.25rem;
+	border-radius: 0.2rem;
+	background: #f59e0b;
+	color: white;
+}
+.tooltipAdditionalTitle {
+	flex: 1;
+	color: #1e293b;
+	font-weight: 500;
+}
+.tooltipAdditionalTime {
+	flex-shrink: 0;
+	color: #64748b;
+	font-size: 0.72rem;
+}
+
 .tooltipCrewSection {
 	margin-top: 0.25rem;
 	padding-top: 0.5rem;

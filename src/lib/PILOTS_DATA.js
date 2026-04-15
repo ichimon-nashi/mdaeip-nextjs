@@ -10,7 +10,6 @@ export const PILOTS = [
 	{ name: "煩🐢瘤", base: "TSA" }, //劉世凡
 	{ name: "雨🐢味", base: "TSA" }, //魏鎮宇
 	{ name: "江🐢李", base: "TSA" }, //李震疆
-	{ name: "妹", base: "TSA" }, //MAY, CHO WIN
 	{ name: "薄娶", base: "TSA" }, //曲柏
 	{ name: "輪🐢鋁", base: "TSA" }, //呂忠倫
 	{ name: "影🐢呂", base: "TSA" }, //呂欣穎
@@ -49,6 +48,7 @@ export const PILOTS = [
 	{ name: "餘🐢陳", base: "RMQ" }, //陳士瑜
 	{ name: "搖🐢晨", base: "RMQ" }, //陳子堯
 	{ name: "尾沉", base: "RMQ" }, //陳瑋
+	{ name: "妹", base: "RMQ" }, //MAY, CHO WIN
 	{ name: "治🐢假", base: "RMQ" }, //賈雲志
 	{ name: "熊🐢戴", base: "RMQ" }, //戴志雄
 	{ name: "鬆🐢洩", base: "RMQ" }, //謝一菘

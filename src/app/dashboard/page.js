@@ -62,6 +62,7 @@ export default function DashboardPage() {
 	const [scheduleData, setScheduleData] = useState([]);
 	// approved swap overlay: key = "YYYY-MM-DD", value = swapped duty string
 	const [approvedSwapMap, setApprovedSwapMap] = useState({});
+	const [overrideMap, setOverrideMap] = useState({}); // { 'YYYY-MM-DD': override }
 	const [isLoading, setIsLoading] = useState(true);
 	const [currentTime, setCurrentTime] = useState('');
 	const [activeDate, setActiveDate] = useState(null);
@@ -288,6 +289,29 @@ export default function DashboardPage() {
 			
 			const sortedDates = Array.from(allDatesToShow).sort();
 
+			// ── Pre-fetch schedule_day_overrides (must be before dataPromises loop) ─
+			const localOverrideMap = {};
+			try {
+				for (const label of monthsToLoad) {
+					const mMatch2 = label.match(/^(\d{4})年(\d{2})月$/);
+					if (!mMatch2) continue;
+					const { data: mRow2 } = await supabase.from('mdaeip_schedule_months')
+						.select('id').eq('month', label).single();
+					if (!mRow2) continue;
+					const { data: ovs2 } = await supabase.from('schedule_day_overrides')
+						.select('day, duty_code, start_time, end_time, extra_sectors, additional_tasks, is_special')
+						.eq('employee_id', user.id).eq('month_id', mRow2.id);
+					const [yr2, mo2] = [parseInt(mMatch2[1]), parseInt(mMatch2[2])];
+					(ovs2 || []).forEach(ov => {
+						const ds = `${yr2}-${String(mo2).padStart(2,'0')}-${String(ov.day).padStart(2,'0')}`;
+						localOverrideMap[ds] = ov;
+					});
+				}
+				setOverrideMap(localOverrideMap);
+			} catch (ovLoadErr) {
+				console.error('Error pre-fetching overrides:', ovLoadErr);
+			}
+
 			// ── 4. Per-date enrichment ───────────────────────────────────────
 			const dataPromises = sortedDates.map(async (date) => {
 				const duty = allUserSchedules[date];
@@ -364,6 +388,14 @@ export default function DashboardPage() {
 					}
 				}
 
+				// ── Apply schedule_day_overrides if present ─────────────────────
+				let overrideData = null;
+				if (localOverrideMap[date]) {
+					overrideData = localOverrideMap[date];
+					if (overrideData.start_time) reportingTime = overrideData.start_time.slice(0,5);
+					if (overrideData.end_time)   endTime = overrideData.end_time.slice(0,5);
+				}
+
 				// ── Crewmates: roster prefix matching (unchanged) ────────────
 				const monthSchedules = allSchedulesByMonth[dateMonthString] || [];
 				const isEmptyDuty = dutyCode === '空';
@@ -382,8 +414,9 @@ export default function DashboardPage() {
 					date, dutyCode, reportingTime, endTime, dutyType,
 					totalSectors, isDutyOff, isResv, hasData, crewmates,
 					rawDuty: dutyStr,
-					pdxDutyRow,   // null if no PDX match
-					pdxSectors,   // null if no PDX match
+					pdxDutyRow,
+					pdxSectors,
+					override: overrideData,  // schedule_day_overrides row or null
 				};
 			});
 
@@ -424,6 +457,30 @@ export default function DashboardPage() {
 					});
 					setApprovedSwapMap(swapMap);
 				}
+			// ── Fetch schedule_day_overrides for current user ──────────────────────
+			try {
+				const newOverrideMap = {};
+				for (const label of monthsToLoad) {
+					const mMatch = label.match(/^(\d{4})年(\d{2})月$/);
+					if (!mMatch) continue;
+					const { data: mRow } = await supabase
+						.from('mdaeip_schedule_months').select('id').eq('month', label).single();
+					if (!mRow) continue;
+					const { data: ovs } = await supabase
+						.from('schedule_day_overrides')
+						.select('day, duty_code, start_time, end_time, extra_sectors, additional_tasks, is_special')
+						.eq('employee_id', user.id)
+						.eq('month_id', mRow.id);
+					const [yr, mo] = [parseInt(mMatch[1]), parseInt(mMatch[2])];
+					(ovs || []).forEach(ov => {
+						const dateStr = `${yr}-${String(mo).padStart(2,'0')}-${String(ov.day).padStart(2,'0')}`;
+						newOverrideMap[dateStr] = ov;
+					});
+				}
+				setOverrideMap(newOverrideMap);
+			} catch (ovErr) {
+				console.error('Error fetching overrides:', ovErr);
+			}
 			} catch (swapErr) {
 				console.error('Error fetching approved swap overlay:', swapErr);
 				// Non-fatal — dashboard still shows correct data from mdaeip_schedules
@@ -629,7 +686,7 @@ export default function DashboardPage() {
 							onClick={() => setSectorsExpanded(v => !v)}
 						>
 							<span className={styles.tooltipRowIcon} style={{ fontSize: '0.75rem' }}>✈</span>
-							<span>航段明細 ({sectors.length} 段)</span>
+							<span>航段明細 ({sectors.length + (item.override?.extra_sectors?.length || 0)} 段){item.override?.extra_sectors?.length > 0 && ' ✎'}</span>
 							{sectorsExpanded ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
 						</button>
 						{sectorsExpanded && (
@@ -642,9 +699,14 @@ export default function DashboardPage() {
 											<span className={styles.tooltipSectorArrow}>→</span>
 											{s.arr_airport}
 										</span>
-										<span className={styles.tooltipSectorTimes}>
-											{s.dep_time?.substring(0,5)} – {s.arr_time?.substring(0,5)}
-										</span>
+										<span className={styles.tooltipSectorTimes}>{s.dep_time?.substring(0,5)} – {s.arr_time?.substring(0,5)}</span>
+									</div>
+								))}
+								{(item.override?.extra_sectors || []).map((s, i) => (
+									<div key={`ex-${i}`} className={styles.tooltipSectorRow} style={{ borderLeft: '2px solid #7c3aed', paddingLeft: '4px' }}>
+										<span className={styles.tooltipSectorFlight} style={{ color: '#7c3aed' }}>AE-{s.flight_number}</span>
+										<span className={styles.tooltipSectorRoute}>{s.dep_airport}<span className={styles.tooltipSectorArrow}>→</span>{s.arr_airport}</span>
+										<span className={styles.tooltipSectorTimes}>{s.dep_time} – {s.arr_time}</span>
 									</div>
 								))}
 							</div>
@@ -657,6 +719,21 @@ export default function DashboardPage() {
 						<span className={styles.tooltipRowValue}>{item.totalSectors} 段</span>
 					</div>
 				) : null}
+				{/* Additional tasks from schedule_day_overrides */}
+				{(item.override?.additional_tasks || []).filter(t => t.title).map((t, i) => {
+					const isBefore = t.start_time && item.reportingTime && t.start_time < item.reportingTime;
+					const isAfter  = t.end_time && item.endTime && t.end_time > item.endTime;
+					const tag = isBefore ? "前" : isAfter ? "後" : "中";
+					return (
+						<div key={i} className={styles.tooltipAdditionalTask}>
+							<span className={styles.tooltipAdditionalTag}>{tag}</span>
+							<span className={styles.tooltipAdditionalTitle}>{t.title}</span>
+							{t.start_time && t.end_time && (
+								<span className={styles.tooltipAdditionalTime}>{t.start_time}–{t.end_time}</span>
+							)}
+						</div>
+					);
+				})}
 			</>
 		);
 	};
@@ -907,7 +984,7 @@ export default function DashboardPage() {
 									})()}
 								</div>
 								<div className={styles.tooltipDutyCode} style={{ color: tooltipColors?.text }}>
-									{tooltipItem.isResv ? '待命備用 (RESV)' : tooltipItem.dutyCode}
+									{tooltipItem.isResv ? '待命備用 (RESV)' : (tooltipItem.override ? (tooltipItem.dutyCode?.split(/[\\\n]/)[0]?.trim() || tooltipItem.dutyCode) + ' ✎' : (tooltipItem.dutyCode?.split(/[\\\n]/)[0]?.trim() || tooltipItem.dutyCode))}
 								</div>
 							</div>
 						</div>
