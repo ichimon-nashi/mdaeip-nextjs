@@ -90,7 +90,9 @@
 	font-size: 14px;
 	font-family: inherit;
 	box-sizing: border-box;
-	transition: border-color 0.2s, box-shadow 0.2s;
+	transition:
+		border-color 0.2s,
+		box-shadow 0.2s;
 }
 
 .formGroup textarea {
@@ -213,4 +215,18 @@
 	.submitButton {
 		width: 100%;
 	}
+}
+
+/* Parsed bulletin preview */
+.parsedPreview {
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+	margin-top: 8px;
+	padding: 8px 10px;
+	background-color: #f0fdf4;
+	border: 1px solid #bbf7d0;
+	border-radius: 4px;
+	font-size: 13px;
+	color: #166534;
 }

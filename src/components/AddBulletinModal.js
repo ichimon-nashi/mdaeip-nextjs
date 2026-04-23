@@ -12,6 +12,7 @@ const AddBulletinModal = ({ isOpen, onClose, onAdd }) => {
     bulletin_id: '',
     title: ''
   });
+  const [bulletinRaw, setBulletinRaw] = useState('');
   const [isLoading, setIsLoading] = useState(false);
 
   if (!isOpen) return null;
@@ -22,6 +23,25 @@ const AddBulletinModal = ({ isOpen, onClose, onAdd }) => {
       ...prev,
       [name]: value
     }));
+  };
+
+  const handleBulletinInput = (e) => {
+    const value = e.target.value;
+    setBulletinRaw(value);
+    const match = value.match(/([A-Z]\d{4}-\d{3})\s*:\s*(.+)/);
+    if (match) {
+      setFormData(prev => ({
+        ...prev,
+        bulletin_id: match[1].trim(),
+        title: match[2].trim()
+      }));
+    } else {
+      setFormData(prev => ({
+        ...prev,
+        bulletin_id: value,
+        title: ''
+      }));
+    }
   };
 
   const handleSubmit = async (e) => {
@@ -37,13 +57,13 @@ const AddBulletinModal = ({ isOpen, onClose, onAdd }) => {
     try {
       const success = await onAdd(formData);
       if (success) {
-        // Reset form and close modal
         setFormData({
           date: moment().format('YYYY-MM-DD'),
           time: moment().format('HH:mm'),
           bulletin_id: '',
           title: ''
         });
+        setBulletinRaw('');
         onClose();
       }
     } catch (error) {
@@ -60,6 +80,7 @@ const AddBulletinModal = ({ isOpen, onClose, onAdd }) => {
       bulletin_id: '',
       title: ''
     });
+    setBulletinRaw('');
     onClose();
   };
 
@@ -102,31 +123,22 @@ const AddBulletinModal = ({ isOpen, onClose, onAdd }) => {
             </div>
 
             <div className={styles.formGroup}>
-              <label htmlFor="bulletin_id">Bulletin ID:</label>
-              <input
-                type="text"
-                id="bulletin_id"
-                name="bulletin_id"
-                value={formData.bulletin_id}
-                onChange={handleChange}
-                placeholder="e.g., G2509-006"
-                disabled={isLoading}
-                required
-              />
-            </div>
-
-            <div className={styles.formGroup}>
-              <label htmlFor="title">Title:</label>
+              <label htmlFor="bulletinRaw">公告:</label>
               <textarea
-                id="title"
-                name="title"
-                value={formData.title}
-                onChange={handleChange}
-                placeholder="Enter bulletin title..."
+                id="bulletinRaw"
+                value={bulletinRaw}
+                onChange={handleBulletinInput}
+                placeholder="貼上公告，例如：空服公告G2604-007 : 越南胡志明實施「外國人入境卡」網上填報。"
                 rows="3"
                 disabled={isLoading}
                 required
               />
+              {formData.bulletin_id && formData.title && (
+                <div className={styles.parsedPreview}>
+                  <span><strong>ID:</strong> {formData.bulletin_id}</span>
+                  <span><strong>標題:</strong> {formData.title}</span>
+                </div>
+              )}
             </div>
 
             <div className={styles.formActions}>
