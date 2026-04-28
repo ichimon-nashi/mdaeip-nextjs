@@ -449,3 +449,70 @@ export function monthLabel(year, month) {
 export function daysInMonth(year, month) {
 	return new Date(year, month, 0).getDate();
 }
+
+/**
+ * getFlightDutiesForMRTByMonth
+ * Returns Map<duty_code, DutyRow[]> where each DutyRow has:
+ *   { reporting_time, end_time, total_sectors, aircraft_type, base_code,
+ *     date_from, date_to, active_weekdays, specific_dates }
+ * Returns empty Map if no pdx_months entry exists for this year/month.
+ * Used by MRT Checker to source flight duties from PDX tables.
+ */
+export async function getFlightDutiesForMRTByMonth(year, month) {
+	const result = new Map();
+
+	// 1. Find the pdx_months entry
+	const { data: monthRow, error: monthErr } = await supabase
+		.from("pdx_months")
+		.select("id")
+		.eq("year", year)
+		.eq("month", month)
+		.maybeSingle();
+
+	if (monthErr || !monthRow) return result;
+
+	// 2. Fetch all duties with their fields
+	const { data: duties, error: dutiesErr } = await supabase
+		.from("pdx_duties")
+		.select(
+			"id, duty_code, reporting_time, duty_end_time, aircraft_type, base, date_from, date_to, active_weekdays, specific_dates",
+		)
+		.eq("month_id", monthRow.id);
+
+	if (dutiesErr || !duties?.length) return result;
+
+	// 3. Fetch sector counts from pdx_duty_stats view
+	const dutyIds = duties.map((d) => d.id);
+	const { data: stats } = await supabase
+		.from("pdx_duty_stats")
+		.select("duty_id, sector_count")
+		.in("duty_id", dutyIds);
+
+	const statsMap = {};
+	(stats || []).forEach((s) => {
+		statsMap[s.duty_id] = s.sector_count;
+	});
+
+	// 4. Build Map<code, DutyRow[]> — multiple rows per code for special dates
+	duties.forEach((d) => {
+		const row = {
+			reporting_time: d.reporting_time?.slice(0, 5) || "",
+			end_time: d.duty_end_time?.slice(0, 5) || "",
+			total_sectors: statsMap[d.id] ?? 0,
+			sector_count: statsMap[d.id] ?? 0,
+			aircraft_type: d.aircraft_type || "ATR",
+			base_code: d.base || "KHH",
+			date_from: d.date_from || null,
+			date_to: d.date_to || null,
+			active_weekdays: d.active_weekdays || [],
+			specific_dates: d.specific_dates || null,
+		};
+		const code = d.duty_code;
+		if (!result.has(code)) {
+			result.set(code, []);
+		}
+		result.get(code).push(row);
+	});
+
+	return result;
+}
