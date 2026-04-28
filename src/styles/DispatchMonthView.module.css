@@ -302,7 +302,10 @@
 .splitLayout {
 	display: grid;
 	grid-template-columns: 25vw 1fr;
-	min-height: calc(100vh - 114px);
+	height: calc(
+		100vh - 114px
+	); /* fixed height — both panels scroll independently */
+	overflow: hidden;
 }
 
 /* ─── Duty Sidebar ────────────────────────── */
@@ -311,7 +314,8 @@
 	border-right: 1px solid #e8e8e8;
 	display: flex;
 	flex-direction: column;
-	overflow: hidden;
+	overflow: hidden; /* clip — inner sidebarList scrolls */
+	height: 100%;
 }
 
 .sidebarHead {
@@ -427,6 +431,7 @@
 	padding: 20px;
 	overflow-y: auto;
 	background: #f8f7f4;
+	height: 100%;
 }
 
 .emptySelection {
@@ -1223,20 +1228,18 @@
 }
 
 @media (max-width: 768px) {
-	/* Mobile — sidebar takes full width, detail is a fixed bottom sheet */
+	/* Mobile — override fixed height, sidebar scrolls normally, detail is bottom sheet */
 	.splitLayout {
 		grid-template-columns: 1fr;
-		grid-template-rows: 1fr;
-		min-height: unset;
-		position: relative;
+		height: auto;
+		overflow: visible;
 	}
 
-	/* Sidebar: takes full available height, scrollable */
 	.dutySidebar {
+		height: auto;
 		border-right: none;
 		border-bottom: none;
 		max-height: unset;
-		height: 100%;
 		overflow-y: auto;
 	}
 

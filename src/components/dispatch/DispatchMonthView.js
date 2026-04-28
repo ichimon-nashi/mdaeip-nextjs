@@ -1595,6 +1595,24 @@ export default function DispatchMonthView({
 																{s.is_highlight
 																	? " ★"
 																	: ""}
+																{s.aircraft_type ? (
+																	<span
+																		style={{
+																			fontSize: 10,
+																			background:
+																				"#dbeafe",
+																			color: "#1d4ed8",
+																			borderRadius: 4,
+																			padding:
+																				"1px 5px",
+																			marginLeft: 4,
+																		}}
+																	>
+																		{
+																			s.aircraft_type
+																		}
+																	</span>
+																) : null}
 															</span>
 															<span
 																className={

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import { ChevronLeft, Plus, GripVertical, Save } from "lucide-react";
 import toast from "react-hot-toast";
 import {
@@ -184,6 +184,7 @@ const DEFAULT_SECTOR = {
 	arr_airport: "",
 	arr_time: "",
 	is_highlight: false,
+	aircraft_type: null,
 };
 
 export default function DispatchDutyBuilder({ month, duty, onBack, onSaved }) {
@@ -216,6 +217,36 @@ export default function DispatchDutyBuilder({ month, duty, onBack, onSaved }) {
 	);
 	const [notes, setNotes] = useState(duty?.notes || "");
 	const [sortOrder, setSortOrder] = useState(duty?.sort_order ?? 0);
+	// Track if user manually edited the label — if so, don't auto-overwrite
+	const labelManualRef = useRef(!!duty?.label);
+
+	// Auto-generate label from date selection when not manually edited
+	useEffect(() => {
+		if (labelManualRef.current) return;
+		const monthYear = month ? `${month.month}` : "";
+		if (dateMode === "specific" && specificDates.length > 0) {
+			const sorted = [...specificDates].sort();
+			const fmt = (d) =>
+				`${parseInt(d.slice(5, 7))}/${parseInt(d.slice(8, 10))}`;
+			setLabel(sorted.map(fmt).join("、"));
+		} else if (dateMode === "range" && dateFrom && dateTo) {
+			// Only auto-label if it's NOT the full month
+			const monthStart = `${dateFrom.slice(0, 8)}01`;
+			const lastDay = new Date(
+				parseInt(dateFrom.slice(0, 4)),
+				parseInt(dateFrom.slice(5, 7)),
+				0,
+			).getDate();
+			const monthEnd = `${dateFrom.slice(0, 8)}${String(lastDay).padStart(2, "0")}`;
+			if (dateFrom === monthStart && dateTo === monthEnd) {
+				setLabel(""); // full month — no label needed
+			} else {
+				const fmtD = (d) =>
+					`${parseInt(d.slice(5, 7))}/${parseInt(d.slice(8, 10))}`;
+				setLabel(`${fmtD(dateFrom)}-${fmtD(dateTo)}`);
+			}
+		}
+	}, [dateMode, dateFrom, dateTo, specificDates]);
 
 	// Sectors
 	const [sectors, setSectors] = useState([]);
@@ -261,6 +292,7 @@ export default function DispatchDutyBuilder({ month, duty, onBack, onSaved }) {
 							arr_airport: s.arr_airport,
 							arr_time: s.arr_time?.slice(0, 5),
 							is_highlight: s.is_highlight,
+							aircraft_type: s.aircraft_type || null,
 						};
 					}) || [],
 				);
@@ -448,6 +480,7 @@ export default function DispatchDutyBuilder({ month, duty, onBack, onSaved }) {
 		const finalSectors = validSectors.map((s) => ({
 			...s,
 			flight_number: `${s.airline || "AE"}-${s.flight_number}`,
+			aircraft_type: s.aircraft_type || null,
 		}));
 
 		setSaving(true);
@@ -586,7 +619,10 @@ export default function DispatchDutyBuilder({ month, duty, onBack, onSaved }) {
 								<input
 									className={styles.fieldInput}
 									value={label}
-									onChange={(e) => setLabel(e.target.value)}
+									onChange={(e) => {
+										labelManualRef.current = true;
+										setLabel(e.target.value);
+									}}
 									placeholder="3/16起 (選填)"
 								/>
 							</div>
@@ -818,7 +854,7 @@ export default function DispatchDutyBuilder({ month, duty, onBack, onSaved }) {
 									style={{
 										display: "grid",
 										gridTemplateColumns:
-											"18px 24px 90px 108px 56px 64px 90px 108px 32px 28px",
+											"18px 24px 90px 108px 56px 64px 90px 108px 32px 52px 28px",
 										gap: 8,
 										padding: "0 12px",
 										marginBottom: 6,
@@ -834,6 +870,7 @@ export default function DispatchDutyBuilder({ month, duty, onBack, onSaved }) {
 										"降落地",
 										"降落",
 										"★",
+										"機型",
 										"",
 									].map((h, i) => (
 										<div
@@ -856,7 +893,7 @@ export default function DispatchDutyBuilder({ month, duty, onBack, onSaved }) {
 											className={`${styles.sectorItem} ${s.is_highlight ? styles.highlighted : ""} ${sectorDragOverIdx === i ? styles.sectorDragOver : ""}`}
 											style={{
 												gridTemplateColumns:
-													"18px 24px 90px 108px 56px 64px 90px 108px 32px 28px",
+													"18px 24px 90px 108px 56px 64px 90px 108px 32px 52px 28px",
 												opacity:
 													sectorDragIdx === i
 														? 0.4
@@ -1106,6 +1143,40 @@ export default function DispatchDutyBuilder({ month, duty, onBack, onSaved }) {
 											>
 												★
 											</button>
+
+											{/* Per-sector aircraft override (null = inherit from duty) */}
+											<select
+												value={s.aircraft_type || ""}
+												onChange={(e) =>
+													updateSector(
+														i,
+														"aircraft_type",
+														e.target.value || null,
+													)
+												}
+												title="機型（留空則沿用班型機型）"
+												style={{
+													fontSize: 11,
+													padding: "2px 2px",
+													border: "1px solid #e5e7eb",
+													borderRadius: 5,
+													fontFamily: "inherit",
+													background: s.aircraft_type
+														? "#eff6ff"
+														: "#f9fafb",
+													color: s.aircraft_type
+														? "#1d4ed8"
+														: "#9ca3af",
+													width: "100%",
+													cursor: "pointer",
+												}}
+											>
+												<option value="">繼承</option>
+												<option value="ATR">ATR</option>
+												<option value="B738">
+													B738
+												</option>
+											</select>
 
 											{/* Remove */}
 											<button

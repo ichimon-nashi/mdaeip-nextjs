@@ -125,11 +125,30 @@ export const pdxMonthHelpers = {
 			if (!sourceDuties.length) return { data: newMonth, error: null };
 
 			// Helper: remap a YYYY-MM-DD date to the target month, keeping day clamped to last day
-			function remapDate(dateStr) {
+			// If the source date_to is the last day of the SOURCE month, map to last day of TARGET month
+			function remapDate(
+				dateStr,
+				isDateTo = false,
+				sourceDateFrom = null,
+			) {
 				if (!dateStr) return dateStr;
 				const day = parseInt(dateStr.slice(8, 10));
-				const lastDay = new Date(targetYear, targetMonth, 0).getDate();
-				const clampedDay = Math.min(day, lastDay);
+				const targetLastDay = new Date(
+					targetYear,
+					targetMonth,
+					0,
+				).getDate();
+				if (isDateTo && sourceDateFrom) {
+					// Detect if this date_to is the last day of its own month
+					const srcYear = parseInt(sourceDateFrom.slice(0, 4));
+					const srcMonth = parseInt(sourceDateFrom.slice(5, 7));
+					const srcLastDay = new Date(srcYear, srcMonth, 0).getDate();
+					if (day === srcLastDay) {
+						// Full month — map to last day of target month
+						return `${targetYear}-${String(targetMonth).padStart(2, "0")}-${String(targetLastDay).padStart(2, "0")}`;
+					}
+				}
+				const clampedDay = Math.min(day, targetLastDay);
 				return `${targetYear}-${String(targetMonth).padStart(2, "0")}-${String(clampedDay).padStart(2, "0")}`;
 			}
 
@@ -147,9 +166,9 @@ export const pdxMonthHelpers = {
 					...dutyData,
 					month_id: newMonth.id,
 					date_from: remapDate(duty.date_from),
-					date_to: remapDate(duty.date_to),
+					date_to: remapDate(duty.date_to, true, duty.date_from),
 					specific_dates: duty.specific_dates?.length
-						? duty.specific_dates.map(remapDate)
+						? duty.specific_dates.map((d) => remapDate(d))
 						: duty.specific_dates,
 				};
 
@@ -360,128 +379,6 @@ export const pdxStatsHelpers = {
 		}
 	},
 };
-
-// ─── MRT CHECKER DATA ────────────────────────────────────────────────────────
-
-/**
- * Load flight duty data for the MRT Checker from PDX tables.
- *
- * Returns a Map<duty_code, DutyRow[]> where each DutyRow is:
- *   { id, duty_code, reporting_time, end_time, aircraft_type, base_code,
- *     sector_count, date_from, date_to, active_weekdays, specific_dates }
- *
- * Multiple rows per code are preserved so callers can find the date-specific
- * row (same logic as findPdxDuty in the schedule page).
- *
- * Returns null if no month row exists for year/month.
- */
-export async function getFlightDutiesForMRTByMonth(year, month) {
-	try {
-		// 1. Find the month row (published preferred, draft accepted)
-		const { data: monthRow, error: monthError } = await supabase
-			.from("pdx_months")
-			.select("id")
-			.eq("year", year)
-			.eq("month", month)
-			.in("status", ["published", "draft"])
-			.order("status", { ascending: true })
-			.limit(1)
-			.single();
-
-		if (monthError || !monthRow) return null;
-
-		// 2. Fetch ALL duty rows for the month (need date fields for date matching)
-		const { data: duties, error: dutiesError } = await supabase
-			.from("pdx_duties")
-			.select("id, duty_code, reporting_time, duty_end_time, aircraft_type, base, date_from, date_to, active_weekdays, specific_dates")
-			.eq("month_id", monthRow.id);
-
-		if (dutiesError || !duties?.length) return null;
-
-		// 3. Fetch sector counts and FT/FDP minutes from pdx_duty_stats by duty ID
-		const dutyIds = duties.map((d) => d.id);
-		const { data: stats } = await supabase
-			.from("pdx_duty_stats")
-			.select("duty_id, sector_count, ft_minutes, fdp_minutes")
-			.in("duty_id", dutyIds);
-
-		const statsMap = new Map();
-		if (stats?.length) {
-			stats.forEach((s) => statsMap.set(s.duty_id, {
-				sector_count: s.sector_count ?? null,
-				ft_minutes:   s.ft_minutes   ?? null,
-				fdp_minutes:  s.fdp_minutes  ?? null,
-			}));
-		}
-
-		// 4. Fetch individual sector rows for partial-sector FT/FDP computation
-		const { data: sectorRows } = await supabase
-			.from("pdx_sectors")
-			.select("duty_id, seq, flight_number, dep_time, arr_time")
-			.in("duty_id", dutyIds)
-			.order("duty_id")
-			.order("seq", { ascending: true });
-
-		// Group sectors by duty_id
-		const sectorsMap = new Map();
-		if (sectorRows?.length) {
-			sectorRows.forEach((s) => {
-				if (!sectorsMap.has(s.duty_id)) sectorsMap.set(s.duty_id, []);
-				sectorsMap.get(s.duty_id).push({
-					seq:           s.seq,
-					flight_number: s.flight_number,
-					dep_time:      s.dep_time,
-					arr_time:      s.arr_time,
-				});
-			});
-		}
-
-		const result = new Map();
-		duties.forEach((duty) => {
-			const code = duty.duty_code?.trim();
-			if (!code) return;
-
-			const stat = statsMap.get(duty.id) || {};
-			const hasComplete = !!(duty.reporting_time && duty.duty_end_time);
-			const existing = result.get(code);
-
-			const row = {
-				reporting_time: duty.reporting_time || "",
-				end_time:       duty.duty_end_time  || "",
-				aircraft_type:  duty.aircraft_type  || null,
-				base_code:      duty.base           || null,
-				sector_count:   stat.sector_count   ?? null,
-				ft_minutes:     stat.ft_minutes     ?? null,
-				fdp_minutes:    stat.fdp_minutes    ?? null,
-				sectors_data:   sectorsMap.get(duty.id) || [],
-				date_from:      duty.date_from      || null,
-				date_to:        duty.date_to        || null,
-				active_weekdays: duty.active_weekdays || [],
-				specific_dates:  duty.specific_dates  || [],
-				_complete: hasComplete,
-			};
-
-			if (!existing) {
-				result.set(code, [row]);
-			} else {
-				// Upgrade first incomplete entry if this one is complete
-				if (!existing[0]._complete && hasComplete) {
-					existing.unshift(row);
-				} else {
-					existing.push(row);
-				}
-			}
-		});
-
-		// Strip internal _complete flag
-		result.forEach((rows) => rows.forEach(r => delete r._complete));
-
-		return result;
-	} catch (error) {
-		console.error("getFlightDutiesForMRTByMonth:", error);
-		return null;
-	}
-}
 
 // ─── UTILITY FUNCTIONS ───────────────────────────────────────────────────────
 
