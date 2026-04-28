@@ -693,7 +693,7 @@ export default function SchedulePage() {
 	}, [currentMonth]);
 
 	// ── Unified click handler: show tooltip on any device ───────────────────
-	const handleDutyCellClick = useCallback(async (e, employeeId, name, date, duty, sameEmployees, isUserSchedule) => {
+	const handleDutyCellClick = useCallback((e, employeeId, name, date, duty, sameEmployees, isUserSchedule) => {
 		e.stopPropagation();
 
 		// Toggle off if same cell clicked again
@@ -720,20 +720,7 @@ export default function SchedulePage() {
 			}
 		}
 
-		// Fallback to flight_duty_records
-		if (!pdxDutyRow && baseDutyCode && /^[A-Z]\d+$/.test(baseDutyCode)) {
-			try {
-				const flightDetails = await getFlightDutyDetails(baseDutyCode, date);
-				if (flightDetails) {
-					if (flightDetails.reporting_time) reportingTime = flightDetails.reporting_time.substring(0, 5);
-					if (flightDetails.end_time)       endTime = flightDetails.end_time.substring(0, 5);
-				}
-			} catch (err) {
-				console.error('Fallback flight duty fetch failed:', err);
-			}
-		}
-
-		// Q3: Ground duty time fallback (OD, 課, 訓, etc. are not in PDX)
+		// Ground duty time fallback (OD, 課, 訓, etc. are not in PDX)
 		if (!reportingTime && !endTime && GROUND_DUTY_TIMES[baseDutyCode]) {
 			reportingTime = GROUND_DUTY_TIMES[baseDutyCode].start;
 			endTime       = GROUND_DUTY_TIMES[baseDutyCode].end;
@@ -791,7 +778,7 @@ export default function SchedulePage() {
 			override: overrideEntry,
 			x, y, above,
 		});
-	}, [tooltipData.visible, tooltipData.date, tooltipData.employeeId, getFlightDutyDetails, overrideMap]);
+	}, [tooltipData.visible, tooltipData.date, tooltipData.employeeId, overrideMap]);
 
 	const getDayOfWeek = useCallback((dateStr) => {
 		const date = new Date(dateStr);

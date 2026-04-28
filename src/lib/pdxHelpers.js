@@ -490,22 +490,37 @@ export async function getFlightDutiesForMRTByMonth(year, month) {
 
 	const statsMap = {};
 	(stats || []).forEach((s) => {
-		statsMap[s.duty_id] = s.sector_count;
+		statsMap[s.duty_id] = s.sector_count ?? 0;
 	});
 
-	// 4. Build Map<code, DutyRow[]> — multiple rows per code for special dates
+	// 4. Fetch all sectors in one batch — attach as sectors_data per duty
+	const { data: allSectors } = await supabase
+		.from("pdx_sectors")
+		.select("duty_id, seq, flight_number, dep_airport, dep_time, arr_airport, arr_time, is_highlight")
+		.in("duty_id", dutyIds)
+		.order("seq", { ascending: true });
+
+	const sectorsMap = {};
+	(allSectors || []).forEach((s) => {
+		if (!sectorsMap[s.duty_id]) sectorsMap[s.duty_id] = [];
+		sectorsMap[s.duty_id].push(s);
+	});
+
+	// 5. Build Map<code, DutyRow[]> — multiple rows per code for special dates
 	duties.forEach((d) => {
+		const sc = statsMap[d.id] ?? 0;
 		const row = {
-			reporting_time: d.reporting_time?.slice(0, 5) || "",
-			end_time: d.duty_end_time?.slice(0, 5) || "",
-			total_sectors: statsMap[d.id] ?? 0,
-			sector_count: statsMap[d.id] ?? 0,
-			aircraft_type: d.aircraft_type || "ATR",
-			base_code: d.base || "KHH",
-			date_from: d.date_from || null,
-			date_to: d.date_to || null,
+			reporting_time:  d.reporting_time?.slice(0, 5) || "",
+			end_time:        d.duty_end_time?.slice(0, 5)  || "",
+			total_sectors:   sc,
+			sector_count:    sc,
+			aircraft_type:   d.aircraft_type || "ATR",
+			base_code:       d.base          || "KHH",
+			date_from:       d.date_from     || null,
+			date_to:         d.date_to       || null,
 			active_weekdays: d.active_weekdays || [],
-			specific_dates: d.specific_dates || null,
+			specific_dates:  d.specific_dates  || null,
+			sectors_data:    sectorsMap[d.id]  || [],
 		};
 		const code = d.duty_code;
 		if (!result.has(code)) {
