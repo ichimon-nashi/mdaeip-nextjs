@@ -1038,7 +1038,8 @@ function DutyChangeContent() {
 			// ── Get PDF as Blob for Storage upload ────────────────────────
 			const pdfBlob = pdf.output("blob");
 
-			const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+			const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent)
+				|| (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
 
 			// ── Send email ────────────────────────────────────────────────
 			try {
