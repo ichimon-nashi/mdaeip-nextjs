@@ -23,12 +23,14 @@ export const clearScheduleCache = (month) => {
 };
 
 export const employeeList = [
+//------------------------------TSA 台北------------------------------
 	{ id: "21701", name: "陳怡如", rank: "經理", base: "TSA", typeRating: ["ATR", "B738"] },
 	{ id: "20580", name: "陳秀英", rank: "組長", base: "TSA", typeRating: ["ATR", "B738"] },
 	{ id: "21986", name: "羅翔鴻", rank: "組長", base: "TSA", typeRating: ["ATR", "B738"] },
 	{ id: "22018", name: "凌志謙", rank: "FI", base: "TSA", typeRating: ["ATR", "B738"] },
 	{ id: "36639", name: "李盈瑤", rank: "FI", base: "TSA", typeRating: ["ATR", "B738"] },
 	{ id: "39426", name: "柯佳華", rank: "FI", base: "TSA", typeRating: ["ATR", "B738"] },
+	
 	{ id: "12646", name: "徐子惟", rank: "PR", base: "TSA", typeRating: ["ATR", "B738"] },
 	{ id: "21614", name: "鮑家慧", rank: "PR", base: "TSA", typeRating: ["ATR", "B738"] },
 	{ id: "21682", name: "張景晴", rank: "PR", base: "TSA", typeRating: ["ATR", "B738"] },
@@ -37,6 +39,7 @@ export const employeeList = [
 	{ id: "21972", name: "黃佩玄", rank: "PR", base: "TSA", typeRating: ["ATR", "B738"] },
 	{ id: "22055", name: "李懿婷", rank: "PR", base: "TSA", typeRating: ["ATR", "B738"] },
 	{ id: "30444", name: "徐慧真", rank: "PR", base: "TSA", typeRating: ["ATR", "B738"] },
+
 	{ id: "21600", name: "林涵茵", rank: "LF", base: "TSA", typeRating: ["ATR", "B738"] },
 	{ id: "21650", name: "陳嘉珮", rank: "LF", base: "TSA", typeRating: ["ATR"] },
 	{ id: "21802", name: "粘瀞文", rank: "LF", base: "TSA", typeRating: ["ATR", "B738"] },
@@ -58,6 +61,7 @@ export const employeeList = [
 	{ id: "36914", name: "陳怡君", rank: "LF", base: "TSA", typeRating: ["ATR", "B738"] },
 	{ id: "36964", name: "馬維君", rank: "LF", base: "TSA", typeRating: ["ATR", "B738"] },
 	{ id: "38099", name: "朱宜岑", rank: "LF", base: "TSA", typeRating: ["ATR", "B738"] },
+	{ id: "38103", name: "陳暐晨", rank: "LF", base: "TSA", typeRating: ["ATR", "B738"] },
 	{ id: "38135", name: "利怡禎", rank: "LF", base: "TSA", typeRating: ["ATR", "B738"] },
 	{ id: "51704", name: "王婕驊", rank: "LF", base: "TSA", typeRating: ["ATR", "B738"] },
 	{ id: "51718", name: "陳衍蓉", rank: "LF", base: "TSA", typeRating: ["ATR", "B738"] },
@@ -76,12 +80,15 @@ export const employeeList = [
 	{ id: "56342", name: "孫薔", rank: "FS", base: "TSA", typeRating: ["ATR", "B738"] },
 	{ id: "56388", name: "楊媁珺", rank: "FS", base: "TSA", typeRating: ["ATR", "B738"] },
 	{ id: "56406", name: "許景柔", rank: "FS", base: "TSA", typeRating: ["ATR", "B738"] },
+	{ id: "58684", name: "吳秉芳", rank: "FS", base: "TSA", typeRating: ["ATR", "B738"] },
 	{ id: "58698", name: "黃喻萱", rank: "FS", base: "TSA", typeRating: ["ATR", "B738"] },
+	{ id: "58752", name: "吳若寧", rank: "FS", base: "TSA", typeRating: ["ATR", "B738"] },
 	{ id: "58702", name: "鄭佩旻", rank: "FS", base: "TSA", typeRating: ["ATR", "B738"] },
 	{ id: "59139", name: "黃姵華", rank: "FS", base: "TSA", typeRating: ["ATR", "B738"] },
 	{ id: "59143", name: "黃庭薇", rank: "FS", base: "TSA", typeRating: ["ATR", "B738"] },
 	{ id: "59244", name: "陳韋陵", rank: "FS", base: "TSA", typeRating: ["ATR", "B738"] },
 	{ id: "59294", name: "楊富惠", rank: "FS", base: "TSA", typeRating: ["ATR", "B738"] },
+	{ id: "58192", name: "曾聖雯", rank: "FS", base: "TSA", typeRating: ["ATR", "B738"] },
 	{ id: "58427", name: "張育菁", rank: "FS", base: "TSA", typeRating: ["ATR", "B738"] },
 	{ id: "60422", name: "陳心荷", rank: "FS", base: "TSA", typeRating: ["ATR"] },
 	{ id: "60423", name: "林霈芸", rank: "FS", base: "TSA", typeRating: ["ATR"] },
@@ -96,7 +103,9 @@ export const employeeList = [
 	{ id: "60541", name: "萬麗馨", rank: "FS", base: "TSA", typeRating: ["ATR"] },
 	{ id: "60542", name: "高宛柔", rank: "FS", base: "TSA", typeRating: ["ATR"] },
 	{ id: "51061", name: "楊景淳", rank: "LF", base: "TSA", typeRating: ["ATR"] },
+// ------------------------------KHH 高雄------------------------------
 	{ id: "51892", name: "韓建豪", rank: "FI", base: "KHH", typeRating: ["ATR", "B738"] },
+
 	{ id: "22119", name: "徐永成", rank: "PR", base: "KHH", typeRating: ["ATR", "B738"] },
 	{ id: "34011", name: "陳中榆", rank: "LF", base: "KHH", typeRating: ["ATR", "B738"] },
 	{ id: "51043", name: "牛仁鼎", rank: "LF", base: "KHH", typeRating: ["ATR", "B738"] },
@@ -120,6 +129,9 @@ export const employeeList = [
 	{ id: "60546", name: "余宛亭", rank: "FS", base: "KHH", typeRating: ["ATR"] },
 	{ id: "60547", name: "賴勁辰", rank: "FA", base: "KHH", typeRating: ["ATR"] },
 	{ id: "60548", name: "胡顥薰", rank: "FS", base: "KHH", typeRating: ["ATR"] },
+// ------------------------------RMQ 台中------------------------------
+	{ id: "39462", name: "郭曉穎", rank: "FI", base: "RMQ", typeRating: ["ATR", "B738"] },
+
 	{ id: "10781", name: "高佩莉", rank: "PR", base: "RMQ", typeRating: ["ATR", "B738"] },
 	{ id: "21577", name: "陳冠筑", rank: "PR", base: "RMQ", typeRating: ["ATR", "B738"] },
 	{ id: "21628", name: "陳虹蓁", rank: "PR", base: "RMQ", typeRating: ["ATR", "B738"] },
@@ -128,9 +140,8 @@ export const employeeList = [
 	{ id: "22004", name: "鍾秉原", rank: "PR", base: "RMQ", typeRating: ["ATR", "B738"] },
 	{ id: "22036", name: "王慧鈴", rank: "PR", base: "RMQ", typeRating: ["ATR", "B738"] },
 	{ id: "22160", name: "洪旗滿", rank: "PR", base: "RMQ", typeRating: ["ATR", "B738"] },
-	{ id: "30595", name: "黃孟真", rank: "PR", base: "RMQ", typeRating: ["ATR", "B738"] },
 	{ id: "33130", name: "陳蕙珊", rank: "PR", base: "RMQ", typeRating: ["ATR", "B738"] },
-	{ id: "39462", name: "郭曉穎", rank: "PR", base: "RMQ", typeRating: ["ATR", "B738"] },
+
 	{ id: "21595", name: "呂娉萱", rank: "FS", base: "RMQ", typeRating: ["ATR", "B738"] },
 	{ id: "22174", name: "鍾佳臻", rank: "LF", base: "RMQ", typeRating: ["ATR", "B738"] },
 	{ id: "33993", name: "陳宥霖", rank: "LF", base: "RMQ", typeRating: ["ATR", "B738"] },
