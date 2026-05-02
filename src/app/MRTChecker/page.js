@@ -74,7 +74,13 @@ const MRTChecker = () => {
 	const [cameFromFleet, setCameFromFleet] = useState(false);
 	const [adjDroppedItems, setAdjDroppedItems] = useState({ prev: {}, next: {} }); // adjacent month duties for display
 	const [expandedDuties, setExpandedDuties] = useState(new Set());
-	const [activeTab, setActiveTab] = useState("rest");
+	// Accordion open sections — Set of keys (TSA/RMQ/KHH/ground/rest/custom)
+	const [accordionOpen, setAccordionOpen] = useState(new Set()); // all collapsed by default
+	const toggleAccordion = (key) => setAccordionOpen(prev => {
+		const next = new Set(prev);
+		if (next.has(key)) next.delete(key); else next.add(key);
+		return next;
+	});
 	const [bottomSheetExpanded, setBottomSheetExpanded] = useState(false);
 	const [flightDutyData, setFlightDutyData] = useState({});
 	const [hsrItems, setHsrItems] = useState({});   // { [dateKey]: { before: bool, after: bool } }
@@ -85,10 +91,21 @@ const MRTChecker = () => {
 	const [addDutyForm, setAddDutyForm] = useState({ code: "", startTime: "", endTime: "", note: "", isSpecial: true });
 	// Extra custom sectors per dateKey — { [dateKey]: [{ id, flight_number, dep_airport, arr_airport, dep_time, arr_time }] }
 	const [extraSectors, setExtraSectors] = useState({});
+	// HSR train picker
+	const [hsrPicker, setHsrPicker] = useState(null); // { dateKey, direction, duty }
+	const [hsrTrains, setHsrTrains] = useState([]);
+	const [hsrLoading, setHsrLoading] = useState(false);
+	const [hsrLastUpdated, setHsrLastUpdated] = useState(null);
+	// Station selectors inside picker (overrideable by user)
+	const [hsrFromStation, setHsrFromStation] = useState(null); // { id, name }
+	const [hsrToStation, setHsrToStation] = useState(null);
+	// SQL paste modal for new timetables
+	const [hsrSqlModal, setHsrSqlModal] = useState(null); // { newNames: [], sql: "" }
+	const [hsrSqlRunning, setHsrSqlRunning] = useState(false);
 	// Additional tasks after duty (training, meetings) per dateKey
 	const [additionalTasks, setAdditionalTasks] = useState({}); // { [dateKey]: [{ id, title, start_time, end_time }] }
 	const rosterRef = useRef(null);
-	const tabBarRef = useRef(null);
+	// tabBarRef removed — accordion replaces tab bar
 
 	const monthNames = [
 		"1月",
@@ -293,6 +310,17 @@ const MRTChecker = () => {
 	}, [currentYear, currentMonth]);
 
 	const { calendarDays, startDayOfWeek, daysInMonth } = getCalendarData();
+
+	// Check HSR timetable last-updated on mount
+	useEffect(() => {
+		(async () => {
+			try {
+				const res = await fetch("/api/refresh-hsr");
+				const data = await res.json();
+				if (data.lastUpdated) setHsrLastUpdated(data.lastUpdated);
+			} catch {}
+		})();
+	}, []);
 
 	// Load user schedule data
 	useEffect(() => {
@@ -1370,168 +1398,323 @@ const MRTChecker = () => {
 	}, []);
 
 	// ── Shared palette renderer (used by sidebar + bottom sheet) ──────────────
+// ── HSR station mapping ─────────────────────────────────────────────────────
+	const BASE_TO_HSR_STATION = {
+		TSA: { id: "1010", name: "台北" },
+		RMQ: { id: "1043", name: "台中" },
+		KHH: { id: "1070", name: "左營" },
+	};
+
+	// Load trains from Supabase for the HSR picker
+	const openHsrPicker = useCallback(async (dateKey, direction, duty) => {
+		setHsrPicker({ dateKey, direction, duty });
+		setHsrLoading(true);
+		setHsrTrains([]);
+		try {
+			const { supabase } = await import("../../lib/supabase");
+
+			// Derive duty date from dateKey (format: YYYY-M-D)
+			const [dkYear, dkMonth, dkDay] = dateKey.split("-").map(Number);
+			const dutyDateStr = `${dkYear}-${String(dkMonth+1).padStart(2,"0")}-${String(dkDay).padStart(2,"0")}`;
+
+			// Determine which timetable applies for this date:
+			// 1. Check if a special timetable covers this date → use it exclusively
+			// 2. Otherwise use the regular timetable
+			const { data: specials } = await supabase
+				.from("hsr_timetable")
+				.select("timetable_name")
+				.eq("timetable_type", "special")
+				.lte("valid_from", dutyDateStr)
+				.gte("valid_to", dutyDateStr)
+				.limit(1);
+			const activeTimetableName = specials?.[0]?.timetable_name || null;
+			const useSpecial = !!activeTimetableName;
+
+			// Station routing
+			const userEmp     = employeeList?.find(e => e.id === (viewUserId || user?.id));
+			const homeBase    = userEmp?.base || "TSA";
+			const dutyBase    = duty?.base_code || "TSA";
+			const homeStation = BASE_TO_HSR_STATION[homeBase];
+			const dutyStation = BASE_TO_HSR_STATION[dutyBase];
+			if (!homeStation || !dutyStation) { setHsrLoading(false); return; }
+			const fromStation = direction === 'before' ? homeStation : dutyStation;
+			const toStation   = direction === 'before' ? dutyStation : homeStation;
+			// Northbound = 1 (station IDs increase southward, so lower ID = more north)
+			const dirInt = parseInt(fromStation.id) < parseInt(toStation.id) ? 0 : 1;
+
+			// Build query — filter by active timetable
+			const buildQuery = (stationId, timeCol) => {
+				let q = supabase
+					.from("hsr_timetable")
+					.select(`train_no, ${timeCol}, stop_sequence, operation_days, timetable_name`)
+					.eq("direction", dirInt)
+					.eq("station_id", stationId)
+					.not(timeCol, "is", null);
+				if (useSpecial) {
+					q = q.eq("timetable_name", activeTimetableName);
+				} else {
+					q = q.eq("timetable_type", "regular");
+				}
+				if (timeCol === "dep_time") q = q.order("dep_time");
+				return q;
+			};
+
+			const { data: fromStops } = await buildQuery(fromStation.id, "dep_time");
+			const { data: toStops }   = await buildQuery(toStation.id,   "arr_time");
+
+			// Build arrival map keyed by train_no
+			const toMap = {};
+			(toStops || []).forEach(s => {
+				toMap[s.train_no] = { arrTime: s.arr_time?.slice(0,5), seq: s.stop_sequence, opDays: s.operation_days };
+			});
+
+			// Build train list — show ALL trains, mark which ones run on duty date
+			const trains = (fromStops || [])
+				.filter(s => toMap[s.train_no] && s.stop_sequence < toMap[s.train_no].seq)
+				.map(s => {
+					const opDays = toMap[s.train_no].opDays;
+					// runsOnDate: true if no specific days listed (runs all days in range)
+					//             or if dutyDateStr is in the operation_days list
+					const runsOnDate = !opDays || opDays.includes(dutyDateStr);
+					return {
+						trainNo:     s.train_no,
+						depTime:     s.dep_time?.slice(0,5),
+						arrTime:     toMap[s.train_no].arrTime,
+						fromName:    fromStation.name,
+						toName:      toStation.name,
+						runsOnDate,
+						opDays:      opDays,
+					};
+				});
+
+			setHsrTrains(trains);
+			// Store the computed stations so selectors are pre-filled
+			setHsrFromStation(fromStation);
+			setHsrToStation(toStation);
+			const { data: latest } = await supabase
+				.from("hsr_timetable").select("updated_at").order("updated_at", { ascending: false }).limit(1).single();
+			if (latest) setHsrLastUpdated(latest.updated_at);
+		} catch (err) {
+			console.error("openHsrPicker:", err);
+		} finally {
+			setHsrLoading(false);
+		}
+	}, [viewUserId, user]);
+
+	// Select a train from the picker
+	const selectHsrTrain = useCallback((train) => {
+		if (!hsrPicker) return;
+		const { dateKey, direction } = hsrPicker;
+		const field = direction === 'before' ? 'before' : 'after';
+		setHsrItems(prev => ({
+			...prev,
+			[dateKey]: {
+				...(prev[dateKey] || {}),
+				[field]: true,
+				[`${field}TrainNo`]:  train.trainNo,
+				[`${field}DepTime`]:  train.depTime,
+				[`${field}ArrTime`]:  train.arrTime,
+				[`${field}From`]:     train.fromName,
+				[`${field}To`]:       train.toName,
+				// Keep legacy fields for fatigueHelpers compatibility
+				...(direction === 'before'
+					? { beforeFrom: train.fromName }
+					: { afterTo: train.toName }
+				),
+			},
+		}));
+		setHsrPicker(null);
+		snapshotIfNeeded(droppedItems);
+	}, [hsrPicker, droppedItems, snapshotIfNeeded]);
+
+	// Fetch trains for a specific from→to station pair (called when user changes dropdowns)
+	const fetchTrainsForStations = useCallback(async (fromSt, toSt, dateKey, direction) => {
+		if (!fromSt || !toSt || !dateKey) return;
+		setHsrLoading(true);
+		setHsrTrains([]);
+		try {
+			const { supabase } = await import("../../lib/supabase");
+			const [dkYear, dkMonth, dkDay] = dateKey.split("-").map(Number);
+			const dutyDateStr = `${dkYear}-${String(dkMonth+1).padStart(2,"0")}-${String(dkDay).padStart(2,"0")}`;
+			const dirInt = parseInt(fromSt.id) < parseInt(toSt.id) ? 0 : 1;
+			const { data: specials } = await supabase
+				.from("hsr_timetable").select("timetable_name")
+				.eq("timetable_type","special").lte("valid_from",dutyDateStr).gte("valid_to",dutyDateStr).limit(1);
+			const activeName = specials?.[0]?.timetable_name || null;
+			const buildQ = (stId, timeCol) => {
+				let q = supabase.from("hsr_timetable")
+					.select(`train_no, ${timeCol}, stop_sequence, operation_days`)
+					.eq("direction", dirInt).eq("station_id", stId).not(timeCol,"is",null);
+				if (activeName) q = q.eq("timetable_name", activeName);
+				else q = q.eq("timetable_type","regular");
+				if (timeCol === "dep_time") q = q.order("dep_time");
+				return q;
+			};
+			const { data: fromStops } = await buildQ(fromSt.id, "dep_time");
+			const { data: toStops }   = await buildQ(toSt.id,   "arr_time");
+			const toMap = {};
+			(toStops||[]).forEach(s => { toMap[s.train_no] = { arrTime: s.arr_time?.slice(0,5), seq: s.stop_sequence, opDays: s.operation_days }; });
+			const trains = (fromStops||[])
+				.filter(s => toMap[s.train_no] && s.stop_sequence < toMap[s.train_no].seq)
+				.map(s => ({
+					trainNo: s.train_no, depTime: s.dep_time?.slice(0,5),
+					arrTime: toMap[s.train_no].arrTime, fromName: fromSt.name, toName: toSt.name,
+					runsOnDate: !toMap[s.train_no].opDays || toMap[s.train_no].opDays.includes(dutyDateStr),
+				}));
+			setHsrTrains(trains);
+		} catch(e) { console.error("fetchTrainsForStations:", e); }
+		finally { setHsrLoading(false); }
+	}, []);
+
+	// Admin: refresh HSR timetable from TDX
+	const refreshHsrTimetable = useCallback(async () => {
+		try {
+			toast.loading('正在檢查高鐵時刻表...', { id: 'hsr-refresh' });
+			const res = await fetch('/api/refresh-hsr');
+			const data = await res.json();
+			if (data.lastUpdated) setHsrLastUpdated(data.lastUpdated);
+			if (data.hasNew) {
+				toast.dismiss('hsr-refresh');
+				const names = data.newTimetables.map(t => t.name);
+				// Auto-load the seed SQL from public folder so user just clicks 執行
+				let seedSql = "";
+				try {
+					const sqlRes = await fetch("/hsr_timetable_seed.sql");
+					if (sqlRes.ok) seedSql = await sqlRes.text();
+				} catch {}
+				setHsrSqlModal({ newNames: names, sql: seedSql });
+			} else if (data.available?.length) {
+				toast.success(`時刻表已是最新 (${data.available.length} 份)`, { id: 'hsr-refresh' });
+			} else {
+				toast.success('時刻表檢查完成', { id: 'hsr-refresh' });
+			}
+		} catch (err) {
+			toast.error('檢查失敗', { id: 'hsr-refresh' });
+		}
+	}, []);
+
 	const renderPalette = () => {
 		const buckets = organizeByTab();
-		const tabDuties = buckets[activeTab] || [];
+
+		// Accordion section config
+		const sections = [
+			{ key: "TSA",    label: "✈ TSA",    color: "#7c3aed", emoji: "✈" },
+			{ key: "RMQ",    label: "✈ RMQ",    color: "#0284c7", emoji: "✈" },
+			{ key: "KHH",    label: "✈ KHH",    color: "#059669", emoji: "✈" },
+			{ key: "ground", label: "🏢 地面任務", color: "#64748b", emoji: "🏢" },
+			{ key: "rest",   label: "🌿 休假/補休", color: "#10b981", emoji: "🌿" },
+			{ key: "custom", label: "🎨 自訂",   color: "#8b5cf6", emoji: "🎨" },
+		];
 
 		return (
 			<>
-				{/* Tab bar with scroll arrows */}
-				<div className={styles.tabBarWrap}>
-					<button
-						className={styles.tabBarScrollBtn}
-						onClick={() => { if (tabBarRef.current) tabBarRef.current.scrollLeft -= 72; }}
-						aria-label="scroll left"
-					>‹</button>
-					<div
-						ref={tabBarRef}
-						className={styles.tabBar}
-					>
-						{TABS.map((tab) => {
-							const count = buckets[tab.key]?.length || 0;
-							const hasAnyFlight = allDuties.some(d => d.isFlightDuty);
-							// Always show rest/ground/custom; show base tabs if they have duties OR any flight duties exist
-							const flightBaseTab = tab.key === "TSA" || tab.key === "RMQ" || tab.key === "KHH";
-							if (flightBaseTab && count === 0 && !hasAnyFlight) return null;
-							return (
+				<div className={styles.sidebarAccordion}>
+					{sections.map(section => {
+						const duties = buckets[section.key] || [];
+						const hasAnyFlight = allDuties.some(d => d.isFlightDuty);
+						const isFlightBase = section.key === "TSA" || section.key === "RMQ" || section.key === "KHH";
+						// Hide empty flight base sections when no PDX published
+						if (isFlightBase && duties.length === 0 && !hasAnyFlight) return null;
+						const isOpen = accordionOpen.has(section.key);
+						return (
+							<div key={section.key} className={styles.accordionSection}>
+								{/* Section header */}
 								<button
-									key={tab.key}
-									className={`${styles.tab} ${activeTab === tab.key ? styles.active : ""}`}
-									style={activeTab === tab.key ? { borderBottomColor: tab.color, color: tab.color } : {}}
-									onClick={() => setActiveTab(tab.key)}
+									className={styles.accordionHeader}
+									style={{ borderLeftColor: section.color }}
+									onClick={() => toggleAccordion(section.key)}
 								>
-									{tab.label}
-									{count > 0 && <span style={{ marginLeft: "0.25rem", opacity: 0.6, fontSize: "0.65rem" }}>({count})</span>}
+									<span className={styles.accordionLabel}>{section.label}</span>
+									{duties.length > 0 && (
+										<span className={styles.accordionCount}>{duties.length}</span>
+									)}
+									<span className={`${styles.accordionChevron} ${isOpen ? styles.accordionChevronOpen : ""}`}>▾</span>
 								</button>
-							);
-						})}
-					</div>
-					<button
-						className={styles.tabBarScrollBtn}
-						onClick={() => { if (tabBarRef.current) tabBarRef.current.scrollLeft += 72; }}
-						aria-label="scroll right"
-					>›</button>
-				</div>
 
-				{/* Duty list */}
-				<div className={styles.sidebarBody}>
-					{tabDuties.length === 0 ? (
-						<div style={{ padding: "1rem 0.875rem", fontSize: "0.75rem", color: "#9ca3af" }}>
-							{activeTab === "TSA" || activeTab === "RMQ" || activeTab === "KHH"
-								? "此月份尚未發布派遣表"
-								: "無任務"}
-						</div>
-					) : (
-						tabDuties.map((duty) => {
-							const fdpMinutes = calculateFDP(duty);
-							const mrtMinutes = calculateMRT(fdpMinutes);
-							const dotColor = duty.color || BASE_COLORS[duty.base_code] || BASE_COLORS[activeTab] || "#64748b";
-							const isExpanded = expandedDuties.has(duty.code);
-							const variants = duty.pdxRows ? groupPdxVariants(duty.pdxRows) : [];
-							const hasVariants = variants.length > 1;
-
-							return (
-								<div key={duty.id}>
-									{/* Header row — draggable always; click also selects */}
-									<div
-										className={`${styles.dutyRow} ${!hasVariants && selectedDuty?.id === duty.id ? styles.selected : ""} ${hasVariants ? styles.dutyRowMulti : ""}`}
-										data-base={duty.base_code || duty.baseCategory || activeTab}
-										draggable={!hasVariants}
-										onDragStart={!hasVariants ? (e) => handleDragStart(e, duty) : undefined}
-										onClick={() => { if (!hasVariants) handleDutyClick(duty); }}
-									>
-										<span className={styles.dutyRowDot} style={{ backgroundColor: dotColor }} />
-										<span className={styles.dutyRowCode}>{duty.code}</span>
-										<span className={styles.dutyRowMeta}>
-											{duty.startTime && duty.endTime ? (
-												<>
-													<div className={styles.dutyRowTimes}>
-														{formatTime(duty.startTime)} – {formatTime(duty.endTime)}
+								{/* Section body */}
+								{isOpen && (
+									<div className={styles.accordionBody}>
+										{duties.length === 0 ? (
+											<div className={styles.accordionEmpty}>
+												{isFlightBase ? "此月份尚未發布派遣表" : "無任務"}
+											</div>
+										) : duties.map((duty) => {
+											const fdpMinutes = calculateFDP(duty);
+											const mrtMinutes = calculateMRT(fdpMinutes);
+											const dotColor = duty.color || section.color;
+											const isExpanded = expandedDuties.has(duty.code);
+											const variants = duty.pdxRows ? groupPdxVariants(duty.pdxRows) : [];
+											const hasVariants = variants.length > 1;
+											return (
+												<div key={duty.id}>
+													<div
+														className={`${styles.dutyRow} ${!hasVariants && selectedDuty?.id === duty.id ? styles.selected : ""} ${hasVariants ? styles.dutyRowMulti : ""}`}
+														data-base={duty.base_code || duty.baseCategory || section.key}
+														draggable={!hasVariants}
+														onDragStart={!hasVariants ? (e) => handleDragStart(e, duty) : undefined}
+														onClick={() => { if (!hasVariants) handleDutyClick(duty); }}
+													>
+														<span className={styles.dutyRowDot} style={{ backgroundColor: dotColor }} />
+														<span className={styles.dutyRowCode}>{duty.code}</span>
+														<span className={styles.dutyRowMeta}>
+															{duty.startTime && duty.endTime ? (
+																<>
+																	<div className={styles.dutyRowTimes}>{formatTime(duty.startTime)} – {formatTime(duty.endTime)}</div>
+																	{duty.isFlightDuty && (
+																		<div className={styles.dutyRowFdp}>FDP {formatDuration(fdpMinutes)} · MRT {formatDuration(mrtMinutes)}{duty.sectors ? ` · ${duty.sectors}段` : ""}</div>
+																	)}
+																</>
+															) : (
+																<div className={styles.dutyRowName}>{duty.name}</div>
+															)}
+														</span>
+														{duty.isCustom && (
+															<button className={styles.dutyRowDelete} onClick={(e) => { e.stopPropagation(); handleDeleteCustomDuty(duty.id); }} title="刪除"><Trash2 size={12} /></button>
+														)}
+														{hasVariants && (
+															<button className={styles.dutyRowExpand} onClick={(e) => { e.stopPropagation(); toggleDutyExpanded(duty.code); }} title={isExpanded ? "收起" : `${variants.length}種班型`}>{isExpanded ? "▲" : `▼${variants.length}`}</button>
+														)}
 													</div>
-													{duty.isFlightDuty && (
-														<div className={styles.dutyRowFdp}>
-															FDP {formatDuration(fdpMinutes)} · MRT {formatDuration(mrtMinutes)}
-															{duty.sectors ? ` · ${duty.sectors}段` : ""}
+													{isExpanded && hasVariants && (
+														<div className={styles.dutyVariants}>
+															{variants.map((v, i) => {
+																const variantDuty = { ...duty, id: `${duty.id}_v${i}`, startTime: v.reporting_time || duty.startTime, endTime: v.end_time || duty.endTime, sectors: v.sector_count ?? duty.sectors, isPinnedVariant: true };
+																const isVariantSelected = selectedDuty?.id === variantDuty.id;
+																return (
+																	<div key={i} className={`${styles.dutyVariantRow} ${v.isOverride ? styles.dutyVariantOverride : ""} ${isVariantSelected ? styles.dutyVariantSelected : ""}`} draggable onDragStart={(e) => handleDragStart(e, variantDuty)} onClick={() => handleDutyClick(variantDuty)} title="拖到日期安排">
+																		<span className={styles.dutyVariantLabel}>{v.label || "一般"}</span>
+																		<span className={styles.dutyVariantTimes}><span>{v.reporting_time ? `${formatTime(v.reporting_time)}–${formatTime(v.end_time)}` : "—"}{v.sector_count ? ` · ${v.sector_count}段` : ""}</span><span className={styles.dutyVariantDrag}>⠿</span></span>
+																	</div>
+																);
+															})}
 														</div>
 													)}
-												</>
-											) : (
-												<div className={styles.dutyRowName}>{duty.name}</div>
-											)}
-										</span>
-										{duty.isCustom && (
-											<button
-												className={styles.dutyRowDelete}
-												onClick={(e) => { e.stopPropagation(); handleDeleteCustomDuty(duty.id); }}
-												title="刪除"
-											>
-												<Trash2 size={12} />
-											</button>
-										)}
-										{hasVariants && (
-											<button
-												className={styles.dutyRowExpand}
-												onClick={(e) => { e.stopPropagation(); toggleDutyExpanded(duty.code); }}
-												title={isExpanded ? "收起" : `${variants.length}種班型`}
-											>
-												{isExpanded ? "▲" : `▼${variants.length}`}
-											</button>
-										)}
+												</div>
+											);
+										})}
 									</div>
-
-									{/* Variant rows — each draggable with specific times/sectors */}
-									{isExpanded && hasVariants && (
-										<div className={styles.dutyVariants}>
-											{variants.map((v, i) => {
-												// Build a specific duty object for this variant
-												const variantDuty = {
-													...duty,
-													id: `${duty.id}_v${i}`,
-													startTime: v.reporting_time || duty.startTime,
-													endTime: v.end_time || duty.endTime,
-													sectors: v.sector_count ?? duty.sectors,
-													// Mark as pinned so calendar drop won't override with date lookup
-													isPinnedVariant: true,
-												};
-												const isVariantSelected = selectedDuty?.id === variantDuty.id;
-												return (
-													<div
-														key={i}
-														className={`${styles.dutyVariantRow} ${v.isOverride ? styles.dutyVariantOverride : ""} ${isVariantSelected ? styles.dutyVariantSelected : ""}`}
-														draggable
-														onDragStart={(e) => handleDragStart(e, variantDuty)}
-														onClick={() => handleDutyClick(variantDuty)}
-														title="拖到日期安排"
-													>
-														<span className={styles.dutyVariantLabel}>{v.label || "一般"}</span>
-														<span className={styles.dutyVariantTimes}>
-															<span>{v.reporting_time ? `${formatTime(v.reporting_time)}–${formatTime(v.end_time)}` : "—"}
-															{v.sector_count ? ` · ${v.sector_count}段` : ""}</span>
-															<span className={styles.dutyVariantDrag}>⠿</span>
-														</span>
-													</div>
-												);
-											})}
-										</div>
-									)}
-								</div>
-							);
-						})
-					)}
+								)}
+							</div>
+						);
+					})}
 				</div>
 
-				{/* Add custom duty button */}
+				{/* Add custom duty footer */}
 				<div className={styles.sidebarFooter}>
-					<button
-						onClick={() => setShowCustomDutyModal(true)}
-						className={styles.addDutyButton}
-					>
+					<button onClick={() => setShowCustomDutyModal(true)} className={styles.addDutyButton}>
 						<Plus size={14} />
 						增加自訂任務
 					</button>
+					<button
+						className={styles.hsrRefreshBtn}
+						onClick={refreshHsrTimetable}
+						title={hsrLastUpdated ? `高鐵時刻表更新於 ${new Date(hsrLastUpdated).toLocaleDateString("zh-TW")}` : "更新高鐵時刻表"}
+					>
+						🚄
+					</button>
 				</div>
-		</>
-	);
+			</>
+		);
 	};
 
 	if (!user || !hasAppAccess(user, "mrt_checker")) return null;
@@ -2037,64 +2220,41 @@ const MRTChecker = () => {
 							)}
 						</div>
 					</div>
-					<div className={styles.bottomSheetTabBar}>
-						{TABS.map((tab) => {
-							const count = organizeByTab()[tab.key]?.length || 0;
-							const hasAnyFlight = allDuties.some(d => d.isFlightDuty);
-							const flightBaseTab = tab.key === "TSA" || tab.key === "RMQ" || tab.key === "KHH";
-							if (flightBaseTab && count === 0 && !hasAnyFlight) return null;
-							return (
-								<button
-									key={tab.key}
-									className={`${styles.tab} ${activeTab === tab.key ? styles.active : ""}`}
-									style={activeTab === tab.key ? { borderBottomColor: tab.color, color: tab.color } : {}}
-									onClick={() => { setActiveTab(tab.key); setBottomSheetExpanded(true); }}
-								>
-									{tab.label}
-									{count > 0 && <span style={{ marginLeft: "0.2rem", opacity: 0.6, fontSize: "0.6rem" }}>({count})</span>}
-								</button>
-							);
-						})}
-					</div>
 					<div className={styles.bottomSheetBody}>
-						{(organizeByTab()[activeTab] || []).map((duty) => {
-							const fdpMinutes = calculateFDP(duty);
-							const mrtMinutes = calculateMRT(fdpMinutes);
-							const dotColor = duty.color || "#64748b";
+						{/* Accordion in bottom sheet */}
+						{[
+							{ key: "TSA",    label: "✈ TSA",    color: "#7c3aed" },
+							{ key: "RMQ",    label: "✈ RMQ",    color: "#0284c7" },
+							{ key: "KHH",    label: "✈ KHH",    color: "#059669" },
+							{ key: "ground", label: "🏢 地面",   color: "#64748b" },
+							{ key: "rest",   label: "🌿 休假",   color: "#10b981" },
+							{ key: "custom", label: "🎨 自訂",   color: "#8b5cf6" },
+						].map(section => {
+							const duties = organizeByTab()[section.key] || [];
+							const isFlightBase = ["TSA","RMQ","KHH"].includes(section.key);
+							if (isFlightBase && duties.length === 0 && !allDuties.some(d => d.isFlightDuty)) return null;
+							const isOpen = accordionOpen.has(section.key);
 							return (
-								<div
-									key={duty.id}
-									className={`${styles.dutyRow} ${selectedDuty?.id === duty.id ? styles.selected : ""}`}
-									data-base={duty.base_code || duty.baseCategory || activeTab}
-									onClick={() => handleDutyClick(duty)}
-								>
-									<span className={styles.dutyRowDot} style={{ backgroundColor: dotColor }} />
-									<span className={styles.dutyRowCode}>{duty.code}</span>
-									<span className={styles.dutyRowMeta}>
-										{duty.startTime && duty.endTime ? (
-											<>
-												<div className={styles.dutyRowTimes}>
-													{formatTime(duty.startTime)} – {formatTime(duty.endTime)}
-												</div>
-												{duty.isFlightDuty && (
-													<div className={styles.dutyRowFdp}>
-														FDP {formatDuration(fdpMinutes)} · MRT {formatDuration(mrtMinutes)}
-														{duty.sectors ? ` · ${duty.sectors}段` : ""}
-													</div>
-												)}
-											</>
-										) : (
-											<div className={styles.dutyRowName}>{duty.name}</div>
-										)}
-									</span>
-									{duty.isCustom && (
-										<button
-											className={styles.dutyRowDelete}
-											onClick={(e) => { e.stopPropagation(); handleDeleteCustomDuty(duty.id); }}
-										>
-											<Trash2 size={12} />
-										</button>
-									)}
+								<div key={section.key} className={styles.accordionSection}>
+									<button className={styles.accordionHeader} style={{ borderLeftColor: section.color }} onClick={() => { toggleAccordion(section.key); setBottomSheetExpanded(true); }}>
+										<span className={styles.accordionLabel}>{section.label}</span>
+										{duties.length > 0 && <span className={styles.accordionCount}>{duties.length}</span>}
+										<span className={`${styles.accordionChevron} ${isOpen ? styles.accordionChevronOpen : ""}`}>▾</span>
+									</button>
+									{isOpen && duties.map(duty => {
+										const fdpMinutes = calculateFDP(duty);
+										const mrtMinutes = calculateMRT(fdpMinutes);
+										return (
+											<div key={duty.id} className={`${styles.dutyRow} ${selectedDuty?.id === duty.id ? styles.selected : ""}`} data-base={duty.base_code || duty.baseCategory || section.key} onClick={() => handleDutyClick(duty)}>
+												<span className={styles.dutyRowDot} style={{ backgroundColor: duty.color || section.color }} />
+												<span className={styles.dutyRowCode}>{duty.code}</span>
+												<span className={styles.dutyRowMeta}>
+													{duty.startTime && duty.endTime ? (<><div className={styles.dutyRowTimes}>{formatTime(duty.startTime)} – {formatTime(duty.endTime)}</div>{duty.isFlightDuty && <div className={styles.dutyRowFdp}>FDP {formatDuration(fdpMinutes)} · MRT {formatDuration(mrtMinutes)}{duty.sectors ? ` · ${duty.sectors}段` : ""}</div>}</>) : <div className={styles.dutyRowName}>{duty.name}</div>}
+												</span>
+												{duty.isCustom && <button className={styles.dutyRowDelete} onClick={(e) => { e.stopPropagation(); handleDeleteCustomDuty(duty.id); }}><Trash2 size={12} /></button>}
+											</div>
+										);
+									})}
 								</div>
 							);
 						})}
@@ -2103,6 +2263,13 @@ const MRTChecker = () => {
 						<button onClick={() => setShowCustomDutyModal(true)} className={styles.addDutyButton}>
 							<Plus size={14} />
 							增加自訂任務
+						</button>
+						<button
+							className={styles.hsrRefreshBtn}
+							onClick={refreshHsrTimetable}
+							title={hsrLastUpdated ? `高鐵時刻表更新於 ${new Date(hsrLastUpdated).toLocaleDateString("zh-TW")}` : "更新高鐵時刻表"}
+						>
+							🚄
 						</button>
 					</div>
 				</div>
@@ -2277,29 +2444,53 @@ const MRTChecker = () => {
 														</div>
 													</div>
 												)}
-												{/* HSR */}
+												{/* HSR train picker */}
 												{(() => {
 													const hsr = hsrItems[dateKey] || {};
-													const allBases = ["TSA","RMQ","KHH"];
-													const otherBases = duty.base_code ? allBases.filter(b => b !== duty.base_code) : allBases;
-													const setHsr = (field, val) => setHsrItems(prev => ({ ...prev, [dateKey]: { ...prev[dateKey], [field]: val } }));
 													return (
 														<div className={styles.dutyPopoverHsr}>
 															<div className={styles.dutyPopoverHsrLabel}>高鐵通勤</div>
 															<div className={styles.dutyPopoverHsrSameRow}>
-																<button className={`${styles.dutyPopoverHsrToggle} ${hsr.before ? styles.dutyPopoverHsrActive : ""}`} onClick={() => { setHsr("before", !hsr.before); if (!hsr.before && !hsr.beforeFrom) setHsr("beforeFrom", otherBases[0]); }}>T前</button>
-																<button className={`${styles.dutyPopoverHsrToggle} ${hsr.after ? styles.dutyPopoverHsrActive : ""}`} onClick={() => { setHsr("after", !hsr.after); if (!hsr.after && !hsr.afterTo) setHsr("afterTo", otherBases[0]); }}>T後</button>
+																{/* T前 button — opens train picker */}
+																<button
+																	className={`${styles.dutyPopoverHsrToggle} ${hsr.before ? styles.dutyPopoverHsrActive : ""}`}
+																	onClick={() => {
+																		if (hsr.before) {
+																			setHsrItems(prev => ({ ...prev, [dateKey]: { ...prev[dateKey], before: false, beforeTrainNo: null, beforeDepTime: null, beforeArrTime: null } }));
+																		} else {
+																			openHsrPicker(dateKey, "before", duty);
+																		}
+																	}}
+																>T前</button>
+																{/* T後 button */}
+																<button
+																	className={`${styles.dutyPopoverHsrToggle} ${hsr.after ? styles.dutyPopoverHsrActive : ""}`}
+																	onClick={() => {
+																		if (hsr.after) {
+																			setHsrItems(prev => ({ ...prev, [dateKey]: { ...prev[dateKey], after: false, afterTrainNo: null, afterDepTime: null, afterArrTime: null } }));
+																		} else {
+																			openHsrPicker(dateKey, "after", duty);
+																		}
+																	}}
+																>T後</button>
 															</div>
-															{hsr.before && (<div className={styles.dutyPopoverHsrBasePicker}>
-																<span className={styles.dutyPopoverHsrFrom}>T前 from</span>
-																{otherBases.map(b => (<button key={b} className={`${styles.dutyPopoverHsrBase} ${hsr.beforeFrom===b?styles.dutyPopoverHsrBaseActive:""}`} style={hsr.beforeFrom===b?{backgroundColor:BASE_COLORS[b],color:"white"}:{}} onClick={()=>setHsr("beforeFrom",b)}>{b}</button>))}
-																{hsr.beforeFrom && duty.base_code && <span className={styles.dutyPopoverHsrOffset}>+{getHsrOffset(hsr.beforeFrom,duty.base_code)/60}h</span>}
-															</div>)}
-															{hsr.after && (<div className={styles.dutyPopoverHsrBasePicker}>
-																<span className={styles.dutyPopoverHsrFrom}>T後 to</span>
-																{otherBases.map(b => (<button key={b} className={`${styles.dutyPopoverHsrBase} ${hsr.afterTo===b?styles.dutyPopoverHsrBaseActive:""}`} style={hsr.afterTo===b?{backgroundColor:BASE_COLORS[b],color:"white"}:{}} onClick={()=>setHsr("afterTo",b)}>{b}</button>))}
-																{hsr.afterTo && duty.base_code && <span className={styles.dutyPopoverHsrOffset}>+{getHsrOffset(duty.base_code,hsr.afterTo)/60}h</span>}
-															</div>)}
+															{/* Show selected train info */}
+															{hsr.before && hsr.beforeTrainNo && (
+																<div className={styles.hsrTrainInfo}>
+																	<span className={styles.hsrTrainBadge}>T前</span>
+																	<span>#{hsr.beforeTrainNo}</span>
+																	<span className={styles.hsrTrainTimes}>{hsr.beforeDepTime} → {hsr.beforeArrTime}</span>
+																	<span className={styles.hsrTrainRoute}>{hsr.beforeFrom} → {hsr.beforeTo}</span>
+																</div>
+															)}
+															{hsr.after && hsr.afterTrainNo && (
+																<div className={styles.hsrTrainInfo}>
+																	<span className={styles.hsrTrainBadge}>T後</span>
+																	<span>#{hsr.afterTrainNo}</span>
+																	<span className={styles.hsrTrainTimes}>{hsr.afterDepTime} → {hsr.afterArrTime}</span>
+																	<span className={styles.hsrTrainRoute}>{hsr.afterFrom} → {hsr.afterTo}</span>
+																</div>
+															)}
 														</div>
 													);
 												})()}
@@ -2456,6 +2647,156 @@ const MRTChecker = () => {
 						</>
 					);
 				})()}
+
+				{/* ── HSR train picker modal ── */}
+				{hsrPicker && (() => {
+					const PAD = 12;
+					const vw = typeof window !== "undefined" ? window.innerWidth : 800;
+					const vh = typeof window !== "undefined" ? window.innerHeight : 600;
+					const W = Math.min(320, vw - PAD * 2);
+					return (<>
+						<div style={{ position: "fixed", inset: 0, zIndex: 96, background: "rgba(0,0,0,0.2)" }}
+							onClick={() => setHsrPicker(null)} />
+						<div className={styles.hsrPickerModal} style={{ width: W, maxHeight: Math.min(560, vh - PAD * 2) }}>
+							<div className={styles.hsrPickerHeader}>
+								<span>🚄 {hsrPicker.direction === "before" ? "去程班次 (T前)" : "返程班次 (T後)"}</span>
+								<button className={styles.hsrPickerClose} onClick={() => setHsrPicker(null)}>✕</button>
+							</div>
+							{/* Station selectors */}
+							<div className={styles.hsrStationRow}>
+								{(() => {
+									// Sorted: 台北, 桃園, 台中, 左營
+									const STATIONS = [
+										{ id: "1010", name: "台北" },
+										{ id: "1030", name: "桃園" },
+										{ id: "1043", name: "台中" },
+										{ id: "1070", name: "左營" },
+									];
+									return (<>
+										<div className={styles.hsrStationSelect}>
+											<label className={styles.hsrStationLabel}>出發站</label>
+											<select
+												className={styles.hsrStationDropdown}
+												value={hsrFromStation?.id || ""}
+												onChange={e => {
+													const newFrom = STATIONS.find(s => s.id === e.target.value);
+													if (!newFrom) return;
+													// If same as current To, swap: To becomes old From
+													const newTo = newFrom.id === hsrToStation?.id ? hsrFromStation : hsrToStation;
+													setHsrFromStation(newFrom);
+													setHsrToStation(newTo);
+													if (newTo) fetchTrainsForStations(newFrom, newTo, hsrPicker.dateKey, hsrPicker.direction);
+												}}
+											>
+												{STATIONS.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+											</select>
+										</div>
+										<span className={styles.hsrStationArrow}>→</span>
+										<div className={styles.hsrStationSelect}>
+											<label className={styles.hsrStationLabel}>到達站</label>
+											<select
+												className={styles.hsrStationDropdown}
+												value={hsrToStation?.id || ""}
+												onChange={e => {
+													const newTo = STATIONS.find(s => s.id === e.target.value);
+													if (!newTo) return;
+													// If same as current From, swap: From becomes old To
+													const newFrom = newTo.id === hsrFromStation?.id ? hsrToStation : hsrFromStation;
+													setHsrToStation(newTo);
+													setHsrFromStation(newFrom);
+													if (newFrom) fetchTrainsForStations(newFrom, newTo, hsrPicker.dateKey, hsrPicker.direction);
+												}}
+											>
+												{STATIONS.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+											</select>
+										</div>
+									</>);
+								})()}
+							</div>
+							{/* Refresh row */}
+							<div className={styles.hsrPickerRefresh}>
+								{hsrLastUpdated && <span className={styles.hsrPickerUpdated}>更新於 {new Date(hsrLastUpdated).toLocaleDateString("zh-TW")}</span>}
+								<button className={styles.hsrPickerRefreshBtn} onClick={refreshHsrTimetable}>↻ 檢查新時刻表</button>
+							</div>
+							<div className={styles.hsrPickerList}>
+								{hsrLoading ? (
+									<div className={styles.hsrPickerLoading}>載入中...</div>
+								) : hsrTrains.length === 0 ? (
+									<div className={styles.hsrPickerEmpty}>
+										<div>尚無時刻表資料</div>
+										<div style={{ fontSize: "0.75rem", marginTop: "0.25rem", color: "#94a3b8" }}>請請管理員點擊「更新時刻表」從高鐵官方資料庫取得資料</div>
+									</div>
+								) : hsrTrains.map(train => (
+									<button
+										key={train.trainNo}
+										className={`${styles.hsrTrainRow} ${!train.runsOnDate ? styles.hsrTrainRowNoRun : ""}`}
+										onClick={() => selectHsrTrain(train)}
+										title={!train.runsOnDate ? "此班次當日不行駛" : undefined}
+									>
+										<span className={styles.hsrTrainNo}>#{train.trainNo}</span>
+										<span className={styles.hsrTrainRowRoute}>{train.fromName} → {train.toName}</span>
+										<span className={styles.hsrTrainRowTimes}>{train.depTime} → {train.arrTime}</span>
+										{!train.runsOnDate && <span className={styles.hsrTrainNoRunBadge}>當日不行駛</span>}
+									</button>
+								))}
+							</div>
+						</div>
+					</>);
+				})()}
+
+				{/* ── HSR SQL paste modal ── */}
+				{hsrSqlModal && (
+					<>
+						<div style={{ position:"fixed",inset:0,zIndex:98,background:"rgba(0,0,0,0.4)" }}
+							onClick={() => !hsrSqlRunning && setHsrSqlModal(null)} />
+						<div className={styles.hsrSqlModal}>
+							<div className={styles.hsrSqlModalHeader}>
+								<span>🚄 發現新時刻表</span>
+								<button className={styles.hsrPickerClose} onClick={() => setHsrSqlModal(null)} disabled={hsrSqlRunning}>✕</button>
+							</div>
+							<div className={styles.hsrSqlModalBody}>
+								<div className={styles.hsrSqlNewNames}>
+									<strong>新時刻表：</strong>{hsrSqlModal.newNames.join("、")}
+								</div>
+								<p className={styles.hsrSqlInstructions}>
+									{hsrSqlModal.sql ? "時刻表資料已自動載入，確認後點擊「執行 SQL」更新。" : "SQL 載入失敗，請手動貼上 hsr_timetable_seed.sql 內容後點擊「執行 SQL」。"}
+								</p>
+								<textarea
+									className={styles.hsrSqlTextarea}
+									placeholder="貼上 SQL 內容..."
+									value={hsrSqlModal.sql}
+									onChange={e => setHsrSqlModal(prev => ({ ...prev, sql: e.target.value }))}
+									disabled={hsrSqlRunning}
+								/>
+								<div className={styles.hsrSqlModalFooter}>
+									<button className={styles.hsrSqlCancelBtn} onClick={() => setHsrSqlModal(null)} disabled={hsrSqlRunning}>取消</button>
+									<button
+										className={styles.hsrSqlRunBtn}
+										disabled={!hsrSqlModal.sql.trim() || hsrSqlRunning}
+										onClick={async () => {
+											setHsrSqlRunning(true);
+											try {
+												const res = await fetch("/api/refresh-hsr", {
+													method: "POST",
+													headers: { "Content-Type": "application/json" },
+													body: JSON.stringify({ sql: hsrSqlModal.sql.trim() }),
+												});
+												const data = await res.json();
+												if (data.success) {
+													toast.success(`時刻表已更新：${data.rows} 筆資料`);
+													setHsrSqlModal(null);
+												} else {
+													toast.error(data.error || "SQL 執行失敗");
+												}
+											} catch(e) { toast.error("執行失敗"); }
+											finally { setHsrSqlRunning(false); }
+										}}
+									>{hsrSqlRunning ? "執行中..." : "執行 SQL"}</button>
+								</div>
+							</div>
+						</div>
+					</>
+				)}
 
 				{/* ── Add special duty popover (dispatch only) ── */}
 				{addDutyCell && hasAppAccess(user, "dispatch") && (() => {

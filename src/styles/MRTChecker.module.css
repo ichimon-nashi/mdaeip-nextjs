@@ -755,11 +755,359 @@
 .sidebarBody::-webkit-scrollbar       { width: 4px; }
 .sidebarBody::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 2px; }
 
+/* ── Accordion sidebar ──────────────────────────────────────────── */
+.sidebarAccordion {
+	display: flex;
+	flex-direction: column;
+	flex: 1;
+	overflow-y: auto;
+	scrollbar-width: thin;
+	scrollbar-color: #cbd5e1 transparent;
+}
+.sidebarAccordion::-webkit-scrollbar { width: 4px; }
+.sidebarAccordion::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 2px; }
+
+.accordionSection {
+	border-bottom: 1px solid #f1f5f9;
+}
+.accordionHeader {
+	display: flex;
+	align-items: center;
+	gap: 0.5rem;
+	width: 100%;
+	padding: 0.6rem 0.75rem;
+	background: #eef2f7;
+	border: none;
+	border-left: 3px solid #e2e8f0;
+	cursor: pointer;
+	font-family: inherit;
+	font-size: 0.78rem;
+	font-weight: 600;
+	color: #1e293b;
+	text-align: left;
+	transition: background 0.12s;
+	letter-spacing: 0.01em;
+}
+.accordionHeader:hover { background: #e2e8f0; }
+.accordionLabel { flex: 1; }
+.accordionCount {
+	font-size: 0.68rem;
+	color: #6b7280;
+	background: #e2e8f0;
+	border-radius: 0.75rem;
+	padding: 0.05rem 0.4rem;
+	font-weight: 500;
+}
+.accordionChevron {
+	font-size: 0.75rem;
+	color: #9ca3af;
+	transition: transform 0.2s;
+	display: inline-block;
+}
+.accordionChevronOpen { transform: rotate(180deg); }
+.accordionBody { background: white; }
+.accordionEmpty {
+	padding: 0.625rem 0.875rem;
+	font-size: 0.72rem;
+	color: #9ca3af;
+}
+
+/* ── HSR train info in popover ──────────────────────────────────── */
+.hsrTrainInfo {
+	display: flex;
+	align-items: center;
+	gap: 0.35rem;
+	padding: 0.25rem 0.5rem;
+	background: #f0fdf4;
+	border-radius: 0.375rem;
+	border: 1px solid #bbf7d0;
+	font-size: 0.72rem;
+	margin-top: 0.25rem;
+	flex-wrap: wrap;
+}
+.hsrTrainBadge {
+	background: #16a34a;
+	color: white;
+	font-size: 0.6rem;
+	font-weight: 700;
+	padding: 0.05rem 0.3rem;
+	border-radius: 0.2rem;
+}
+.hsrTrainTimes { color: #166534; font-weight: 600; }
+.hsrTrainRoute { color: #6b7280; font-size: 0.65rem; }
+
+/* ── HSR train picker modal ─────────────────────────────────────── */
+/* Station selector row in HSR picker */
+.hsrStationRow {
+	display: flex;
+	align-items: flex-end;
+	gap: 0.5rem;
+	padding: 0.5rem 0.75rem;
+	background: #f8fafc;
+	border-bottom: 1px solid #f1f5f9;
+}
+.hsrStationSelect {
+	display: flex;
+	flex-direction: column;
+	gap: 0.2rem;
+	flex: 1;
+}
+.hsrStationLabel {
+	font-size: 0.62rem;
+	color: #6b7280;
+	font-weight: 600;
+	text-transform: uppercase;
+	letter-spacing: 0.03em;
+}
+.hsrStationDropdown {
+	font-size: 0.82rem;
+	padding: 0.3rem 0.4rem;
+	border: 1px solid #e2e8f0;
+	border-radius: 0.375rem;
+	background: white;
+	color: #1e293b;
+	font-family: inherit;
+	cursor: pointer;
+	width: 100%;
+}
+.hsrStationDropdown:focus { outline: 2px solid #16a34a; border-color: transparent; }
+.hsrStationArrow {
+	font-size: 1rem;
+	color: #9ca3af;
+	padding-bottom: 0.3rem;
+	flex-shrink: 0;
+}
+
+/* SQL paste modal */
+.hsrSqlModal {
+	position: fixed;
+	top: 50%;
+	left: 50%;
+	transform: translate(-50%, -50%);
+	z-index: 99;
+	background: white;
+	border-radius: 0.875rem;
+	box-shadow: 0 20px 60px rgba(0,0,0,0.25);
+	width: min(520px, calc(100vw - 24px));
+	max-height: calc(100vh - 48px);
+	display: flex;
+	flex-direction: column;
+	overflow: hidden;
+}
+.hsrSqlModalHeader {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	padding: 0.875rem 1rem;
+	font-size: 0.9rem;
+	font-weight: 700;
+	color: #1e293b;
+	border-bottom: 1px solid #f1f5f9;
+	background: #f8fafc;
+}
+.hsrSqlModalBody {
+	display: flex;
+	flex-direction: column;
+	gap: 0.75rem;
+	padding: 1rem;
+	flex: 1;
+	overflow-y: auto;
+}
+.hsrSqlNewNames {
+	font-size: 0.82rem;
+	padding: 0.5rem 0.75rem;
+	background: #fef3c7;
+	border: 1px solid #fbbf24;
+	border-radius: 0.375rem;
+	color: #92400e;
+}
+.hsrSqlInstructions {
+	font-size: 0.78rem;
+	color: #6b7280;
+	margin: 0;
+}
+.hsrSqlTextarea {
+	width: 100%;
+	min-height: 200px;
+	flex: 1;
+	font-family: "Courier New", monospace;
+	font-size: 0.72rem;
+	padding: 0.5rem;
+	border: 1px solid #e2e8f0;
+	border-radius: 0.375rem;
+	resize: vertical;
+	color: #1e293b;
+	box-sizing: border-box;
+}
+.hsrSqlTextarea:focus { outline: 2px solid #16a34a; border-color: transparent; }
+.hsrSqlModalFooter {
+	display: flex;
+	justify-content: flex-end;
+	gap: 0.5rem;
+}
+.hsrSqlCancelBtn {
+	padding: 0.4rem 0.875rem;
+	border: 1px solid #e2e8f0;
+	border-radius: 0.375rem;
+	background: white;
+	color: #374151;
+	font-size: 0.82rem;
+	cursor: pointer;
+	font-family: inherit;
+}
+.hsrSqlCancelBtn:hover { background: #f1f5f9; }
+.hsrSqlRunBtn {
+	padding: 0.4rem 1rem;
+	border: none;
+	border-radius: 0.375rem;
+	background: #16a34a;
+	color: white;
+	font-size: 0.82rem;
+	font-weight: 600;
+	cursor: pointer;
+	font-family: inherit;
+	transition: background 0.12s;
+}
+.hsrSqlRunBtn:hover:not(:disabled) { background: #15803d; }
+.hsrSqlRunBtn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.hsrPickerModal {
+	position: fixed;
+	top: 50%;
+	left: 50%;
+	transform: translate(-50%, -50%);
+	z-index: 97;
+	background: white;
+	border-radius: 0.875rem;
+	box-shadow: 0 20px 60px rgba(0,0,0,0.2);
+	display: flex;
+	flex-direction: column;
+	overflow: hidden;
+}
+.hsrPickerHeader {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	padding: 0.875rem 1rem;
+	font-size: 0.875rem;
+	font-weight: 700;
+	color: #1e293b;
+	border-bottom: 1px solid #f1f5f9;
+	background: #f8fafc;
+}
+.hsrPickerClose {
+	background: none;
+	border: none;
+	cursor: pointer;
+	color: #6b7280;
+	font-size: 1rem;
+	padding: 0.2rem;
+	transition: color 0.12s;
+}
+.hsrPickerClose:hover { color: #dc2626; }
+.hsrPickerRefresh {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	padding: 0.375rem 1rem;
+	background: #fffbeb;
+	border-bottom: 1px solid #fef3c7;
+}
+.hsrPickerUpdated { font-size: 0.68rem; color: #92400e; }
+.hsrPickerRefreshBtn {
+	font-size: 0.72rem;
+	color: #92400e;
+	background: none;
+	border: 1px solid #fbbf24;
+	border-radius: 0.25rem;
+	padding: 0.15rem 0.5rem;
+	cursor: pointer;
+	font-family: inherit;
+	transition: background 0.12s;
+}
+.hsrPickerRefreshBtn:hover { background: #fef3c7; }
+.hsrPickerList {
+	overflow-y: auto;
+	flex: 1;
+	scrollbar-width: thin;
+	scrollbar-color: #cbd5e1 transparent;
+}
+.hsrPickerLoading, .hsrPickerEmpty {
+	padding: 2rem 1rem;
+	text-align: center;
+	font-size: 0.82rem;
+	color: #6b7280;
+}
+.hsrTrainRow {
+	display: flex;
+	align-items: center;
+	gap: 0.5rem;
+	width: 100%;
+	padding: 0.6rem 1rem;
+	border: none;
+	border-bottom: 1px solid #f1f5f9;
+	background: white;
+	cursor: pointer;
+	text-align: left;
+	transition: background 0.1s;
+	font-family: inherit;
+}
+.hsrTrainRow:hover { background: #f0fdf4; }
+.hsrTrainRowNoRun { opacity: 0.45; }
+.hsrTrainRowNoRun:hover { background: #fff7ed; opacity: 0.7; }
+.hsrTrainNoRunBadge {
+	margin-left: auto;
+	font-size: 0.6rem;
+	padding: 0.1rem 0.3rem;
+	border-radius: 0.2rem;
+	background: #fed7aa;
+	color: #92400e;
+	white-space: nowrap;
+}
+.hsrTrainNo {
+	min-width: 3rem;
+	font-size: 0.8rem;
+	font-weight: 700;
+	color: #1e293b;
+}
+.hsrTrainRowRoute {
+	flex: 1;
+	font-size: 0.75rem;
+	color: #6b7280;
+}
+.hsrTrainRowTimes {
+	font-size: 0.78rem;
+	font-weight: 600;
+	color: #16a34a;
+	white-space: nowrap;
+}
+
+/* HSR refresh button in sidebar footer */
+.hsrRefreshBtn {
+	flex-shrink: 0;
+	background: none;
+	border: 1px solid #e2e8f0;
+	border-radius: 0.375rem;
+	padding: 0.3rem 0.5rem;
+	font-size: 1rem;
+	cursor: pointer;
+	transition: background 0.12s, border-color 0.12s;
+	line-height: 1;
+}
+.hsrRefreshBtn:hover {
+	background: #f0fdf4;
+	border-color: #16a34a;
+}
+
 .sidebarFooter {
 	padding: 0.625rem 0.875rem;
 	border-top: 1px solid #f1f5f9;
 	flex-shrink: 0;
+	display: flex;
+	align-items: center;
+	gap: 0.5rem;
 }
+.sidebarFooter .addDutyButton { flex: 1; }
 
 .addDutyButton {
 	display: flex;

@@ -21,7 +21,8 @@
     "react-datepicker": "^8.7.0",
     "react-dom": "^19.2.1",
     "react-hot-toast": "^2.6.0",
-    "resend": "^6.5.2"
+    "resend": "^6.5.2",
+    "unpdf": "^1.6.2"
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3",

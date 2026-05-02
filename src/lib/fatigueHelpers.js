@@ -107,13 +107,29 @@ export function calculateMRT(fdpMinutes) {
  * Returns HSR travel time in minutes between two bases.
  * TSA↔RMQ = 120min, RMQ↔KHH = 120min, TSA↔KHH = 180min
  */
-export function getHsrOffset(baseA, baseB) {
+/**
+ * Get HSR commute offset in minutes between two bases.
+ * Uses the larger of the fixed conservative offset and the actual train journey duration.
+ * @param {string} baseA      - e.g. "TSA", "RMQ", "KHH"
+ * @param {string} baseB      - e.g. "TSA", "RMQ", "KHH"
+ * @param {string} [depTime]  - actual train dep time "HH:MM" (optional)
+ * @param {string} [arrTime]  - actual train arr time "HH:MM" (optional)
+ */
+export function getHsrOffset(baseA, baseB, depTime, arrTime) {
 	if (!baseA || !baseB || baseA === baseB) return 0;
 	const pair = [baseA, baseB].sort().join("-");
-	if (pair === "RMQ-TSA") return 120;
-	if (pair === "KHH-RMQ") return 120;
-	if (pair === "KHH-TSA") return 180;
-	return 0;
+	let fixedOffset = 0;
+	if (pair === "RMQ-TSA") fixedOffset = 120;
+	else if (pair === "KHH-RMQ") fixedOffset = 120;
+	else if (pair === "KHH-TSA") fixedOffset = 180;
+	// If actual train times provided, compute real duration and use whichever is larger
+	if (depTime && arrTime) {
+		const dep = timeToMinutes(depTime);
+		const arr = timeToMinutes(arrTime);
+		const actualDuration = arr >= dep ? arr - dep : 1440 - dep + arr; // handle midnight crossover
+		return Math.max(fixedOffset, actualDuration);
+	}
+	return fixedOffset;
 }
 
 // ─── Effective rest period boundaries ────────────────────────────────────────
@@ -143,7 +159,8 @@ export function getEffectiveEndMinutes(duty, dateKey, hsrItems = {}) {
 	const hsr = hsrItems[dateKey];
 	if (hsr?.after && hsr?.afterTo) {
 		const fromBase = duty.base_code || hsr.afterFrom || hsr.afterTo;
-		dp += getHsrOffset(fromBase, hsr.afterTo);
+		// Pass actual train times so max(fixed, actual) is used
+		dp += getHsrOffset(fromBase, hsr.afterTo, hsr.afterDepTime, hsr.afterArrTime);
 	}
 
 	return baseEnd + dp;
@@ -168,7 +185,8 @@ export function getEffectiveStartMinutes(duty, dateKey, hsrItems = {}) {
 	const hsr = hsrItems[dateKey];
 	if (hsr?.before && hsr?.beforeFrom) {
 		const toBase = duty.base_code || hsr.beforeTo || hsr.beforeFrom;
-		const offset = getHsrOffset(hsr.beforeFrom, toBase);
+		// Pass actual train times so max(fixed, actual) is used
+		const offset = getHsrOffset(hsr.beforeFrom, toBase, hsr.beforeDepTime, hsr.beforeArrTime);
 		return baseStart - offset;
 	}
 	return baseStart;
@@ -181,7 +199,20 @@ export function getEffectiveStartMinutes(duty, dateKey, hsrItems = {}) {
  */
 export function getFtMinutes(duty) {
 	if (!duty?.isFlightDuty) return 0;
-	return duty.ft_minutes ?? 0;
+	// Use pre-computed ft_minutes if available
+	if (duty.ft_minutes != null) return duty.ft_minutes;
+	// Fall back: compute FT from sectors_data dep/arr times
+	if (duty.sectors_data?.length) {
+		let ft = 0;
+		for (const s of duty.sectors_data) {
+			if (!s.dep_time || !s.arr_time) continue;
+			const dep = timeToMinutes(s.dep_time);
+			const arr = timeToMinutes(s.arr_time);
+			ft += arr >= dep ? arr - dep : 1440 - dep + arr;
+		}
+		return ft;
+	}
+	return 0;
 }
 
 /**

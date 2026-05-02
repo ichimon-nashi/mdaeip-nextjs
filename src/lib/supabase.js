@@ -40,7 +40,7 @@ export const scheduleHelpers = {
 				.from("mdaeip_schedule_months")
 				.select("id")
 				.eq("month", month)
-				.single();
+				.maybeSingle();
 
 			if (monthError) {
 				console.error("Error fetching month:", monthError);
@@ -171,7 +171,7 @@ export const scheduleHelpers = {
 				.from("mdaeip_schedule_months")
 				.select("id")
 				.eq("month", month)
-				.single();
+				.maybeSingle();
 
 			if (monthError) {
 				console.error("Error fetching month:", monthError);
