@@ -218,7 +218,7 @@
 	text-transform: none;
 	letter-spacing: 0;
 }
-.warnCol  { color: #d97706 !important; }
+.warnCol  { color: #d97706; font-size: 0.65rem !important; }
 .alertCol { color: #dc2626 !important; }
 .warnValue  { color: #d97706; font-weight: 700; }
 .alertValue { color: #dc2626; font-weight: 700; }
@@ -370,9 +370,67 @@
 /* ── Responsive ──────────────────────────────────────────────── */
 @media (max-width: 768px) {
 	.container { padding: 1rem; }
+	/* Controls: date+button on top row, window label below */
+	.controls {
+		gap: 0.625rem;
+		padding: 0.875rem 1rem;
+	}
+	.controlGroup {
+		width: 100%;
+		justify-content: space-between;
+	}
+	.controlInfo {
+		order: 3;
+		width: 100%;
+		padding-top: 0.25rem;
+	}
+	.windowLabel {
+		font-size: 0.7rem;
+		color: #94a3b8;
+	}
+	.runBtn {
+		order: 2;
+		width: 100%;
+	}
 	.summaryCards { grid-template-columns: repeat(2, 1fr); }
 	.metricsTable { font-size: 0.75rem; }
 	.metricsTable th, .metricsTable td { padding: 0.5rem 0.625rem; }
-	.violatorRow { flex-wrap: wrap; gap: 0.5rem; }
-	.violatorStats { flex-direction: row; }
+
+	/* Violation rows: card layout on mobile */
+	.violatorRow {
+		flex-wrap: wrap;
+		gap: 0.375rem;
+		padding: 0.75rem 1rem;
+	}
+	/* Top line: name + view button side by side */
+	.violatorInfo {
+		min-width: 0;
+		flex: 1;
+	}
+	/* Stats go on same line as name row */
+	.violatorStats {
+		flex-direction: row;
+		align-items: center;
+		gap: 0.5rem;
+		width: 100%;
+		order: 3;
+		font-size: 0.72rem;
+	}
+	/* Errors take full width below name */
+	.violatorErrors {
+		width: 100%;
+		order: 2;
+		flex: none;
+	}
+	.violatorError {
+		font-size: 0.72rem;
+		white-space: normal;
+		word-break: keep-all;
+	}
+	/* Button stays top-right */
+	.viewBtn {
+		order: 1;
+		flex-shrink: 0;
+		margin-left: auto;
+	}
 }

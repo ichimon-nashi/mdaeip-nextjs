@@ -52,16 +52,14 @@ const MRTChecker = () => {
 	const [showCustomDutyModal, setShowCustomDutyModal] = useState(false);
 	const [customDuties, setCustomDuties] = useState([]);
 	const [newDuty, setNewDuty] = useState({
-		name: "",
-		startTime: "",
-		endTime: "",
-		code: "",
-		isFlightDuty: false,
-		dutyPeriod: 30,
+		name: "", code: "", startTime: "", endTime: "",
+		isFlightDuty: false, dutyPeriod: 30,
+		baseCode: "TSA", // base for color coding
+		sectors: [], // [{ flight_number, dep_airport, arr_airport, dep_time, arr_time }]
 	});
 	const [validationErrors, setValidationErrors] = useState([]);
 	const [violationDates, setViolationDates] = useState(new Set());
-	const [showValidation, setShowValidation] = useState(false);
+	const [showValidation, setShowValidation] = useState(true); // expanded by default when violations exist
 	const [activeMainTab, setActiveMainTab] = useState("fleet"); // "fleet" | "individual" | "swap"
 	const [originalDroppedItems, setOriginalDroppedItems] = useState(null); // non-null = unsaved changes
 	const [userScheduleLoading, setUserScheduleLoading] = useState(false);
@@ -774,24 +772,21 @@ const MRTChecker = () => {
 			name: newDuty.name,
 			startTime: newDuty.startTime,
 			endTime: newDuty.endTime,
-			color: getBaseColor(null, "custom"),
+			color: getBaseColor(newDuty.baseCode, newDuty.baseCode ? newDuty.baseCode : "custom"),
 			isCustom: true,
-			isDuty: newDuty.startTime && newDuty.endTime ? true : false,
+			isDuty: !!(newDuty.startTime && newDuty.endTime),
 			isFlightDuty: newDuty.isFlightDuty,
 			dutyPeriod: newDuty.isFlightDuty ? newDuty.dutyPeriod : 0,
-			baseCategory: "custom",
+			base_code: newDuty.baseCode || null,
+			baseCategory: newDuty.baseCode || "custom",
+			sectors_data: newDuty.sectors.filter(s => s.dep_airport && s.arr_airport),
+			sectors: newDuty.sectors.filter(s => s.dep_airport && s.arr_airport).length || null,
 		};
 
 		setCustomDuties((prev) => [...prev, customDuty]);
 		setAllDuties((prev) => [...prev, customDuty]);
-		setNewDuty({
-			name: "",
-			startTime: "",
-			endTime: "",
-			code: "",
-			isFlightDuty: false,
-			dutyPeriod: 30,
-		});
+		setNewDuty({ name: "", code: "", startTime: "", endTime: "",
+			isFlightDuty: false, dutyPeriod: 30, baseCode: "TSA", sectors: [] });
 		setShowCustomDutyModal(false);
 	}, [newDuty, getBaseColor]);
 
@@ -1437,8 +1432,18 @@ const MRTChecker = () => {
 			const homeStation = BASE_TO_HSR_STATION[homeBase];
 			const dutyStation = BASE_TO_HSR_STATION[dutyBase];
 			if (!homeStation || !dutyStation) { setHsrLoading(false); return; }
-			const fromStation = direction === 'before' ? homeStation : dutyStation;
-			const toStation   = direction === 'before' ? dutyStation : homeStation;
+			let fromStation = direction === 'before' ? homeStation : dutyStation;
+			let toStation   = direction === 'before' ? dutyStation : homeStation;
+			// If both resolve to the same station (same base crew and duty base),
+			// pick a sensible default for the other side
+			if (fromStation.id === toStation.id) {
+				const ALL_ST = [
+					{ id: "1010", name: "台北" }, { id: "1030", name: "桃園" },
+					{ id: "1043", name: "台中" }, { id: "1070", name: "左營" },
+				];
+				const fallback = ALL_ST.find(s => s.id !== fromStation.id) || ALL_ST[0];
+				toStation = fallback;
+			}
 			// Northbound = 1 (station IDs increase southward, so lower ID = more north)
 			const dirInt = parseInt(fromStation.id) < parseInt(toStation.id) ? 0 : 1;
 
@@ -2279,27 +2284,35 @@ const MRTChecker = () => {
 					const { duty, dateKey } = popoverDuty;
 					const fdpMin = calculateFDP(duty);
 					const mrtMin = calculateMRT(fdpMin);
-					// Position: clamp to viewport
+					// Position: bottom sheet on mobile, floating on desktop
 					const PAD = 12;
-					const W = 420; // max width (two-column when sectors present)
+					const W = 420;
 					const vw = typeof window !== "undefined" ? window.innerWidth : 800;
 					const vh = typeof window !== "undefined" ? window.innerHeight : 600;
-					const left = Math.min(Math.max(popoverPos.x, PAD), vw - W - PAD);
-					// Estimate popover height — clamp so it doesn't go below viewport
-					// Dynamic height: fit in viewport, flip above if needed
-					const estH = Math.min(640, vh - PAD * 2);
-					const fitsBelow = (popoverPos.y + estH + PAD) <= vh;
-					const top = fitsBelow ? popoverPos.y : Math.max(PAD, vh - estH - PAD);
+					const isMobile = vw < 500;
+					const popoverStyle = isMobile
+						? { bottom: 0, left: 0, right: 0, width: "100%", maxWidth: "100%",
+							  maxHeight: "82vh", overflowY: "auto",
+							  borderRadius: "1rem 1rem 0 0",
+							  boxShadow: "0 -4px 32px rgba(0,0,0,0.18)" }
+						: { top: (() => {
+								const estH = Math.min(640, vh - PAD * 2);
+								const fitsBelow = (popoverPos.y + estH + PAD) <= vh;
+								return fitsBelow ? popoverPos.y : Math.max(PAD, vh - estH - PAD);
+							})(),
+							left: Math.min(Math.max(popoverPos.x, PAD), vw - W - PAD),
+							maxHeight: `calc(100vh - ${PAD * 2}px)`, overflowY: "auto" };
 					return (
 						<>
-							{/* backdrop — click outside closes */}
+							{/* backdrop */}
 							<div
-								style={{ position: "fixed", inset: 0, zIndex: 90 }}
+								style={{ position: "fixed", inset: 0, zIndex: 90,
+									background: isMobile ? "rgba(0,0,0,0.3)" : "transparent" }}
 								onClick={() => setPopoverDuty(null)}
 							/>
 							<div
 								className={styles.dutyPopover}
-								style={{ top, left, maxHeight: `calc(100vh - ${PAD * 2}px)`, overflowY: "auto" }}
+								style={popoverStyle}
 							>
 								{/* colour strip */}
 								<div className={styles.dutyPopoverStrip} style={{ backgroundColor: duty.color }} />
@@ -2506,19 +2519,20 @@ const MRTChecker = () => {
 														const fn = s.flight_number.replace(/^AE-/, "");
 														const checked = isAll || selected.has(fn);
 														return (
-															<div key={s.seq} className={styles.sectorRow}>
-																<input type="checkbox" checked={checked} onChange={(e) => {
+															<button
+																key={s.seq}
+																className={`${styles.sectorChip} ${checked ? styles.sectorChipActive : styles.sectorChipInactive}`}
+																onClick={() => {
 																	const current = isAll ? new Set(allFlights) : new Set(duty.flightNums);
-																	if (e.target.checked) current.add(fn); else current.delete(fn);
+																	if (checked) current.delete(fn); else current.add(fn);
 																	if (current.size === 0) return;
 																	applySectors(allFlights.filter(f => current.has(f)));
-																}} />
-																<span className={styles.sectorInfo}>
-																	<span className={styles.sectorFlight}>AE-{fn}</span>
-																	<span className={styles.sectorRoute}>{s.dep_airport}→{s.arr_airport}</span>
-																	<span className={styles.sectorTime}>{s.dep_time?.slice(0,5)}–{s.arr_time?.slice(0,5)}</span>
-																</span>
-															</div>
+																}}
+															>
+																<span className={styles.sectorChipFlight}>AE-{fn}</span>
+																<span className={styles.sectorChipRoute}>{s.dep_airport}→{s.arr_airport}</span>
+																<span className={styles.sectorChipTime}>{s.dep_time?.slice(0,5)}–{s.arr_time?.slice(0,5)}</span>
+															</button>
 														);
 													})}
 													{/* Extra custom sectors */}
@@ -2868,101 +2882,84 @@ const MRTChecker = () => {
 				{/* ── Custom duty modal ── */}
 				{showCustomDutyModal && (
 					<div className={styles.modalOverlay}>
-						<div className={styles.modalContent}>
+						<div className={styles.modalContent} style={{ maxWidth: "480px" }}>
 							<div className={styles.modalHeader}>
 								<h3 className={styles.modalTitle}>新增自訂任務</h3>
-								<button onClick={() => setShowCustomDutyModal(false)} className={styles.modalClose}>
-									<X size={20} />
-								</button>
+								<button onClick={() => setShowCustomDutyModal(false)} className={styles.modalClose}><X size={20} /></button>
 							</div>
-
 							<div className={styles.modalForm}>
-								<div className={styles.formGroup}>
-									<label className={styles.formLabel}>任務名稱 *</label>
-									<input
-										type="text"
-										value={newDuty.code}
-										onChange={(e) => setNewDuty((prev) => ({ ...prev, code: e.target.value }))}
-										className={styles.formInput}
-										placeholder="例: T1, R2, etc."
-									/>
-								</div>
-								<div className={styles.formGroup}>
-									<label className={styles.formLabel}>任務說明 *</label>
-									<input
-										type="text"
-										value={newDuty.name}
-										onChange={(e) => setNewDuty((prev) => ({ ...prev, name: e.target.value }))}
-										className={styles.formInput}
-										placeholder="例: 訓練"
-									/>
-								</div>
+								<p className={styles.customDutyNote}>自訂任務為本次工作階段的調色盤預設，不會儲存至資料庫。</p>
+								{/* Row 1: Code + Base */}
 								<div className={styles.formRow}>
 									<div className={styles.formGroup}>
-										<label className={styles.formLabel}>開始時間</label>
-										<input
-											type="time"
-											value={newDuty.startTime}
-											onChange={(e) => setNewDuty((prev) => ({ ...prev, startTime: e.target.value }))}
-											className={styles.formInput}
-											step="60"
-										/>
+										<label className={styles.formLabel}>任務代號 *</label>
+										<input type="text" value={newDuty.code} onChange={e => setNewDuty(p => ({ ...p, code: e.target.value }))} className={styles.formInput} placeholder="例: T1, R2" />
+									</div>
+									<div className={styles.formGroup}>
+										<label className={styles.formLabel}>基地</label>
+										<select value={newDuty.baseCode} onChange={e => setNewDuty(p => ({ ...p, baseCode: e.target.value }))} className={styles.formInput}>
+											<option value="TSA">TSA</option>
+											<option value="RMQ">RMQ</option>
+											<option value="KHH">KHH</option>
+										</select>
+									</div>
+								</div>
+								{/* Row 2: Description */}
+								<div className={styles.formGroup}>
+									<label className={styles.formLabel}>任務說明 *</label>
+									<input type="text" value={newDuty.name} onChange={e => setNewDuty(p => ({ ...p, name: e.target.value }))} className={styles.formInput} placeholder="例: 訓練、備降" />
+								</div>
+								{/* Row 3: Times */}
+								<div className={styles.formRow}>
+									<div className={styles.formGroup}>
+										<label className={styles.formLabel}>報到時間</label>
+										<input type="time" value={newDuty.startTime} onChange={e => setNewDuty(p => ({ ...p, startTime: e.target.value }))} className={styles.formInput} step="60" />
 									</div>
 									<div className={styles.formGroup}>
 										<label className={styles.formLabel}>結束時間</label>
-										<input
-											type="time"
-											value={newDuty.endTime}
-											onChange={(e) => setNewDuty((prev) => ({ ...prev, endTime: e.target.value }))}
-											className={styles.formInput}
-											step="60"
-										/>
+										<input type="time" value={newDuty.endTime} onChange={e => setNewDuty(p => ({ ...p, endTime: e.target.value }))} className={styles.formInput} step="60" />
 									</div>
 								</div>
+								{/* Row 4: Flight duty toggle */}
 								<div className={styles.formGroup}>
 									<label className={styles.formCheckboxLabel}>
-										<input
-											type="checkbox"
-											checked={newDuty.isFlightDuty}
-											onChange={(e) => setNewDuty((prev) => ({
-												...prev,
-												isFlightDuty: e.target.checked,
-												dutyPeriod: e.target.checked ? 30 : 0,
-											}))}
-											className={styles.formCheckbox}
-										/>
-										<span className={styles.formCheckboxText}>飛班</span>
+										<input type="checkbox" checked={newDuty.isFlightDuty} onChange={e => setNewDuty(p => ({ ...p, isFlightDuty: e.target.checked, dutyPeriod: e.target.checked ? 30 : 0 }))} className={styles.formCheckbox} />
+										<span className={styles.formCheckboxText}>飛班 (計算FDP/MRT)</span>
 										{newDuty.isFlightDuty && (
-											<div className={styles.customDutyCheckboxContainer}>
-												<span className={styles.customDutyInputLabel}>DP</span>
-												<input
-													type="number"
-													value={newDuty.dutyPeriod}
-													onChange={(e) => setNewDuty((prev) => ({ ...prev, dutyPeriod: parseInt(e.target.value) || 30 }))}
-													className={`${styles.formInput} ${styles.customDutyTimeInput}`}
-													placeholder="30"
-													min="0"
-												/>
-												<span className={styles.customDutyInputHint}>分鐘 (預設30)</span>
-											</div>
+											<span style={{ display: "flex", alignItems: "center", gap: "0.3rem", marginLeft: "0.5rem" }}>
+												<span className={styles.customDutyInputLabel}>DP後</span>
+												<input type="number" value={newDuty.dutyPeriod} min="0" onChange={e => setNewDuty(p => ({ ...p, dutyPeriod: parseInt(e.target.value)||30 }))} className={`${styles.formInput} ${styles.customDutyTimeInput}`} />
+												<span className={styles.customDutyInputHint}>分</span>
+											</span>
 										)}
 									</label>
 								</div>
+								{/* Sector rows */}
+								<div className={styles.formGroup}>
+									<div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:"0.4rem" }}>
+										<label className={styles.formLabel}>航段</label>
+										<button type="button" className={styles.extraSectorAddBtn} onClick={() => setNewDuty(p => ({ ...p, sectors: [...p.sectors, { flight_number:"", dep_airport:"", arr_airport:"", dep_time:"", arr_time:"" }] }))}>＋ 新增</button>
+									</div>
+									{newDuty.sectors.map((s, idx) => {
+										const upd = (f,v) => setNewDuty(p => ({ ...p, sectors: p.sectors.map((x,i) => i===idx ? {...x,[f]:v} : x) }));
+										return (
+											<div key={idx} className={styles.customSectorRow}>
+												<input className={styles.formInput} style={{width:"3.5rem",flexShrink:0}} placeholder="班號" value={s.flight_number} onChange={e => upd("flight_number", e.target.value)} />
+												<input className={styles.formInput} style={{width:"2.8rem",flexShrink:0}} placeholder="出發" value={s.dep_airport} onChange={e => upd("dep_airport", e.target.value.toUpperCase())} />
+												<span style={{color:"#94a3b8",fontSize:"0.65rem"}}>→</span>
+												<input className={styles.formInput} style={{width:"2.8rem",flexShrink:0}} placeholder="到達" value={s.arr_airport} onChange={e => upd("arr_airport", e.target.value.toUpperCase())} />
+												<input type="time" className={styles.formInput} style={{flexShrink:0}} value={s.dep_time} onChange={e => upd("dep_time", e.target.value)} />
+												<span style={{color:"#94a3b8",fontSize:"0.65rem"}}>–</span>
+												<input type="time" className={styles.formInput} style={{flexShrink:0}} value={s.arr_time} onChange={e => upd("arr_time", e.target.value)} />
+												<button type="button" className={styles.extraSectorDelBtn} onClick={() => setNewDuty(p => ({ ...p, sectors: p.sectors.filter((_,i) => i!==idx) }))}>✕</button>
+											</div>
+										);
+									})}
+								</div>
 							</div>
-
 							<div className={styles.modalActions}>
-								<button
-									onClick={() => setShowCustomDutyModal(false)}
-									className={`${styles.modalButton} ${styles.cancel}`}
-								>
-									取消
-								</button>
-								<button
-									onClick={handleAddCustomDuty}
-									className={`${styles.modalButton} ${styles.confirm}`}
-								>
-									新增任務
-								</button>
+								<button onClick={() => setShowCustomDutyModal(false)} className={`${styles.modalButton} ${styles.cancel}`}>取消</button>
+								<button onClick={handleAddCustomDuty} className={`${styles.modalButton} ${styles.confirm}`}>新增任務</button>
 							</div>
 						</div>
 					</div>

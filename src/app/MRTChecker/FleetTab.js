@@ -279,57 +279,78 @@ export default function FleetTab({ onViewCrew, onBack }) {
 					</div>
 
 					{/* Metrics table */}
-					<div className={styles.section}>
-						<div className={styles.sectionTitle}>
-							本月數據統計
-							<span className={styles.sectionSub}> · 當日: {results.checkDate}</span>
-						</div>
-						<div className={styles.tableScroll}>
-							<table className={styles.metricsTable}>
-								<thead>
-									<tr>
-										<th rowSpan={2}>基地</th>
-										<th rowSpan={2}>人數</th>
-										<th colSpan={3} className={styles.thGroup}>本月平均</th>
-										<th colSpan={3} className={styles.thGroup}>當日平均</th>
-										<th colSpan={2} className={styles.thGroupWarn}>接近上限</th>
-									</tr>
-									<tr>
-										<th>FT</th>
-										<th>FDP</th>
-										<th>DP</th>
-										<th>FT</th>
-										<th>FDP</th>
-										<th>DP</th>
-										<th className={styles.warnCol}>FT 80h+</th>
-										<th className={styles.warnCol}>DP 200h+</th>
-									</tr>
-								</thead>
-								<tbody>
-									{["TSA", "RMQ", "KHH"].map(base => {
-										const m = results.metrics[base];
-										return (
-											<tr key={base}>
-												<td>
-													<span className={styles.baseDot} style={{ backgroundColor: BASE_COLORS[base] }} />
-													{base}
-												</td>
-												<td>{m.count}</td>
-												<td>{m.avgFt.toFixed(1)}h</td>
-												<td>{m.avgFdp.toFixed(1)}h</td>
-												<td>{m.avgDp.toFixed(1)}h</td>
-												<td>{m.dailyAvgFt.toFixed(1)}h</td>
-												<td>{m.dailyAvgFdp.toFixed(1)}h</td>
-												<td>{m.dailyAvgDp.toFixed(1)}h</td>
-												<td className={m.nearFt  > 0 ? styles.warnValue : ""}>{m.nearFt}</td>
-												<td className={m.nearDp > 0 ? styles.warnValue : ""}>{m.nearDp}</td>
-											</tr>
-										);
-									})}
-								</tbody>
-							</table>
-						</div>
+				<div className={styles.section}>
+					<div className={styles.sectionTitle}>
+						本月數據統計
+						<span className={styles.sectionSub}> · 當日: {results.checkDate}</span>
 					</div>
+					{/* Two stacked tables on mobile — one for monthly avg, one for daily avg */}
+					<div className={styles.tableScroll}>
+						<table className={styles.metricsTable}>
+							<thead>
+								<tr>
+									<th>基地</th><th>人數</th>
+									<th colSpan={3} className={styles.thGroup}>本月平均</th>
+									<th className={styles.thGroupWarn}>接近上限</th>
+								</tr>
+								<tr>
+									<th colSpan={2}></th>
+									<th>FT</th><th>FDP</th><th>DP</th>
+									<th className={styles.warnCol} title="FT 接近80小時 / DP 接近200小時">FT≥80h / DP≥200h</th>
+								</tr>
+							</thead>
+							<tbody>
+								{["TSA","RMQ","KHH"].map(base => {
+									const m = results.metrics[base];
+									const hasWarn = m.nearFt > 0 || m.nearDp > 0;
+									return (
+										<tr key={base}>
+											<td><span className={styles.baseDot} style={{ backgroundColor: BASE_COLORS[base] }} />{base}</td>
+											<td>{m.count}</td>
+											<td>{m.avgFt.toFixed(1)}h</td>
+											<td>{m.avgFdp.toFixed(1)}h</td>
+											<td>{m.avgDp.toFixed(1)}h</td>
+											<td className={hasWarn ? styles.warnValue : ""} style={{ fontSize: "0.7rem", lineHeight: 1.4 }}>
+												{m.nearFt > 0 ? <span>FT: {m.nearFt}人</span> : null}
+												{m.nearFt > 0 && m.nearDp > 0 ? <br /> : null}
+												{m.nearDp > 0 ? <span>DP: {m.nearDp}人</span> : null}
+												{!hasWarn ? "—" : null}
+											</td>
+										</tr>
+									);
+								})}
+							</tbody>
+						</table>
+					</div>
+					{/* Daily averages — separate table */}
+					<div className={styles.tableScroll} style={{ borderTop: "1px solid #f1f5f9" }}>
+						<table className={styles.metricsTable}>
+							<thead>
+								<tr>
+									<th>基地</th>
+									<th colSpan={3} className={styles.thGroup}>當日平均</th>
+								</tr>
+								<tr>
+									<th></th>
+									<th>FT</th><th>FDP</th><th>DP</th>
+								</tr>
+							</thead>
+							<tbody>
+								{["TSA","RMQ","KHH"].map(base => {
+									const m = results.metrics[base];
+									return (
+										<tr key={base}>
+											<td><span className={styles.baseDot} style={{ backgroundColor: BASE_COLORS[base] }} />{base}</td>
+											<td>{m.dailyAvgFt.toFixed(1)}h</td>
+											<td>{m.dailyAvgFdp.toFixed(1)}h</td>
+											<td>{m.dailyAvgDp.toFixed(1)}h</td>
+										</tr>
+									);
+								})}
+							</tbody>
+						</table>
+					</div>
+				</div>
 
 					{/* Violation list by base */}
 					<div className={styles.section}>

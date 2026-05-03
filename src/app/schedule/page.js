@@ -1329,7 +1329,7 @@ export default function SchedulePage() {
 								<div className={styles.schedTooltipCrewLabel}>同勤組員</div>
 								{td.sameEmployees?.length > 0 ? (
 									<div className={styles.schedTooltipCrewList}>
-										{td.sameEmployees.slice(0, 8).map((emp, i) => {
+										{td.sameEmployees.map((emp, i) => {
 											const baseColors = {
 												TSA: { bg: '#fee2e2', text: '#991b1b' },
 												RMQ: { bg: '#d1fae5', text: '#065f46' },
@@ -1343,9 +1343,6 @@ export default function SchedulePage() {
 												</span>
 											);
 										})}
-										{td.sameEmployees.length > 8 && (
-											<span className={styles.schedTooltipCrewMore}>+{td.sameEmployees.length - 8}</span>
-										)}
 									</div>
 								) : (
 									<span className={styles.schedTooltipNoCrewText}>無同勤組員</span>

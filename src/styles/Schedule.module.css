@@ -183,11 +183,12 @@
 
 .tableContainer {
 	overflow-x: auto;
+	overflow-y: auto;
+	max-height: calc(100vh - 12rem);
 	background: white;
 	border: 1px solid #e5e7eb;
 	box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
 	border-radius: 0.5rem;
-	overflow-y: hidden;
 	-webkit-overflow-scrolling: touch;
 }
 
@@ -613,6 +614,10 @@
 @media (max-width: 768px) {
 	.scheduleHeading {
 		font-size: 2rem;
+	}
+
+	.tableContainer {
+		max-height: calc(100vh - 16rem);
 	}
 
 	/* Hide employee ID column on mobile */
@@ -1091,11 +1096,12 @@
 
 .tableContainer {
 	overflow-x: auto;
+	overflow-y: auto;
+	max-height: calc(100vh - 12rem);
 	background: white;
 	border: 1px solid #e5e7eb;
 	box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
 	border-radius: 0.5rem;
-	overflow-y: hidden;
 	-webkit-overflow-scrolling: touch;
 	position: relative;
 }
