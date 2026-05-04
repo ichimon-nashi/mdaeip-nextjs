@@ -40,6 +40,8 @@ function CrewColumn({
 	violations,
 	errors,
 	year, month,
+	adjItems,
+	totalFtDelta,
 	onSelect,
 	onSearch,
 	searchQuery,
@@ -52,6 +54,13 @@ function CrewColumn({
 	const startDow = (firstDay.getDay() + 6) % 7; // 0=Mon
 	const totalDays = new Date(year, month, 0).getDate();
 
+	// Derive color for adj month duties (buildAdjItems has no color field)
+	const getAdjColor = (d) => {
+		const c = (d?.code || "").split("\\")[0].split("\n")[0];
+		if (!c || d?.isRest || ["例","休","假"].includes(c)) return "#e11d48";
+		if (["O","S","G"].some(p => c.startsWith(p))) return "#64748b";
+		return "#7c3aed";
+	};
 	const calDays = [];
 	for (let i = 0; i < startDow; i++) calDays.push(null);
 	for (let d = 1; d <= totalDays; d++) calDays.push(d);
@@ -101,24 +110,81 @@ function CrewColumn({
 			</div>
 
 			{/* Calendar */}
+			<div className={styles.calDayNames}>
+				{DAY_NAMES.map((d, idx) => <div key={d} className={`${styles.calDayName}${idx >= 5 ? " " + styles.calDayNameWeekend : ""}`}>{d}</div>)}
+			</div>
 			{loading ? (
 				<div className={styles.loading}>載入中…</div>
 			) : !crew ? (
 				<div className={styles.empty}>請搜尋並選擇組員</div>
 			) : (
 				<div className={styles.calendar}>
-					<div className={styles.calDayNames}>
-						{DAY_NAMES.map(d => <div key={d} className={styles.calDayName}>{d}</div>)}
-					</div>
 					<div className={styles.calGrid}>
 						{calDays.map((day, i) => {
-							if (!day) return <div key={i} className={styles.calEmpty} />;
+							if (!day) {
+								if (adjItems) {
+									const isLeading = i < startDow;
+									if (isLeading) {
+										const prevLastDay = new Date(year, monthIndex, 0).getDate();
+										const prevDay = prevLastDay - (startDow - 1 - i);
+										const pDate = new Date(year, monthIndex - 1, 1);
+										const adjDuty = adjItems.prev?.[prevDay];
+										return (
+											<div key={i} className={`${styles.calEmpty} ${styles.calAdjCell}`}>
+												<span className={styles.calAdjDay}>{prevDay}</span>
+												{adjDuty && <div className={styles.calAdjChip} style={{ backgroundColor: getAdjColor(adjDuty) }}>{(adjDuty.code || "").split("\\")[0].split("\n")[0]}</div>}
+											</div>
+										);
+									} else {
+										const nextDay = i - startDow - totalDays + 1;
+										const nDate = new Date(year, monthIndex + 1, 1);
+										const adjDuty = adjItems.next?.[nextDay];
+										return (
+											<div key={i} className={`${styles.calEmpty} ${styles.calAdjCell}`}>
+												<span className={styles.calAdjDay}>{nextDay}</span>
+												{adjDuty && <div className={styles.calAdjChip} style={{ backgroundColor: getAdjColor(adjDuty) }}>{(adjDuty.code || "").split("\\")[0].split("\n")[0]}</div>}
+											</div>
+										);
+									}
+								}
+								return <div key={i} className={styles.calEmpty} />;
+							}
 							const key = `${year}-${monthIndex}-${day}`;
 							const duty = items[key];
 							const isSelected = selectedDays.has(key);
 							const isViolation = violations.has(key);
 							const isSwapped = simItems && droppedItems &&
 								simItems[key]?.code !== droppedItems[key]?.code;
+							const origDuty = droppedItems?.[key] ?? null; // null if empty day
+							// Show delta for: swapped duty, empty→duty, or duty→empty
+							const showDelta = isSwapped || (simItems && droppedItems &&
+								(simItems[key] != null) !== (droppedItems[key] != null));
+							const ftDelta = showDelta
+								? (() => {
+									const calcFt = (d) => {
+										if (!d) return null;
+										if (d.ft_minutes != null) return d.ft_minutes;
+										if (d.sectors_data?.length) {
+											return d.sectors_data.reduce((acc, s) => {
+												if (!s.dep_time || !s.arr_time) return acc;
+												const d2 = parseInt(s.dep_time)*60 + parseInt((s.dep_time.split(":")||[])[1]||0);
+												const a2 = parseInt(s.arr_time)*60  + parseInt((s.arr_time.split(":")||[])[1]||0);
+												return acc + (a2 >= d2 ? a2 - d2 : 1440 - d2 + a2);
+											}, 0);
+										}
+										// Rest/off duties: FT = 0
+										if (d.isRest || !d.isDuty) return 0;
+										// Flight duty without sector data: FT unknown (startTime/endTime = FDP not FT)
+										if (d.isFlightDuty) return null;
+										return 0; // ground duty, FT = 0
+										// Can't compute — return 0 to still show delta
+										return 0;
+									};
+									const ftNew  = calcFt(duty);
+									const ftOrig = calcFt(origDuty);
+									return (ftNew != null && ftOrig != null) ? ftNew - ftOrig : null;
+								})()
+								: null;
 							return (
 								<div
 									key={key}
@@ -143,13 +209,23 @@ function CrewColumn({
 										})()
 										: null;
 									const fmtDur = (m) => m == null ? null : `${Math.floor(m/60)}h${m%60>0?` ${m%60}m`:""}`;
+									// Compute FT from sectors_data if not pre-computed
+									const computedFt = duty.ft_minutes != null ? duty.ft_minutes
+										: (duty.sectors_data?.length ? duty.sectors_data.reduce((acc, s) => {
+												if (!s.dep_time || !s.arr_time) return acc;
+												const d2 = parseInt(s.dep_time)*60 + parseInt((s.dep_time.split(":")||[])[1]||0);
+												const a2 = parseInt(s.arr_time)*60  + parseInt((s.arr_time.split(":")||[])[1]||0);
+												return acc + (a2 >= d2 ? a2 - d2 : 1440 - d2 + a2);
+											}, 0) : null);
 									const tipLines = !duty.isRest && duty.isDuty ? [
-										hasTimes ? `${duty.startTime.slice(0,5)} – ${duty.endTime.slice(0,5)}` : null,
-										duty.ft_minutes != null ? `FT  ${fmtDur(duty.ft_minutes)}` : null,
-										duty.fdp_minutes != null ? `FDP ${fmtDur(duty.fdp_minutes)}` : null,
-										duty.sectors ? `${duty.sectors} 段` : null,
-										(!duty.ft_minutes && hasTimes && durMin) ? `工時 ${fmtDur(durMin)}` : null,
-										duty.base_code ? `基地  ${duty.base_code}` : null,
+										hasTimes ? { label: "⏱", value: `${duty.startTime.slice(0,5)} – ${duty.endTime.slice(0,5)}` } : null,
+										duty.isFlightDuty && computedFt != null ? { label: "FT", value: fmtDur(computedFt) } : null,
+										duty.isFlightDuty && duty.fdp_minutes != null ? { label: "FDP", value: fmtDur(duty.fdp_minutes) } : null,
+										// Per-sector route and times
+										...(duty.sectors_data?.slice().sort((a,b)=>a.seq-b.seq).map(s =>
+											({ label: s.flight_number?.replace(/^AE-/,"") || "", value: `${s.dep_airport}→${s.arr_airport}  ${s.dep_time?.slice(0,5)}–${s.arr_time?.slice(0,5)}` })
+										) || []),
+										duty.base_code ? { label: "基地", value: duty.base_code } : null,
 									].filter(Boolean) : [];
 
 									return (
@@ -160,10 +236,28 @@ function CrewColumn({
 											>
 												{normalizeDutyCode(duty.code) || duty.code}
 											</div>
+											{ftDelta != null && (() => {
+												const sign = ftDelta > 0 ? "+" : ftDelta < 0 ? "" : "±";
+												const h = Math.floor(Math.abs(ftDelta) / 60);
+												const m = Math.abs(ftDelta) % 60;
+												const label = `${sign}${h > 0 ? h + "h" : ""}${m > 0 ? m + "m" : h === 0 ? "0" : ""}`;
+												const isPos = ftDelta > 0;
+												const isNeg = ftDelta < 0;
+												return (
+													<div className={`${styles.calDeltaBadge} ${isPos ? styles.calDeltaPos : isNeg ? styles.calDeltaNeg : styles.calDeltaZero}`}>
+														△FT {label}
+													</div>
+												);
+											})()}
 											{tipLines.length > 0 && (
 												<div className={styles.calTooltip}>
 													{tipLines.map((line, i) => (
-														<div key={i} className={styles.calTooltipLine}>{line}</div>
+														<div key={i} className={styles.calTooltipLine}>
+															{typeof line === "object" ? (<>
+																<span className={styles.calTooltipLabel}>{line.label}</span>
+																<span className={styles.calTooltipValue} style={line.delta != null ? { color: line.delta > 0 ? "#4ade80" : "#f87171", fontWeight: 700 } : undefined}>{line.value}</span>
+															</>) : <span className={styles.calTooltipValue}>{line}</span>}
+														</div>
 													))}
 												</div>
 											)}
@@ -188,6 +282,19 @@ function CrewColumn({
 					))}
 				</div>
 			)}
+			{totalFtDelta != null && (() => {
+				const sign = totalFtDelta > 0 ? "+" : totalFtDelta < 0 ? "" : "±";
+				const h = Math.floor(Math.abs(totalFtDelta) / 60);
+				const m = Math.abs(totalFtDelta) % 60;
+				const label = `${sign}${h > 0 ? h + "h" : ""}${m > 0 ? m + "m" : h === 0 ? "0" : ""}`;
+				const isPos = totalFtDelta > 0, isNeg = totalFtDelta < 0;
+				return (
+					<div className={`${styles.totalDeltaBar} ${isPos ? styles.calDeltaPos : isNeg ? styles.calDeltaNeg : styles.calDeltaZero}`}>
+						<span className={styles.totalDeltaLabel}>本月FT變動</span>
+						<span className={styles.totalDeltaValue}>{label}</span>
+					</div>
+				);
+			})()}
 		</div>
 	);
 }
@@ -333,8 +440,8 @@ export default function SwapTab() {
 		setShowImport(false);
 		const empA = employeeList.find(e => e.id === req.person_a_id);
 		const empB = employeeList.find(e => e.id === req.person_b_id);
-		if (empA) { setSearchA(empA.name); await loadCrew(empA, "A"); }
-		if (empB) { setSearchB(empB.name); await loadCrew(empB, "B"); }
+		if (empA) { setSearchA(""); await loadCrew(empA, "A"); }
+		if (empB) { setSearchB(""); await loadCrew(empB, "B"); }
 		// Pre-select the dates from the request
 		// selected_dates = Person A's dates (what A is giving up)
 		// all_duties = Person B's duties [{ date, duty }] (what B is giving up)
@@ -369,8 +476,9 @@ export default function SwapTab() {
 			const emp = employeeList.find(e => e.id === query || e.name === query);
 			if (emp) {
 				loadCrew(emp, side);
-				if (side === "A") setSearchA(emp.name);
-				else setSearchB(emp.name);
+				// Clear search so dropdown closes and day names are visible
+				if (side === "A") setSearchA("");
+				else setSearchB("");
 			}
 		}
 	};
@@ -427,7 +535,98 @@ export default function SwapTab() {
 		setSwapApplied(false);
 	};
 
+	const [saving, setSaving] = useState(false);
+
+	const saveSwap = useCallback(async () => {
+		if (!simA || !simB || !crewA || !crewB) return;
+		setSaving(true);
+		try {
+			const { supabase } = await import("../../lib/supabase");
+			const monthStr = `${year}年${String(month + 1).padStart(2, "0")}月`;
+			const totalDays = new Date(year, month + 1, 0).getDate();
+
+			// Get month_id
+			const { data: monthRow } = await supabase
+				.from("mdaeip_schedule_months").select("id").eq("month", monthStr).maybeSingle();
+			if (!monthRow) { alert("找不到月份資料"); return; }
+
+			// Helper: build duties array from droppedItems
+			const buildDuties = (items) => {
+				const arr = Array(totalDays).fill("");
+				Object.entries(items).forEach(([key, duty]) => {
+					const day = parseInt(key.split("-")[2]);
+					if (day >= 1 && day <= totalDays) arr[day - 1] = duty.code || "";
+				});
+				return arr;
+			};
+
+			// Save both sides
+			await Promise.all([
+				supabase.from("mdaeip_schedules").upsert(
+					{ employee_id: crewA.id, month_id: monthRow.id, duties: buildDuties(simA) },
+					{ onConflict: "month_id,employee_id" }
+				),
+				supabase.from("mdaeip_schedules").upsert(
+					{ employee_id: crewB.id, month_id: monthRow.id, duties: buildDuties(simB) },
+					{ onConflict: "month_id,employee_id" }
+				),
+			]);
+
+			// Clear cache
+			const { clearScheduleCache } = await import("../../lib/DataRoster");
+			clearScheduleCache(monthStr);
+
+			// Apply sim as new base schedule
+			setSchedA(simA); setSimA(null);
+			setSchedB(simB); setSimB(null);
+			setSelA(new Set()); setSelB(new Set());
+			setSwapApplied(false);
+			alert("換班已儲存！");
+		} catch (err) {
+			console.error("saveSwap:", err);
+			alert("儲存失敗：" + err.message);
+		} finally {
+			setSaving(false);
+		}
+	}, [simA, simB, crewA, crewB, year, month]);
+
 	const canSwap = crewA && crewB && (selA.size > 0 || selB.size > 0);
+
+	// Total FT delta per crew — computed from all simulated days vs originals
+	const computeTotalDelta = (simItems, origItems) => {
+		if (!simItems) return null;
+		const calcFtSimple = (d) => {
+			if (!d) return 0;
+			if (d.ft_minutes != null) return d.ft_minutes;
+			if (d.sectors_data?.length) return d.sectors_data.reduce((acc, s) => {
+				if (!s.dep_time || !s.arr_time) return acc;
+				const d2 = parseInt(s.dep_time)*60 + parseInt((s.dep_time.split(":")||[])[1]||0);
+				const a2 = parseInt(s.arr_time)*60  + parseInt((s.arr_time.split(":")||[])[1]||0);
+				return acc + (a2 >= d2 ? a2 - d2 : 1440 - d2 + a2);
+			}, 0);
+			// Rest/off duties: FT = 0
+			// Flight duty without sectors: FT unknown, treat as 0 for summary
+			if (d.isFlightDuty) return 0;
+			return 0; // ground duty
+			if (d.isRest || !d.isDuty) return 0;
+			return 0;
+		};
+		// Sum FT across all days that changed
+		const allKeys = new Set([...Object.keys(simItems), ...Object.keys(origItems || {})]);
+		let delta = 0;
+		let anyChange = false;
+		allKeys.forEach(key => {
+			const newD = simItems[key];
+			const oldD = origItems?.[key];
+			if (newD?.code === oldD?.code) return; // unchanged day
+			anyChange = true;
+			delta += calcFtSimple(newD) - calcFtSimple(oldD);
+		});
+		return anyChange ? Math.round(delta) : null;
+	};
+	const totalFtDeltaA = computeTotalDelta(simA, schedA);
+	const totalFtDeltaB = computeTotalDelta(simB, schedB);
+
 	const totalViol = errA.length + errB.length;
 
 	// Swap summary: what's being exchanged, with FT gain/loss
@@ -506,6 +705,8 @@ export default function SwapTab() {
 					droppedItems={schedA} simItems={simA}
 					selectedDays={selA} violations={violA} errors={errA}
 					year={year} month={month + 1}
+					adjItems={adjA}
+					totalFtDelta={totalFtDeltaA}
 					onSelect={toggleDay("A")}
 					onSearch={doSearch("A")}
 					searchQuery={searchA}
@@ -567,10 +768,20 @@ export default function SwapTab() {
 					</button>
 
 					{swapApplied && (
-						<button className={styles.resetBtn} onClick={resetSwap}>
-							<RefreshCw size={13} />
-							重置
-						</button>
+						<>
+							<button className={styles.resetBtn} onClick={resetSwap}>
+								<RefreshCw size={13} />
+								重置
+							</button>
+							<button
+								className={`${styles.saveSwapBtn} ${saving ? styles.swapBtnDisabled : ""}`}
+								onClick={saveSwap}
+								disabled={saving}
+								title="將模擬結果儲存至排班系統"
+							>
+								{saving ? "儲存中…" : "✓ 儲存換班"}
+							</button>
+						</>
 					)}
 
 					{/* Validation result */}
@@ -589,6 +800,8 @@ export default function SwapTab() {
 					droppedItems={schedB} simItems={simB}
 					selectedDays={selB} violations={violB} errors={errB}
 					year={year} month={month + 1}
+					adjItems={adjB}
+					totalFtDelta={totalFtDeltaB}
 					onSelect={toggleDay("B")}
 					onSearch={doSearch("B")}
 					searchQuery={searchB}
