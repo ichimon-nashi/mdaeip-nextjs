@@ -521,6 +521,39 @@ function DutyChangeContent() {
 		};
 	};
 
+	// ── Check for overlapping pending/approved requests on same dates ────────
+	const checkDuplicateDates = async (personAId, personBId, month, selectedDates, allDuties) => {
+		const personBDates = (allDuties || []).map(d => d.date);
+		const allCurrentDates = [...new Set([...selectedDates, ...personBDates])];
+		if (!allCurrentDates.length) return null;
+
+		// Fetch all pending/approved requests involving either party this month
+		const { data, error } = await supabase
+			.from("duty_change_requests")
+			.select("id, person_a_id, person_b_id, selected_dates, all_duties, status")
+			.eq("month", month)
+			.in("status", ["pending", "approved"])
+			.or(`person_a_id.eq.${personAId},person_b_id.eq.${personAId},person_a_id.eq.${personBId},person_b_id.eq.${personBId}`);
+
+		if (error || !data?.length) return null;
+
+		for (const req of data) {
+			const existingDates = [
+				...(req.selected_dates || []),
+				...(req.all_duties || []).map(d => d.date),
+			];
+			const overlap = allCurrentDates.filter(d => existingDates.includes(d));
+			if (overlap.length > 0) {
+				const formatted = overlap.map(d => {
+					const dt = new Date(d);
+					return `${dt.getMonth() + 1}/${dt.getDate()}`;
+				}).join("、");
+				return `⚠️ 日期衝突：${formatted} 已有待審核或已核准的換班申請，請確認後再送出。`;
+			}
+		}
+		return null;
+	};
+
 	// ── Upload PDF blob to Supabase Storage ──────────────────────────────────
 	const uploadPdfToStorage = async (pdfBlob, personAId, month) => {
 		const timestamp = Date.now();
@@ -609,6 +642,20 @@ function DutyChangeContent() {
 				personBSubmissionNumber = quota.personBSubmissionNumber;
 			} catch (quotaErr) {
 				toast.error(quotaErr.message, { duration: 5000 });
+				return;
+			}
+
+			// ── Duplicate date check ─────────────────────────────────────
+			const duplicateWarning = await checkDuplicateDates(
+				formData.firstID,
+				formData.secondID,
+				formData.selectedMonth,
+				formData.selectedDates,
+				formData.allDuties
+			);
+			if (duplicateWarning) {
+				toast.error(duplicateWarning, { duration: 8000 });
+				setIsLoading(false);
 				return;
 			}
 			// submission_number on the PDF uses Person A's count (甲方 initiates)
