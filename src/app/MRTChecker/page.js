@@ -999,6 +999,52 @@ const MRTChecker = () => {
 				return;
 			}
 
+			// Persist any extra sectors / additional tasks in local state to schedule_day_overrides
+			// This is per-person and does NOT affect other crew loading the same duty code.
+			const daysWithExtras = Object.entries(extraSectors)
+				.filter(([, es]) => es?.length > 0)
+				.map(([key]) => key);
+			const daysWithTasks = Object.entries(additionalTasks)
+				.filter(([, ts]) => ts?.some(t => t.title))
+				.map(([key]) => key);
+			const daysNeedingOverride = [...new Set([...daysWithExtras, ...daysWithTasks])];
+			if (daysNeedingOverride.length > 0) {
+				await Promise.all(daysNeedingOverride.map(async (dateKey) => {
+					const duty = droppedItems[dateKey];
+					if (!duty) return;
+					const day = parseInt(dateKey.split("-")[2]);
+					const extras = (extraSectors[dateKey] || []).filter(e => e.flight_number && e.dep_time && e.arr_time);
+					const tasks  = (additionalTasks[dateKey] || []).filter(t => t.title && t.start_time && t.end_time);
+					const keptPdxNums = duty.isFlightDuty && duty.sectors_data?.length > 0
+						? (duty.flightNums || duty.sectors_data.map(s => s.flight_number.replace(/^AE-/, "")))
+						: (duty.flightNums || []);
+					// Reuse saveExtraSectors logic inline
+					const keptSectors = (duty.sectors_data || [])
+						.filter(s => keptPdxNums.includes(s.flight_number.replace(/^AE-/, "")));
+					const allEndTimes = [
+						...keptSectors.map(s => s.arr_time?.slice(0,5)).filter(Boolean),
+						...extras.map(s => s.arr_time).filter(Boolean),
+					];
+					const endTime = allEndTimes.length
+						? allEndTimes.reduce((max, t) => t > max ? t : max, "00:00")
+						: (duty.endTime || "");
+					const startTime = duty.startTime || "";
+					const dutyBase = normalizeDutyCode(duty.code) || duty.code.split("\\")[0];
+					await supabase.from("schedule_day_overrides").upsert({
+						employee_id:      targetUserId,
+						month_id:         monthRow.id,
+						day,
+						duty_code:        dutyBase,
+						start_time:       startTime || "08:00",
+						end_time:         endTime   || "17:00",
+						is_special:       true,
+						extra_sectors:    extras,
+						additional_tasks: tasks,
+						created_by:       user?.name || user?.id || null,
+					}, { onConflict: "employee_id,month_id,day" });
+				}));
+			}
+
 			// Clear cache so next load fetches fresh data
 			const { clearScheduleCache } = await import("../../lib/DataRoster");
 			clearScheduleCache(monthStr);
@@ -2325,24 +2371,37 @@ const MRTChecker = () => {
 									const selected = new Set(duty.flightNums || allFlights);
 									const applySectors = (newNums) => {
 										const pdxRow = { ...duty };
-										const partial = newNums.length === allFlights.length ? null : computePartialDutyTimes(pdxRow, newNums);
-										const flightNums = newNums.length === allFlights.length ? null : newNums;
+										const isAllSelected = newNums.length === allFlights.length;
+										const partial = isAllSelected ? null : computePartialDutyTimes(pdxRow, newNums);
+										const flightNums = isAllSelected ? null : newNums;
+										// Restore original PDX start/end when all sectors reselected
+										const origStart = duty.sectors_data?.length
+											? (pdxRow.reporting_time || duty.sectors_data[0]?.dep_time || duty.startTime)
+											: duty.startTime;
+										const origEnd = duty.sectors_data?.length
+											? duty.sectors_data[duty.sectors_data.length - 1]?.arr_time || duty.endTime
+											: duty.endTime;
+										// Compute base end time from PDX sector selection
+										const baseEnd = partial?.partialUnknown ? "" : (partial?.endTime ?? (isAllSelected ? origEnd : duty.endTime));
+										// Factor in extra sectors: extend end if any extra arr_time is later
+										const curExtras = (extraSectors[dateKey] || []).filter(e => e.arr_time);
+										const effectiveEnd = curExtras.length && baseEnd
+											? [baseEnd, ...curExtras.map(e => e.arr_time)].reduce((max,t) => t > max ? t : max)
+											: baseEnd;
+										const newStart = partial?.partialUnknown ? "" : (partial?.startTime ?? (isAllSelected ? origStart : duty.startTime));
+										const newFt  = partial?.partialUnknown ? null : (partial?.ftMinutes  ?? (flightNums ? null : duty.ft_minutes));
+										const newFdp = partial?.partialUnknown ? null : (partial?.fdpMinutes ?? (flightNums ? null : duty.fdp_minutes));
 										setDroppedItems(prev => {
-											snapshotIfNeeded(prev); // mark as unsaved so save button appears
-											return {
-												...prev,
-												[dateKey]: {
-													...prev[dateKey],
-													flightNums,
-													startTime:   partial?.partialUnknown ? "" : (partial?.startTime  ?? duty.startTime),
-													endTime:     partial?.partialUnknown ? "" : (partial?.endTime    ?? duty.endTime),
-													ft_minutes:  partial?.partialUnknown ? null : (partial?.ftMinutes  ?? (flightNums ? null : duty.ft_minutes)),
-													fdp_minutes: partial?.partialUnknown ? null : (partial?.fdpMinutes ?? (flightNums ? null : duty.fdp_minutes)),
-													sectors:     newNums.length,
-												},
-											};
+											snapshotIfNeeded(prev);
+											return { ...prev, [dateKey]: { ...prev[dateKey],
+												flightNums, startTime: newStart, endTime: effectiveEnd,
+												ft_minutes: newFt, fdp_minutes: newFdp, sectors: newNums.length,
+											}};
 										});
-										setPopoverDuty(prev => prev ? { ...prev, duty: { ...prev.duty, flightNums } } : null);
+										setPopoverDuty(prev => prev ? { ...prev, duty: { ...prev.duty,
+											flightNums, startTime: newStart, endTime: effectiveEnd,
+											ft_minutes: newFt, fdp_minutes: newFdp, sectors: newNums.length,
+										}} : null);
 									};
 									return (
 										<div className={(showSectors || showFlightEditor) ? styles.dutyPopoverTwoCol : undefined}>
@@ -2356,18 +2415,34 @@ const MRTChecker = () => {
 												{duty.name && duty.name !== `Flight ${duty.code}` && (
 													<div className={styles.dutyPopoverName}>{duty.name}</div>
 												)}
-												{duty.startTime && duty.endTime && (
-													<div className={styles.dutyPopoverRow}>
-														<span className={styles.dutyPopoverLabel}>報到</span>
-														<span className={styles.dutyPopoverValue}>{formatTime(duty.startTime)}</span>
-													</div>
-												)}
-												{duty.endTime && (
-													<div className={styles.dutyPopoverRow}>
-														<span className={styles.dutyPopoverLabel}>結束</span>
-														<span className={styles.dutyPopoverValue}>{formatTime(duty.endTime)}</span>
-													</div>
-												)}
+												{duty.startTime && duty.endTime && [
+													(() => {
+														const hsr = hsrItems[dateKey] || {};
+														const t2m = (t) => { if (!t) return null; const [h,m] = t.split(":"); return parseInt(h)*60+parseInt(m||0); };
+														const dutyStartM = t2m(duty.startTime?.slice(0,5));
+														const dutyEndM   = t2m(duty.endTime?.slice(0,5));
+														const hasBefore  = hsr.before && hsr.beforeDepTime;
+														const beforeArrM = t2m(hsr.beforeArrTime);
+														const hasAfter   = hsr.after && hsr.afterArrTime;
+														const afterDepM  = t2m(hsr.afterDepTime);
+														const beforeErr  = hasBefore && beforeArrM != null && dutyStartM != null && beforeArrM > dutyStartM;
+														const afterErr   = hasAfter && afterDepM != null && dutyEndM != null && afterDepM < dutyEndM;
+														return [
+															<div key="row-start" className={styles.dutyPopoverRow}>
+																<span className={styles.dutyPopoverLabel}>報到</span>
+																<span className={styles.dutyPopoverValue}>{formatTime(duty.startTime)}</span>
+																{hasBefore && <span key="eff-start" className={`${styles.dutyPopoverEffTime} ${beforeErr ? styles.dutyPopoverEffTimeWarn : ""}`}>→ {hsr.beforeDepTime}</span>}
+															</div>,
+															beforeErr && <div key="err-start" className={styles.hsrValidationError}>⚠ T前班次抵達時間（{hsr.beforeArrTime}）晚於報到時間（{duty.startTime?.slice(0,5)}）</div>,
+															<div key="row-end" className={styles.dutyPopoverRow}>
+																<span className={styles.dutyPopoverLabel}>結束</span>
+																<span className={styles.dutyPopoverValue}>{formatTime(duty.endTime)}</span>
+																{hasAfter && <span key="eff-end" className={`${styles.dutyPopoverEffTime} ${afterErr ? styles.dutyPopoverEffTimeWarn : ""}`}>→ {hsr.afterArrTime}</span>}
+															</div>,
+															afterErr && <div key="err-end" className={styles.hsrValidationError}>⚠ T後班次出發時間（{hsr.afterDepTime}）早於下班時間（{duty.endTime?.slice(0,5)}）</div>,
+														];
+													})()
+												]}
 												{duty.isFlightDuty && duty.startTime && duty.endTime && (<>
 													<div className={styles.dutyPopoverRow}>
 														<span className={styles.dutyPopoverLabel}>FDP</span>
@@ -2549,23 +2624,76 @@ const MRTChecker = () => {
 														</div>
 													{(extraSectors[dateKey] || []).map((es, idx) => {
 														const upd = (f, v) => setExtraSectors(prev => ({ ...prev, [dateKey]: prev[dateKey].map((x,i) => i===idx ? {...x, [f]: v} : x) }));
+														const fmtTime = (raw) => {
+															const d = raw.replace(/\D/g, "").slice(0, 4);
+															if (d.length < 4) return d.length === 3 ?
+																`0${d[0]}:${d.slice(1)}` : raw;
+															return `${d.slice(0,2)}:${d.slice(2)}`;
+														};
+														const airline = es.flight_number?.startsWith("CI") ? "CI" : "AE";
+														const flightNum = (es.flight_number || "").replace(/^(AE|CI)[-\s]?/, "");
+														const AIRPORTS = [
+															{ code: "KHH", name: "高雄" },
+															{ code: "TSA", name: "台北" },
+															{ code: "RMQ", name: "台中" },
+															{ code: "KNH", name: "金門" },
+															{ code: "MZG", name: "澎湖" },
+															{ code: "HUN", name: "花蓮" },
+															{ code: "TTT", name: "台東" },
+															{ code: "LZN", name: "南竿" },
+															{ code: "WUH", name: "武漢" },
+															{ code: "SGN", name: "胡志明市" },
+															{ code: "TPE", name: "桃園" },
+														];
 														return (
 														<div key={es.id} className={styles.extraSectorRow}>
 															<div className={styles.extraSectorRowTop}>
-																<input className={styles.extraSectorInput} style={{width:"4rem"}} placeholder="班號" value={es.flight_number} onChange={e => upd("flight_number", e.target.value)} />
+																<select className={styles.extraSectorAirlineSelect} value={airline} onChange={e => upd("flight_number", e.target.value + "-" + flightNum)}>
+																	<option value="AE">AE</option>
+																	<option value="CI">CI</option>
+																</select>
+																<span className={styles.extraSectorDash}>-</span>
+																<input className={styles.extraSectorInput} style={{width:"3.5rem"}} placeholder="班號" value={flightNum} onChange={e => upd("flight_number", airline + "-" + e.target.value.replace(/\D/g,""))} />
+																<span className={styles.extraSectorPreview}>{flightNum ? `${airline}-${flightNum}` : ""}</span>
 																<button className={styles.extraSectorDelBtn} onClick={() => setExtraSectors(prev => ({ ...prev, [dateKey]: prev[dateKey].filter((_,i) => i !== idx) }))}>✕</button>
 															</div>
 															<div className={styles.extraSectorRowBottom}>
-																<input className={styles.extraSectorInput} style={{width:"3rem"}} placeholder="出發" value={es.dep_airport} onChange={e => upd("dep_airport", e.target.value.toUpperCase())} />
-																<span style={{color:"#94a3b8",fontSize:"0.65rem"}}>→</span>
-																<input className={styles.extraSectorInput} style={{width:"3rem"}} placeholder="到達" value={es.arr_airport} onChange={e => upd("arr_airport", e.target.value.toUpperCase())} />
-																<input type="time" className={styles.extraSectorInput} value={es.dep_time} onChange={e => upd("dep_time", e.target.value)} />
-																<span style={{color:"#94a3b8",fontSize:"0.65rem"}}>–</span>
-																<input type="time" className={styles.extraSectorInput} value={es.arr_time} onChange={e => upd("arr_time", e.target.value)} />
+																<select className={styles.extraSectorAirportSelect} value={es.dep_airport} onChange={e => upd("dep_airport", e.target.value)}>
+																	<option value="">出發</option>
+																	{AIRPORTS.map(a => <option key={a.code} value={a.code}>{a.code} {a.name}</option>)}
+																</select>
+																<span className={styles.extraSectorArrow}>→</span>
+																<select className={styles.extraSectorAirportSelect} value={es.arr_airport} onChange={e => upd("arr_airport", e.target.value)}>
+																	<option value="">到達</option>
+																	{AIRPORTS.map(a => <option key={a.code} value={a.code}>{a.code} {a.name}</option>)}
+																</select>
+																<input className={styles.extraSectorTimeInput} placeholder="起飛" value={es.dep_time} maxLength={5} onChange={e => upd("dep_time", e.target.value)} onBlur={e => upd("dep_time", fmtTime(e.target.value))} />
+																<span className={styles.extraSectorArrow}>–</span>
+																<input className={styles.extraSectorTimeInput} placeholder="落地" value={es.arr_time} maxLength={5} onChange={e => upd("arr_time", e.target.value)} onBlur={e => upd("arr_time", fmtTime(e.target.value))} />
 															</div>
 														</div>
 														);
 													})}
+													{/* Confirm extra sectors → update displayed times without saving to DB */}
+													{(extraSectors[dateKey] || []).length > 0 && (
+														<button
+															className={styles.extraSectorConfirmBtn}
+															onClick={() => applySectors(isAll ? allFlights : [...selected])}
+															title="套用額外航段，更新顯示時間（不儲存資料庫）"
+														>
+															✓ 確認時間
+														</button>
+													)}
+													{/* Sector overlap validation */}
+													{(() => {
+														const allS = [
+															...(duty.sectors_data||[]).filter(s=>(duty.flightNums||allFlights).includes(s.flight_number?.replace(/^AE-/,""))).sort((a,b)=>a.seq-b.seq).map(s=>({dep:s.dep_time?.slice(0,5),arr:s.arr_time?.slice(0,5),fn:s.flight_number?.replace(/^AE-/,"")})),
+															...(extraSectors[dateKey]||[]).filter(e=>e.dep_time&&e.arr_time).map(e=>({dep:e.dep_time?.slice(0,5),arr:e.arr_time?.slice(0,5),fn:e.flight_number})),
+														];
+														const errs=[];
+														for(let i=1;i<allS.length;i++) if(allS[i].dep&&allS[i-1].arr&&allS[i].dep<allS[i-1].arr) errs.push(`${allS[i].fn||"額外"} 起飛(${allS[i].dep})早於上一航段落地(${allS[i-1].arr})`);
+														return errs.map((e,i)=><div key={i} className={styles.hsrValidationError}>⚠ {e}</div>);
+													})()}
 														<button
 															className={styles.extraSectorSaveBtn}
 															onClick={() => {
@@ -2627,25 +2755,28 @@ const MRTChecker = () => {
 														}>✕</button>
 													</div>
 													<div className={styles.additionalTaskRowBottom}>
-														<input type="time" className={styles.extraSectorInput} value={task.start_time}
-															onChange={e => updTask("start_time", e.target.value)} />
-														<span style={{color:"#94a3b8",fontSize:"0.65rem"}}>–</span>
-														<input type="time" className={styles.extraSectorInput} value={task.end_time}
-															onChange={e => updTask("end_time", e.target.value)} />
+														{[1].map(() => {
+															const fmtT = (raw) => { const d = raw.replace(/\D/g,"").slice(0,4); if(d.length<4) return d.length===3?`0${d[0]}:${d.slice(1)}`:raw; return `${d.slice(0,2)}:${d.slice(2)}`; };
+															const timeErr = task.start_time && task.end_time && task.start_time >= task.end_time;
+															return [
+																<input key="s" className={styles.extraSectorTimeInput} placeholder="開始" value={task.start_time} maxLength={5} style={timeErr?{borderColor:"#dc2626"}:undefined} onChange={e=>updTask("start_time",e.target.value)} onBlur={e=>updTask("start_time",fmtT(e.target.value))} />,
+																<span key="sep" className={styles.extraSectorArrow}>–</span>,
+																<input key="e" className={styles.extraSectorTimeInput} placeholder="結束" value={task.end_time} maxLength={5} style={timeErr?{borderColor:"#dc2626"}:undefined} onChange={e=>updTask("end_time",e.target.value)} onBlur={e=>updTask("end_time",fmtT(e.target.value))} />,
+																timeErr&&<span key="err" className={styles.hsrValidationError} style={{fontSize:"0.65rem"}}>結束須晚於開始</span>,
+															];
+														})}
 													</div>
 												</div>
 												);
 											})}
 											{(additionalTasks[dateKey] || []).length > 0 && (
 												<button className={styles.extraSectorSaveBtn} onClick={() => {
-														// keptNums: for flight duties use kept PDX flights from droppedItems;
-														// for ground duties (no sectors_data) use empty array
 														const keptNums = (duty.isFlightDuty && duty.sectors_data?.length > 0)
 															? (duty.flightNums || duty.sectors_data.map(s => s.flight_number.replace(/^AE-/, "")))
 															: (duty.flightNums || []);
-													const extras = (extraSectors[dateKey] || []).filter(e => e.flight_number && e.dep_time && e.arr_time);
-													const day = parseInt(dateKey.split("-")[2]);
-													saveExtraSectors(dateKey, day, keptNums, extras);
+														const extras = (extraSectors[dateKey] || []).filter(e => e.flight_number && e.dep_time && e.arr_time);
+														const day = parseInt(dateKey.split("-")[2]);
+														saveExtraSectors(dateKey, day, keptNums, extras);
 												}}>儲存附加任務</button>
 											)}
 										</div>
