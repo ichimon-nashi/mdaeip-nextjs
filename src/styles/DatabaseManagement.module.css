@@ -2053,3 +2053,155 @@
 		padding: 14px;
 	}
 }
+/* ── Gif Avatar Picker ── */
+
+.genderToggleRow {
+	display: flex;
+	gap: 8px;
+	align-items: center;
+}
+
+.genderToggleBtn {
+	padding: 8px 20px;
+	border: 2px solid #e2e8f0;
+	border-radius: 8px;
+	background: white;
+	color: #64748b;
+	font-size: 0.9rem;
+	font-weight: 600;
+	cursor: pointer;
+	transition: all 0.15s ease;
+}
+
+.genderToggleBtn:hover {
+	border-color: #94a3b8;
+	background: #f8fafc;
+}
+
+.genderToggleBtnActive {
+	border-color: #2563eb;
+	background: #eff6ff;
+	color: #2563eb;
+}
+
+.genderClearBtn {
+	padding: 6px 12px;
+	border: 1px solid #e2e8f0;
+	border-radius: 6px;
+	background: white;
+	color: #94a3b8;
+	font-size: 0.8rem;
+	cursor: pointer;
+	margin-left: 4px;
+	transition: all 0.15s ease;
+}
+
+.genderClearBtn:hover {
+	border-color: #ef4444;
+	color: #ef4444;
+}
+
+.gifPreviewRow {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	padding: 10px 12px;
+	background: #f0f9ff;
+	border: 1px solid #bae6fd;
+	border-radius: 8px;
+	margin-bottom: 10px;
+}
+
+.gifPreviewLarge {
+	width: 48px;
+	height: 48px;
+	object-fit: contain;
+	flex-shrink: 0;
+}
+
+.gifPreviewInfo {
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+}
+
+.gifPreviewName {
+	font-size: 0.85rem;
+	font-weight: 600;
+	color: #0c4a6e;
+	text-transform: capitalize;
+}
+
+.gifClearBtn {
+	padding: 3px 10px;
+	border: 1px solid #fca5a5;
+	border-radius: 6px;
+	background: white;
+	color: #ef4444;
+	font-size: 0.75rem;
+	cursor: pointer;
+	transition: all 0.15s ease;
+	align-self: flex-start;
+}
+
+.gifClearBtn:hover {
+	background: #fef2f2;
+}
+
+.gifGrid {
+	display: grid;
+	grid-template-columns: repeat(auto-fill, minmax(52px, 1fr));
+	gap: 6px;
+	max-height: 220px;
+	overflow-y: auto;
+	padding: 4px 2px;
+}
+
+.gifGridItem {
+	width: 52px;
+	height: 52px;
+	border: 2px solid #e2e8f0;
+	border-radius: 8px;
+	background: white;
+	padding: 3px;
+	cursor: pointer;
+	transition: all 0.15s ease;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+}
+
+.gifGridItem:hover {
+	border-color: #93c5fd;
+	background: #eff6ff;
+	transform: scale(1.08);
+}
+
+.gifGridItemSelected {
+	border-color: #2563eb;
+	background: #eff6ff;
+	box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.25);
+}
+
+.gifGridImg {
+	width: 40px;
+	height: 40px;
+	object-fit: contain;
+}
+
+@media (max-width: 520px) {
+	.gifGrid {
+		grid-template-columns: repeat(auto-fill, minmax(46px, 1fr));
+		max-height: 180px;
+	}
+
+	.gifGridItem {
+		width: 46px;
+		height: 46px;
+	}
+
+	.gifGridImg {
+		width: 34px;
+		height: 34px;
+	}
+}

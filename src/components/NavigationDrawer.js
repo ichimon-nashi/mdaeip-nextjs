@@ -245,6 +245,17 @@ const NavigationDrawer = ({ isOpen, onClose, userDetails }) => {
               </div>
             </div>
           </div>
+
+          {/* Gif avatar — right side, only shown if assigned */}
+          {userDetails?.avatar_gif && (
+            <div className={styles.drawerGifAvatar}>
+              <img
+                src={`/assets/level_gif/${userDetails.avatar_gif}`}
+                alt="character"
+                className={styles.drawerGifAvatarImg}
+              />
+            </div>
+          )}
         </div>
 
         {/* Nav items */}

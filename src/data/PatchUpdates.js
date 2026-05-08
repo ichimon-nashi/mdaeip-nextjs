@@ -170,12 +170,14 @@ export const patchUpdates = [
 			"增加撈高鐵時刻表資料",
 		],
 	},
-		{
+	{
 		date: "2026-05-04",
 		appName: "疲勞管理統",
-		updateInfo: [
-			"修訂模擬換班檢視",
-			"可手動調整組員任務互換",
-		],
+		updateInfo: ["修訂模擬換班檢視", "可手動調整組員任務互換"],
+	},
+		{
+		date: "2026-05-08",
+		appName: "EIP系統",
+		updateInfo: ["增加使用者gif頭像"],
 	},
 ];

@@ -23,15 +23,34 @@ export const AuthProvider = ({ children }) => {
 	useEffect(() => {
 		console.log("🔥 AuthContext initializing...");
 		
-		const initAuth = () => {
+		const initAuth = async () => {
 			try {
 				if (typeof window !== 'undefined') {
 					const savedUser = localStorage.getItem('mdaeip_user');
 					console.log("💾 Checking localStorage:", !!savedUser);
-					
+
 					if (savedUser) {
 						const parsedUser = JSON.parse(savedUser);
 						console.log("✅ Found saved user:", parsedUser.name || parsedUser.id);
+
+						// Re-fetch fresh profile from DB so new columns (e.g. avatar_gif)
+						// are always up-to-date without requiring a re-login
+						try {
+							const response = await fetch(`/api/users/profile?id=${parsedUser.id}`);
+							if (response.ok) {
+								const result = await response.json();
+								if (result.success && result.data) {
+									localStorage.setItem('mdaeip_user', JSON.stringify(result.data));
+									setUser(result.data);
+									console.log("🔄 User profile refreshed from DB");
+									return;
+								}
+							}
+						} catch (fetchError) {
+							console.warn("⚠️ Could not refresh profile, using cached user:", fetchError);
+						}
+
+						// Fallback to cached user if refresh fails
 						setUser(parsedUser);
 					}
 				}

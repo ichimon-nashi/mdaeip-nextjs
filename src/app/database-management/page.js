@@ -23,6 +23,25 @@ import {
 } from "lucide-react";
 import styles from "../../styles/DatabaseManagement.module.css";
 
+// All available gif keys, split by gender prefix
+const GIF_KEYS = {
+	M: [
+		"m_archer","m_bard","m_blackmage","m_calculator","m_chemist",
+		"m_darkknight","m_engineer","m_geomancer","m_hellknight","m_holyknight",
+		"m_hunter","m_knight","m_lancer","m_mediator","m_mimic","m_monk",
+		"m_monster","m_ninja","m_onionknight","m_oracle","m_pirate",
+		"m_ramza1","m_ramza2","m_ramza3","m_robot","m_samurai","m_soldier",
+		"m_squire","m_summoner","m_templeknight","m_thief","m_timemage","m_whitemage",
+	],
+	F: [
+		"f_archer","f_blackmage","f_calculator","f_chemist","f_dancer",
+		"f_darkknight","f_dragon","f_dragoner","f_geomancer","f_hellknight",
+		"f_holyknight","f_knight","f_lancer","f_mediator","f_mimic","f_monk",
+		"f_ninja","f_onionknight","f_oracle","f_samurai","f_squire","f_summoner",
+		"f_templeknight","f_thief","f_timemage","f_whitemage",
+	],
+};
+
 const DatabaseManagement = () => {
 	const { user, loading } = useAuth();
 	const router = useRouter();
@@ -316,6 +335,8 @@ const DatabaseManagement = () => {
 			base: "",
 			access_level: 1,
 			password: "",
+			gender: "",
+			avatar_gif: "",
 			app_permissions: {
 				roster: { access: false },
 				mrt_checker: { access: false },
@@ -340,6 +361,8 @@ const DatabaseManagement = () => {
 			base: user.base,
 			access_level: user.access_level,
 			password: "",
+			gender: user.gender || "",
+			avatar_gif: user.avatar_gif || "",
 			app_permissions: user.app_permissions || {
 				roster: { access: false },
 				mrt_checker: { access: false },
@@ -879,6 +902,89 @@ const DatabaseManagement = () => {
 						</div>
 						<div className={styles.modalBody}>
 							<div className={styles.userForm}>
+
+								{/* ── Section 0: 角色頭像 ── */}
+								<div className={styles.formSection}>
+									<span className={styles.formSectionLabel}>角色頭像</span>
+
+									{/* Gender selector */}
+									<div className={styles.formGroup}>
+										<label>性別</label>
+										<div className={styles.genderToggleRow}>
+											{[{ value: "M", label: "♂ 男" }, { value: "F", label: "♀ 女" }].map(({ value, label }) => (
+												<button
+													key={value}
+													type="button"
+													className={`${styles.genderToggleBtn} ${userFormData.gender === value ? styles.genderToggleBtnActive : ""}`}
+													onClick={() => setUserFormData(prev => ({
+														...prev,
+														gender: value,
+														// Clear gif if it no longer belongs to the new gender
+														avatar_gif: prev.avatar_gif && prev.avatar_gif.startsWith(value.toLowerCase() + "_") ? prev.avatar_gif : "",
+													}))}
+												>
+													{label}
+												</button>
+											))}
+											{userFormData.gender && (
+												<button
+													type="button"
+													className={styles.genderClearBtn}
+													onClick={() => setUserFormData(prev => ({ ...prev, gender: "", avatar_gif: "" }))}
+												>
+													清除
+												</button>
+											)}
+										</div>
+									</div>
+
+									{/* Gif grid — only shown when gender is selected */}
+									{userFormData.gender && (
+										<div className={styles.formGroup}>
+											<label>選擇角色</label>
+											{userFormData.avatar_gif && (
+												<div className={styles.gifPreviewRow}>
+													<img
+														src={`/assets/level_gif/${userFormData.avatar_gif}`}
+														alt={userFormData.avatar_gif}
+														className={styles.gifPreviewLarge}
+													/>
+													<div className={styles.gifPreviewInfo}>
+														<span className={styles.gifPreviewName}>{userFormData.avatar_gif.replace(/^[mf]_/, "").replace(".gif", "")}</span>
+														<button
+															type="button"
+															className={styles.gifClearBtn}
+															onClick={() => setUserFormData(prev => ({ ...prev, avatar_gif: "" }))}
+														>
+															移除頭像
+														</button>
+													</div>
+												</div>
+											)}
+											<div className={styles.gifGrid}>
+												{(GIF_KEYS[userFormData.gender] || []).map((key) => {
+													const filename = `${key}.gif`;
+													const isSelected = userFormData.avatar_gif === filename;
+													return (
+														<button
+															key={key}
+															type="button"
+															className={`${styles.gifGridItem} ${isSelected ? styles.gifGridItemSelected : ""}`}
+															onClick={() => setUserFormData(prev => ({ ...prev, avatar_gif: filename }))}
+															title={key.replace(/^[mf]_/, "")}
+														>
+															<img
+																src={`/assets/level_gif/${filename}`}
+																alt={key}
+																className={styles.gifGridImg}
+															/>
+														</button>
+													);
+												})}
+											</div>
+										</div>
+									)}
+								</div>
 
 								{/* ── Section 1: 基本資料 ── */}
 								<div className={styles.formSection}>

@@ -26,7 +26,7 @@ export async function GET(request) {
 
 		const { data, error } = await supabase
 			.from("mdaeip_users")
-			.select("id, name, rank, base, access_level, app_permissions")
+			.select("id, name, rank, base, access_level, app_permissions, gender, avatar_gif")
 			.order("id", { ascending: true });
 
 		if (error) {
@@ -59,7 +59,7 @@ export async function POST(request) {
 			);
 		}
 
-		const { id, name, rank, base, access_level, password, app_permissions } = userData;
+		const { id, name, rank, base, access_level, password, app_permissions, gender, avatar_gif } = userData;
 
 		if (!id || !name || !password) {
 			return NextResponse.json(
@@ -93,6 +93,8 @@ export async function POST(request) {
 				access_level: parseInt(access_level) || 1,
 				password: hashedPassword,
 				app_permissions: app_permissions || DEFAULT_PERMISSIONS,
+				gender: gender || null,
+				avatar_gif: avatar_gif || null,
 			},
 		]);
 
@@ -129,7 +131,7 @@ export async function PUT(request) {
 			);
 		}
 
-		const { id, name, rank, base, access_level, password, app_permissions } = userData;
+		const { id, name, rank, base, access_level, password, app_permissions, gender, avatar_gif } = userData;
 
 		if (!id || !name) {
 			return NextResponse.json(
@@ -144,6 +146,8 @@ export async function PUT(request) {
 			base: base || "",
 			access_level: parseInt(access_level) || 1,
 			app_permissions: app_permissions || DEFAULT_PERMISSIONS,
+			gender: gender || null,
+			avatar_gif: avatar_gif || null,
 		};
 
 		if (password && password.trim() !== "") {
