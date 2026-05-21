@@ -55,6 +55,12 @@ const DatabaseManagement = () => {
 	const [availableDispatchMonths, setAvailableDispatchMonths] = useState([]);
 	const [isDeleting, setIsDeleting] = useState(false);
 
+	// Excel file processing states (for upload modal)
+	const [xlsxFile, setXlsxFile] = useState(null);
+	const [xlsxDetectedMonth, setXlsxDetectedMonth] = useState(null);
+	const [xlsxStatus, setXlsxStatus] = useState(null); // { message, type } where type = 'processing'|'success'|'error'
+	const [isProcessingExcel, setIsProcessingExcel] = useState(false);
+
 	// User management states
 	const [users, setUsers] = useState([]);
 	const [isLoadingUsers, setIsLoadingUsers] = useState(false);
@@ -156,6 +162,9 @@ const DatabaseManagement = () => {
 		setUploadType(type);
 		setShowUploadModal(true);
 		setJsonData("");
+		setXlsxFile(null);
+		setXlsxDetectedMonth(null);
+		setXlsxStatus(null);
 	};
 
 	const handleUpload = async () => {
@@ -322,6 +331,244 @@ const DatabaseManagement = () => {
 		} finally {
 			setIsDeleting(false);
 		}
+	};
+
+	// ── Excel file processing helpers (for upload modal) ──
+
+	const getDaysInMonthFromStr = (monthStr) => {
+		const yearMatch = monthStr.match(/(\d{4})年/);
+		const monthMatch = monthStr.match(/(\d{2})月/);
+		if (!yearMatch || !monthMatch) return 31;
+		return new Date(parseInt(yearMatch[1]), parseInt(monthMatch[1]), 0).getDate();
+	};
+
+	const convertToDataRoster = (worksheet, month) => {
+		try {
+			const XLSX = window.XLSX;
+			const employees = [];
+			let totalDuties = 0;
+			let completeEmployees = 0;
+			const daysInMonth = getDaysInMonthFromStr(month);
+			const range = XLSX.utils.decode_range(worksheet["!ref"]);
+			for (let row = 0; row <= range.e.r; row++) {
+				const empCell = worksheet[XLSX.utils.encode_cell({ r: row, c: 5 })];
+				if (empCell && empCell.v && /^\d{5}$/.test(empCell.v.toString().trim())) {
+					const employeeID = empCell.v.toString().trim();
+					const nameCell = worksheet[XLSX.utils.encode_cell({ r: row, c: 6 })];
+					const employeeName = nameCell && nameCell.v ? nameCell.v.toString().trim() : "";
+					const duties = [];
+					for (let day = 0; day < daysInMonth; day++) {
+						const dutyCol = 7 + day;
+						const mainCell = worksheet[XLSX.utils.encode_cell({ r: row, c: dutyCol })];
+						const mainDuty = mainCell ? (mainCell.w || (mainCell.v ? mainCell.v.toString() : "")).trim() : "";
+						const nextCell = worksheet[XLSX.utils.encode_cell({ r: row + 1, c: dutyCol })];
+						const nextDuty = nextCell ? (nextCell.w || (nextCell.v ? nextCell.v.toString() : "")).trim() : "";
+						let combinedDuty = "";
+						if (mainDuty && nextDuty) {
+							combinedDuty = `${mainDuty.replace(/\n/g, "\\")}\\${nextDuty.replace(/\n/g, "\\")}`;
+						} else if (mainDuty) {
+							combinedDuty = mainDuty.replace(/\n/g, "\\");
+						} else if (nextDuty) {
+							combinedDuty = nextDuty.replace(/\n/g, "\\");
+						}
+						duties.push(combinedDuty);
+						if (combinedDuty) totalDuties++;
+					}
+					const nonEmptyDuties = duties.filter((d) => d !== "").length;
+					if (nonEmptyDuties > 0) {
+						employees.push({ employeeID, employeeName, duties });
+						if (nonEmptyDuties >= 15) completeEmployees++;
+					}
+				}
+			}
+			if (employees.length === 0) return { success: false, error: "找不到組員資料" };
+			const seenIDs = new Set();
+			const uniqueEmployees = [];
+			employees.forEach((emp) => {
+				if (!seenIDs.has(emp.employeeID)) {
+					seenIDs.add(emp.employeeID);
+					uniqueEmployees.push({ employeeID: emp.employeeID, duties: emp.duties });
+				}
+			});
+			return { success: true, data: { month, crew_schedules: uniqueEmployees } };
+		} catch (error) {
+			return { success: false, error: error.message };
+		}
+	};
+
+	const extractFlightDutiesCompanyFormat = (workbook, monthStr) => {
+		const formatTime = (excelDate) => {
+			if (!excelDate) return null;
+			try { return new Date(excelDate).toTimeString().substring(0, 5); } catch { return null; }
+		};
+		const getDayFromSheetName = (sheetName) => {
+			const dayMap = { "週一": 1, "週二": 2, "週三": 3, "週四": 4, "週五": 5, "週六": 6, "週日": 7 };
+			for (const [chinese, dayNum] of Object.entries(dayMap)) {
+				if (sheetName.includes(chinese)) return dayNum;
+			}
+			return null;
+		};
+		const dutyRecords = [];
+		const amDutyRows = [4,8,12,16,20,24,28,32,36,40,44,48,52,56,60,64,68,72,76,80];
+		const pmDutyRows = [5,9,13,17,21,25,29,33,37,41,45,49,53,57,61,65,69,73,77,81];
+		workbook.SheetNames.forEach((sheetName) => {
+			const sheet = workbook.Sheets[sheetName];
+			const dayOfWeek = getDayFromSheetName(sheetName);
+			if (!dayOfWeek) return;
+			let scheduleType = "regular";
+			let specialDate = null;
+			if (sheetName.includes("22日")) { scheduleType = "special"; specialDate = 22; }
+			else if (sheetName.includes("29日")) { scheduleType = "special"; specialDate = 29; }
+			const foundDuties = new Set();
+			amDutyRows.forEach((row) => {
+				const dutyCell = sheet["B" + row];
+				if (!dutyCell || !dutyCell.w) return;
+				const dutyCode = dutyCell.w.toString().replace("-", "").trim();
+				if (!dutyCode.match(/^[A-Z][2]$/) || foundDuties.has(dutyCode) || ["U2","U4","U6","U8"].includes(dutyCode)) return;
+				const reportCell = sheet["C" + row];
+				const reportTime = reportCell && reportCell.v ? formatTime(reportCell.v) : null;
+				if (!reportTime || reportTime === "00:00") return;
+				const sectors = [];
+				for (let col = 5; col <= 10; col++) {
+					const timeCell = sheet[String.fromCharCode(64 + col) + (row + 2)];
+					if (timeCell && timeCell.w && timeCell.w.match(/^\d{1,2}:\d{2}$/)) sectors.push(timeCell.w);
+					else break;
+				}
+				if (sectors.length > 0 && [2, 4, 6].includes(sectors.length)) {
+					dutyRecords.push({ month_id: monthStr, duty_code: dutyCode, day_of_week: dayOfWeek, schedule_type: scheduleType, special_date: specialDate, reporting_time: reportTime, end_time: sectors[sectors.length - 1], total_sectors: sectors.length, duty_type: "AM", priority: scheduleType === "special" ? 1 : 0 });
+					foundDuties.add(dutyCode);
+				}
+			});
+			pmDutyRows.forEach((row) => {
+				const dutyCell = sheet["B" + row];
+				if (!dutyCell || !dutyCell.w) return;
+				const dutyCode = dutyCell.w.toString().replace("-", "").trim();
+				if (!dutyCode.match(/^[A-Z][4]$/) || foundDuties.has(dutyCode) || ["U2","U4","U6","U8"].includes(dutyCode)) return;
+				const reportCell = sheet["C" + row];
+				const reportTime = reportCell && reportCell.v ? formatTime(reportCell.v) : null;
+				if (!reportTime || reportTime === "00:00") return;
+				const sectors = [];
+				for (let col = 12; col <= 17; col++) {
+					const timeCell = sheet[String.fromCharCode(64 + col) + (row + 1)];
+					if (timeCell && timeCell.w && timeCell.w.match(/^\d{1,2}:\d{2}$/)) sectors.push(timeCell.w);
+					else break;
+				}
+				if (sectors.length > 0 && [2, 4, 6].includes(sectors.length)) {
+					dutyRecords.push({ month_id: monthStr, duty_code: dutyCode, day_of_week: dayOfWeek, schedule_type: scheduleType, special_date: specialDate, reporting_time: reportTime, end_time: sectors[sectors.length - 1], total_sectors: sectors.length, duty_type: "PM", priority: scheduleType === "special" ? 1 : 0 });
+					foundDuties.add(dutyCode);
+				}
+			});
+		});
+		if (dutyRecords.length === 0) return { success: false, error: "未找到任何班務記錄" };
+		return { success: true, data: dutyRecords };
+	};
+
+	const loadXLSX = () => new Promise((resolve, reject) => {
+		if (window.XLSX) { resolve(window.XLSX); return; }
+		const script = document.createElement("script");
+		script.src = "https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js";
+		script.onload = () => resolve(window.XLSX);
+		script.onerror = () => reject(new Error("無法載入 XLSX 套件"));
+		document.head.appendChild(script);
+	});
+
+	const handleExcelFileChange = (e) => {
+		const file = e.target.files[0];
+		if (!file) { setXlsxFile(null); setXlsxDetectedMonth(null); setXlsxStatus(null); return; }
+		setXlsxFile(file);
+		setXlsxDetectedMonth(null);
+		setXlsxStatus({ message: `已選擇: ${file.name}，正在偵測月份...`, type: "processing" });
+
+		loadXLSX().then((XLSX) => {
+			const reader = new FileReader();
+			reader.onload = (ev) => {
+				try {
+					const data = new Uint8Array(ev.target.result);
+					const workbook = XLSX.read(data, { type: "array" });
+					const monthMap = { JAN:"01",FEB:"02",MAR:"03",APR:"04",MAY:"05",JUN:"06",JUL:"07",AUG:"08",SEP:"09",OCT:"10",NOV:"11",DEC:"12" };
+
+					let detectedYear = null, detectedMonthNum = null;
+
+					if (uploadType === "dispatch-duty") {
+						for (const sheetName of workbook.SheetNames) {
+							const yearMatch = sheetName.match(/(\d{4})/);
+							if (yearMatch && !detectedYear) detectedYear = yearMatch[1];
+							for (const [abbr, num] of Object.entries(monthMap)) {
+								if (sheetName.toUpperCase().includes(abbr) && !detectedMonthNum) { detectedMonthNum = num; break; }
+							}
+						}
+						if (!detectedYear && workbook.SheetNames.length > 0) {
+							const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
+							const o1Cell = firstSheet && firstSheet["O1"];
+							if (o1Cell && o1Cell.v) {
+								const m = o1Cell.v.toString().match(/(\d{4})/);
+								if (m) detectedYear = m[1];
+							}
+						}
+					} else {
+						const ws = workbook.Sheets["班表輸入"] || workbook.Sheets[workbook.SheetNames[0]];
+						const e1Cell = ws && ws["E1"];
+						if (e1Cell && e1Cell.v) {
+							const val = e1Cell.v.toString();
+							const ym = val.match(/(\d{4})/);
+							const mm = val.match(/(\d{1,2})月/);
+							if (ym) detectedYear = ym[1];
+							if (mm) detectedMonthNum = mm[1].padStart(2, "0");
+						}
+					}
+
+					if (!detectedYear) detectedYear = new Date().getFullYear().toString();
+					if (!detectedMonthNum) detectedMonthNum = (new Date().getMonth() + 1).toString().padStart(2, "0");
+
+					const month = `${detectedYear}年${detectedMonthNum}月`;
+					setXlsxDetectedMonth(month);
+					setXlsxStatus({ message: `偵測到月份：${month}，點選「轉換並填入」以產生JSON`, type: "success" });
+				} catch (err) {
+					setXlsxStatus({ message: `檔案分析失敗: ${err.message}`, type: "error" });
+				}
+			};
+			reader.readAsArrayBuffer(file);
+		}).catch((err) => {
+			setXlsxStatus({ message: err.message, type: "error" });
+		});
+	};
+
+	const handleExcelConvert = () => {
+		if (!xlsxFile || !xlsxDetectedMonth) return;
+
+		setIsProcessingExcel(true);
+		setXlsxStatus({ message: "正在轉換...", type: "processing" });
+
+		loadXLSX().then((XLSX) => {
+			const reader = new FileReader();
+			reader.onload = (ev) => {
+				try {
+					const data = new Uint8Array(ev.target.result);
+					const workbook = XLSX.read(data, { cellStyles: true, cellFormulas: true, cellDates: true, cellNF: true, sheetStubs: true });
+					let result;
+					if (uploadType === "dispatch-duty") {
+						result = extractFlightDutiesCompanyFormat(workbook, xlsxDetectedMonth);
+					} else {
+						const ws = workbook.Sheets["班表輸入"] || workbook.Sheets[workbook.SheetNames[0]];
+						result = convertToDataRoster(ws, xlsxDetectedMonth);
+					}
+					if (result.success) {
+						setJsonData(JSON.stringify(result.data, null, 2));
+						setXlsxStatus({ message: `轉換成功！JSON已填入下方，確認後點選「確認上傳」`, type: "success" });
+					} else {
+						setXlsxStatus({ message: `轉換失敗: ${result.error}`, type: "error" });
+					}
+				} catch (err) {
+					setXlsxStatus({ message: `處理失敗: ${err.message}`, type: "error" });
+				} finally {
+					setIsProcessingExcel(false);
+				}
+			};
+			reader.readAsArrayBuffer(xlsxFile);
+		}).catch((err) => {
+			setXlsxStatus({ message: err.message, type: "error" });
+			setIsProcessingExcel(false);
+		});
 	};
 
 	// User management functions
@@ -805,6 +1052,38 @@ const DatabaseManagement = () => {
 							</button>
 						</div>
 						<div className={styles.modalBody}>
+							{/* Excel file upload shortcut */}
+							<div className={styles.excelUploadSection}>
+								<div className={styles.excelUploadRow}>
+									<label className={styles.excelFileLabel}>
+										<Upload size={15} />
+										選擇Excel檔案
+										<input
+											type="file"
+											accept=".xlsx,.xls"
+											className={styles.excelFileInput}
+											onChange={handleExcelFileChange}
+										/>
+									</label>
+									{xlsxDetectedMonth && (
+										<span className={styles.excelDetectedMonth}>偵測月份：{xlsxDetectedMonth}</span>
+									)}
+									<button
+										className={styles.excelConvertButton}
+										onClick={handleExcelConvert}
+										disabled={!xlsxFile || !xlsxDetectedMonth || isProcessingExcel}
+									>
+										{isProcessingExcel ? <div className={styles.buttonSpinner}></div> : null}
+										轉換並填入
+									</button>
+								</div>
+								{xlsxStatus && (
+									<p className={`${styles.excelStatus} ${styles["excelStatus_" + xlsxStatus.type]}`}>
+										{xlsxStatus.message}
+									</p>
+								)}
+								<div className={styles.excelDivider}><span>或手動貼上JSON</span></div>
+							</div>
 							<div className={styles.uploadInstructions}>
 								<h4>上傳說明：</h4>
 								<ul>

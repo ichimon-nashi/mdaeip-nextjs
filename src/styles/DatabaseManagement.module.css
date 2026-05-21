@@ -2205,3 +2205,110 @@
 		height: 34px;
 	}
 }
+/* ── Excel upload section inside upload modal ── */
+.excelUploadSection {
+	margin-bottom: 16px;
+}
+
+.excelUploadRow {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	flex-wrap: wrap;
+}
+
+.excelFileLabel {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	padding: 8px 14px;
+	background: #3b82f6;
+	color: #fff;
+	border-radius: 6px;
+	font-size: 0.85rem;
+	font-weight: 500;
+	cursor: pointer;
+	transition: background 0.2s;
+	white-space: nowrap;
+}
+
+.excelFileLabel:hover {
+	background: #2563eb;
+}
+
+.excelFileInput {
+	display: none;
+}
+
+.excelDetectedMonth {
+	font-size: 0.83rem;
+	color: #6366f1;
+	font-weight: 500;
+	background: #ede9fe;
+	padding: 4px 10px;
+	border-radius: 20px;
+}
+
+.excelConvertButton {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	padding: 8px 14px;
+	background: #10b981;
+	color: #fff;
+	border: none;
+	border-radius: 6px;
+	font-size: 0.85rem;
+	font-weight: 500;
+	cursor: pointer;
+	transition: background 0.2s;
+	white-space: nowrap;
+}
+
+.excelConvertButton:hover:not(:disabled) {
+	background: #059669;
+}
+
+.excelConvertButton:disabled {
+	opacity: 0.45;
+	cursor: not-allowed;
+}
+
+.excelStatus {
+	margin-top: 8px;
+	font-size: 0.82rem;
+	padding: 6px 10px;
+	border-radius: 5px;
+}
+
+.excelStatus_processing {
+	background: #eff6ff;
+	color: #3b82f6;
+}
+
+.excelStatus_success {
+	background: #f0fdf4;
+	color: #16a34a;
+}
+
+.excelStatus_error {
+	background: #fef2f2;
+	color: #dc2626;
+}
+
+.excelDivider {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	margin: 14px 0 4px;
+	color: #9ca3af;
+	font-size: 0.8rem;
+}
+
+.excelDivider::before,
+.excelDivider::after {
+	content: "";
+	flex: 1;
+	height: 1px;
+	background: #e5e7eb;
+}

@@ -19,6 +19,7 @@ const ETRGenerator = () => {
 	const [selectedTime, setSelectedTime] = useState("23:59");
 	const [noOfBulletin, setNoOfBulletin] = useState(5);
 	const [is738Mission, setIs738Mission] = useState(false);
+	const [isNo738, setIsNo738] = useState(false);
 	const [textToCopy, setTextToCopy] = useState("");
 	const [copyStatus, setCopyStatus] = useState(false);
 	const [bulletinData, setBulletinData] = useState([]);
@@ -67,6 +68,7 @@ const ETRGenerator = () => {
 		bulletinData,
 		additionalRemarkData,
 		is738Mission,
+		isNo738,
 	]);
 
 	const loadData = async () => {
@@ -164,6 +166,25 @@ const ETRGenerator = () => {
 		.subtract(7, "days")
 		.format("YYYY-MM-DD");
 
+	// Returns the chapter string of the currently active regular CCOM period, or null
+	const getCurrentCcomChapter = () => {
+		for (let i = 0; i < ccomData.length; i++) {
+			if (
+				formattedMonth >= ccomData[i]["startDate"] &&
+				formattedMonth <= ccomData[i]["endDate"]
+			) {
+				return ccomData[i]["chapter"];
+			}
+		}
+		return null;
+	};
+
+	// Returns the question list for chapter 10 (used as fallback for 無738資格)
+	const getCh10QuestionList = () => {
+		const ch10Entry = ccomData.find((d) => d["chapter"] === "10");
+		return ch10Entry ? ch10Entry["questionList"] : [];
+	};
+
 	const getCCOMQuestion = () => {
 		const randomCCOMQuestion = [];
 		const currentDate = moment(startDate).format("YYYY-MM-DD");
@@ -174,7 +195,6 @@ const ETRGenerator = () => {
 				currentDate >= specialCcomData[i]["startDate"] &&
 				currentDate <= specialCcomData[i]["endDate"]
 			) {
-				// Add the special CCOM question
 				if (is738Mission) {
 					randomCCOMQuestion.push(
 						`1. ${specialCcomData[i]["mission738Text"]}`
@@ -184,7 +204,7 @@ const ETRGenerator = () => {
 						`1. ${specialCcomData[i]["f2Text"]}`
 					);
 				}
-				break; // Stop after finding the first matching special range
+				break;
 			}
 		}
 		
@@ -195,7 +215,6 @@ const ETRGenerator = () => {
 				formattedMonth <= ccomData[i]["endDate"]
 			) {
 				if (ccomData[i]["chapter"] === "12") {
-					// Day of week mapping (0-6 for array index)
 					const dayMapping = {
 						"Monday": 0,
 						"Tuesday": 1,
@@ -208,8 +227,6 @@ const ETRGenerator = () => {
 					
 					const dayIndex = dayMapping[dayOfWeek];
 					const questionRange = ccomData[i]["questionList"][dayIndex];
-					
-					// Determine the question number based on whether special question exists
 					const questionNumber = randomCCOMQuestion.length > 0 ? 2 : 1;
 					
 					if (is738Mission) {
@@ -221,15 +238,23 @@ const ETRGenerator = () => {
 							`${questionNumber}. 依公告抽問飛安暨主題加強宣導月題庫。抽問 F2${questionRange}，抽問結果正常。`
 						);
 					}
+				} else if (ccomData[i]["chapter"] === "11" && isNo738 && !is738Mission) {
+					// 無738資格：randomly pick from chapter 10 instead
+					const ch10List = getCh10QuestionList();
+					if (ch10List.length > 0) {
+						const randomNumber = Math.floor(Math.random() * ch10List.length);
+						const questionNumber = randomCCOMQuestion.length > 0 ? 2 : 1;
+						randomCCOMQuestion.push(
+							`${questionNumber}. F2無738資格，改抽問 F2 CCOM Ch.${ch10List[randomNumber]}，抽問結果正常。`
+						);
+					}
 				} else {
 					const questionList = ccomData[i]["questionList"];
 					
 					if (is738Mission) {
-						// Generate 3 different random questions
 						const selectedQuestions = [];
 						const availableIndices = [...Array(questionList.length).keys()];
 						
-						// Pick 3 unique random indices
 						for (let j = 0; j < 3 && availableIndices.length > 0; j++) {
 							const randomIndex = Math.floor(Math.random() * availableIndices.length);
 							const questionIndex = availableIndices[randomIndex];
@@ -237,7 +262,6 @@ const ETRGenerator = () => {
 							availableIndices.splice(randomIndex, 1);
 						}
 						
-						// Determine starting question number
 						const startNumber = randomCCOMQuestion.length > 0 ? 2 : 1;
 						
 						randomCCOMQuestion.push(
@@ -249,8 +273,6 @@ const ETRGenerator = () => {
 						const randomNumber = Math.floor(
 							Math.random() * questionList.length
 						);
-						
-						// Determine the question number based on whether special question exists
 						const questionNumber = randomCCOMQuestion.length > 0 ? 2 : 1;
 						
 						randomCCOMQuestion.push(
@@ -440,11 +462,34 @@ const ETRGenerator = () => {
 							<input
 								type="checkbox"
 								checked={is738Mission}
-								onChange={(e) => setIs738Mission(e.target.checked)}
+								onChange={(e) => {
+									if (e.target.checked && isNo738) {
+										toast.error("🤬  請問是智障嗎？");
+										return;
+									}
+									setIs738Mission(e.target.checked);
+								}}
 								className={styles.missionCheckbox}
 							/>
 							<span>738任務</span>
 						</label>
+						{getCurrentCcomChapter() === "11" && !is738Mission && (
+							<label className={styles.checkboxLabel}>
+								<input
+									type="checkbox"
+									checked={isNo738}
+									onChange={(e) => {
+										if (e.target.checked && is738Mission) {
+											toast.error("🤬  請問是智障嗎？");
+											return;
+										}
+										setIsNo738(e.target.checked);
+									}}
+									className={styles.missionCheckbox}
+								/>
+								<span>無738資格</span>
+							</label>
+						)}
 					</div>
 				</div>
 
