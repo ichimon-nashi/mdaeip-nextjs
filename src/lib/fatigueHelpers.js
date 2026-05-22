@@ -741,7 +741,7 @@ export function buildDroppedItemsFromSchedule(scheduleData, pdxDutyMap, year, mo
 	const monthIndex  = month - 1;
 	const monthPadded = String(month).padStart(2, "0");
 
-	const REST_CODES  = ["例", "休", "假"];
+	const REST_CODES  = ["例", "休", "假", "離", "職"];
 	// Leave codes treated as rest in droppedItems (no FT/FDP/DP accrual, no MRT check)
 	const LEAVE_CODES_SET = new Set([
 		"A/L", "S/L", "P/L", "福補", "補休", "喪", "婚", "空",
