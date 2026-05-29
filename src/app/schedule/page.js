@@ -495,7 +495,7 @@ export default function SchedulePage() {
 		x: 0,
 		y: 0,
 		above: false,
-		days: {},     // schedule.days for CSV export
+		days: {},     // schedule.days for Google Calendar export
 	});
 	// ── PDX bulk-fetch for current month ────────────────────────────────────
 	// Runs when currentMonth changes. Stores data in a ref (no re-render needed).
@@ -687,48 +687,104 @@ export default function SchedulePage() {
 		});
 	}, [empTooltipData.visible, empTooltipData.employeeId, user?.id]);
 
-	// ── Export schedule to Google Calendar CSV ───────────────────────────────
-	const handleExportToGoogleCalendar = useCallback(() => {
+	// ── Google Identity Services: load script once ────────────────────────────
+	const GOOGLE_CLIENT_ID = '238053199889-um5ssk3eprda6epciv8r5kcvia71t9oi.apps.googleusercontent.com';
+	const tokenClientRef = useRef(null);
+
+	useEffect(() => {
+		if (typeof window === 'undefined') return;
+		if (document.getElementById('gsi-script')) return; // already loaded
+		const script = document.createElement('script');
+		script.id = 'gsi-script';
+		script.src = 'https://accounts.google.com/gsi/client';
+		script.async = true;
+		script.defer = true;
+		document.head.appendChild(script);
+	}, []);
+
+	// ── Add schedule to Google Calendar ──────────────────────────────────────
+	const handleAddToGoogleCalendar = useCallback(() => {
 		const { days, employeeId, name } = empTooltipData;
 		if (!days || !Object.keys(days).length) {
-			toast('無班表資料可匯出', { icon: '⚠️' });
+			toast('無班表資料', { icon: '⚠️' });
 			return;
 		}
 
-		const rows = [['Subject', 'Start Date']];
-
+		// Build event list — skip empty / 空
+		const events = [];
 		Object.entries(days)
 			.sort(([a], [b]) => a.localeCompare(b))
 			.forEach(([dateStr, dutyRaw]) => {
 				if (!dutyRaw) return;
-				// Replace backslashes and newlines with spaces (e.g. "會\一級" → "會 一級")
-				const subject = dutyRaw.toString().replace(/[\\n\n]/g, ' ').trim();
+				const subject = dutyRaw.toString().replace(/[\\]/g, ' ').replace(/\n/g, ' ').trim();
 				if (!subject || subject === '空') return;
-				// Convert YYYY-MM-DD → MM/DD/YYYY
-				const [y, m, d] = dateStr.split('-');
-				rows.push([subject, `${m}/${d}/${y}`]);
+				// Google Calendar all-day event: date only, no time
+				events.push({
+					summary: subject,
+					start: { date: dateStr },
+					end:   { date: dateStr },
+				});
 			});
 
-		if (rows.length <= 1) {
-			toast('此月份無班表資料可匯出', { icon: '⚠️' });
+		if (!events.length) {
+			toast('此月份無班表資料', { icon: '⚠️' });
 			return;
 		}
 
-		const csvContent = rows.map(r => r.join(',')).join('\r\n');
-		const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' });
-		const url = URL.createObjectURL(blob);
-		const link = document.createElement('a');
-		link.href = url;
+		// Insert events one-by-one via Calendar API using the access token
+		const insertAll = async (accessToken) => {
+			const toastId = toast.loading(`新增中… (0/${events.length})`);
+			let successCount = 0;
+			for (let i = 0; i < events.length; i++) {
+				try {
+					const res = await fetch(
+						'https://www.googleapis.com/calendar/v3/calendars/primary/events',
+						{
+							method: 'POST',
+							headers: {
+								'Authorization': `Bearer ${accessToken}`,
+								'Content-Type': 'application/json',
+							},
+							body: JSON.stringify(events[i]),
+						}
+					);
+					if (res.ok) {
+						successCount++;
+						toast.loading(`新增中… (${successCount}/${events.length})`, { id: toastId });
+					}
+				} catch (err) {
+					console.error('Error inserting event:', events[i].summary, err);
+				}
+			}
+			toast.dismiss(toastId);
+			toast.success(`已新增 ${successCount} 筆至Google日曆！`);
+		};
 
-		// Filename: 2026年6月班表_51892.csv — strip leading zero from month
-		const monthDisplay = currentMonth.replace(/年0?(\d+)月/, '年$1月');
-		link.download = `${monthDisplay}班表_${employeeId}.csv`;
-		document.body.appendChild(link);
-		link.click();
-		document.body.removeChild(link);
-		URL.revokeObjectURL(url);
+		// Initialise token client on first use, then request token
+		if (!tokenClientRef.current) {
+			tokenClientRef.current = window.google.accounts.oauth2.initTokenClient({
+				client_id: GOOGLE_CLIENT_ID,
+				scope: 'https://www.googleapis.com/auth/calendar.events',
+				callback: (response) => {
+					if (response.error) {
+						toast.error('Google 授權失敗');
+						return;
+					}
+					insertAll(response.access_token);
+				},
+			});
+		} else {
+			// Update callback for current empTooltipData closure
+			tokenClientRef.current.callback = (response) => {
+				if (response.error) {
+					toast.error('Google 授權失敗');
+					return;
+				}
+				insertAll(response.access_token);
+			};
+		}
 
-		toast.success('班表已匯出！');
+		tokenClientRef.current.requestAccessToken({ prompt: '' });
 	}, [empTooltipData, currentMonth]);
 
 	// Flight duty cache for performance
@@ -1231,9 +1287,9 @@ export default function SchedulePage() {
 						)}
 						<button
 							className={styles.empTooltipExportBtn}
-							onClick={handleExportToGoogleCalendar}
+							onClick={handleAddToGoogleCalendar}
 						>
-							📅 匯出csv日曆
+							📅 新增至Google日曆
 						</button>
 					</div>
 				</div>

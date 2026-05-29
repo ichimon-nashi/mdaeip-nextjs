@@ -183,7 +183,7 @@ export const patchUpdates = [
 	{
 		date: "2026-05-29",
 		appName: "任務互換系統",
-		updateInfo: ["點選組員名字可匯出csv班表，方便快速匯入至Google月曆"],
+		updateInfo: ["點選組員名字可匯出至Google月曆"],
 	},
 	{
 		date: "2026-05-29",
