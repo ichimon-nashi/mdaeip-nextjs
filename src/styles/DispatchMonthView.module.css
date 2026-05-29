@@ -571,6 +571,22 @@
 	margin-left: auto;
 }
 
+/* Weekday text row */
+.dutyCardDots {
+	display: flex;
+	gap: 2px;
+	margin-top: 5px;
+	white-space: nowrap;
+	overflow: hidden;
+}
+.dutyCardWeekDot {
+	font-size: 9px;
+	font-weight: 700;
+	color: #e9ecef;
+	flex-shrink: 0;
+	line-height: 1;
+}
+
 .dutyCardRoute {
 	font-size: 11px;
 	color: #374151;

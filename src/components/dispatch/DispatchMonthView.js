@@ -1193,6 +1193,24 @@ export default function DispatchMonthView({
 																		{duty.label ||
 																			`${duty.date_from?.slice(5)} – ${duty.date_to?.slice(5)}`}
 																	</div>
+
+																	{/* Weekday characters — skip for specific-date duties */}
+																	{!duty.specific_dates?.length && (
+																		<div className={styles.dutyCardDots}>
+																			{WEEKDAYS.map((d, i) => {
+																				const active = duty.active_weekdays?.includes(d);
+																				return (
+																					<span
+																						key={d}
+																						className={styles.dutyCardWeekDot}
+																						style={active ? { color: baseColors[base] } : undefined}
+																					>
+																						{DAY_NAMES[i]}
+																					</span>
+																				);
+																			})}
+																		</div>
+																	)}
 																</div>
 															);
 														})}

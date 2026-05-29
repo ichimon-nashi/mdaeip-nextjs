@@ -1488,6 +1488,45 @@
 		padding: 0.875rem 1.5rem;
 	}
 }
+
+/* ── Admin: Person A proxy selection ─────────────────────────────────────── */
+.submitButtonFixed {
+	flex-direction: column;
+	gap: 0.5rem;
+}
+
+.adminPersonAHint {
+	font-size: 0.85rem;
+	font-weight: 600;
+	color: #fde68a;
+	text-align: center;
+	padding: 0.25rem 0.75rem;
+	background: rgba(251, 191, 36, 0.15);
+	border: 1px solid rgba(251, 191, 36, 0.35);
+	border-radius: 8px;
+	width: 100%;
+	max-width: 600px;
+}
+
+.personARow {
+	background-color: rgba(251, 191, 36, 0.08) !important;
+}
+
+.personANameCell {
+	background-color: rgba(251, 191, 36, 0.15) !important;
+}
+
+.personABadge {
+	display: inline-block;
+	padding: 0.1rem 0.4rem;
+	background: #f59e0b;
+	color: white;
+	border-radius: 4px;
+	font-size: 0.65rem;
+	font-weight: 700;
+	letter-spacing: 0.02em;
+}
+
 /* ─── Rich Schedule Tooltip ─────────────────────────────────────────────── */
 .schedTooltip {
 	position: fixed;

@@ -130,6 +130,10 @@ export default function SchedulePage() {
 	// Override map: { 'employeeId|YYYY-MM-DD': overrideRow } from schedule_day_overrides
 	const [overrideMap, setOverrideMap] = useState({});
 
+	// ── Admin proxy: Person A selection (admin only) ─────────────────────────
+	// null = not set; { id, name } = selected Person A
+	const [personA, setPersonA] = useState(null);
+
 	// Flight duty data state - REMOVED for performance
 	// const [flightDutyData, setFlightDutyData] = useState(new Map());
 	// const [flightDutyDetails, setFlightDutyDetails] = useState(new Map());
@@ -606,6 +610,17 @@ export default function SchedulePage() {
 	const handleNameCellClick = useCallback((e, schedule) => {
 		e.stopPropagation();
 
+		// ── Admin mode: click name to set/unset Person A ──────────────────────
+		if (user?.id === 'admin') {
+			setEmpTooltipData(prev => ({ ...prev, visible: false }));
+			setPersonA(prev =>
+				prev?.id === schedule.employeeID
+					? null
+					: { id: schedule.employeeID, name: schedule.name || schedule.employeeID }
+			);
+			return;
+		}
+
 		// Toggle off if same employee clicked again
 		if (empTooltipData.visible && empTooltipData.employeeId === schedule.employeeID) {
 			setEmpTooltipData(prev => ({ ...prev, visible: false }));
@@ -667,7 +682,7 @@ export default function SchedulePage() {
 			duties6,
 			x, y, above,
 		});
-	}, [empTooltipData.visible, empTooltipData.employeeId]);
+	}, [empTooltipData.visible, empTooltipData.employeeId, user?.id]);
 
 	// Flight duty cache for performance
 	const flightDutyCache = useRef(new Map());
@@ -876,6 +891,7 @@ export default function SchedulePage() {
 		setActiveTab(base);
 		setSelectedDuties([]);
 		setHighlightedDates({});
+		setPersonA(null);
 	}, [activeTab, scheduleLoading]);
 
 	const handleDutyChangeClick = useCallback(() => {
@@ -895,9 +911,17 @@ export default function SchedulePage() {
 		return;
 	}
 
+	// ── Admin proxy: must select Person A first ───────────────────────────
+	if (user?.id === 'admin' && !personA) {
+		toast("請先點選甲方姓名！", { icon: '👆', duration: 3000 });
+		return;
+	}
+
+	const isAdminProxy = user?.id === 'admin' && personA;
+
 	const dutyChangeData = {
-		firstID: user?.id || "",
-		firstName: user?.name || "",
+		firstID:   isAdminProxy ? personA.id   : (user?.id   || ""),
+		firstName: isAdminProxy ? personA.name : (user?.name || ""),
 		selectedMonth: currentMonth,
 		allDuties: selectedDuties,
 		userSchedule: scheduleData.userSchedule  // ← FIX: Include Person A's schedule
@@ -907,7 +931,7 @@ export default function SchedulePage() {
 
 	localStorage.setItem('dutyChangeData', JSON.stringify(dutyChangeData));
 	router.push('/duty-change');
-}, [selectedDuties, router, user, currentMonth, scheduleData.hasScheduleData, scheduleData.userSchedule]);
+}, [selectedDuties, router, user, currentMonth, scheduleData.hasScheduleData, scheduleData.userSchedule, personA]);
 
 	const handleMonthChange = useCallback(async (event) => {
 		const newMonth = event.target.value;
@@ -916,6 +940,7 @@ export default function SchedulePage() {
 		setCurrentMonth(newMonth);
 		setSelectedDuties([]);
 		setHighlightedDates({});
+		setPersonA(null);
 	}, [currentMonth]);
 
 	const handleClearAll = useCallback(() => {
@@ -941,20 +966,25 @@ export default function SchedulePage() {
 	), [scheduleData.allDates, formatDate, getDayOfWeek, isMobile]);
 
 	// ── UPDATED renderTableRow: reads swapRequestMap for outline classes ──────
-	const renderTableRow = useCallback((schedule, isUserSchedule = false) => (
-		<tr key={schedule.employeeID}>
+	const renderTableRow = useCallback((schedule, isUserSchedule = false) => {
+		const isPersonA = personA?.id === schedule.employeeID;
+		return (
+		<tr key={schedule.employeeID} className={isPersonA ? styles.personARow : ''}>
 			{!isMobile && (
 				<td className={styles.stickyCol + ' ' + styles.employeeIdCell}>
 					{schedule.employeeID}
 				</td>
 			)}
 			<td
-				className={styles.stickyCol + ' ' + styles.employeeNameCell + ' ' + styles.clickableNameCell}
+				className={styles.stickyCol + ' ' + styles.employeeNameCell + ' ' + styles.clickableNameCell + (isPersonA ? ' ' + styles.personANameCell : '')}
 				onClick={(e) => handleNameCellClick(e, schedule)}
 			>
 				<div className={styles.nameContainer}>
 					<div className={styles.employeeName}>{schedule.name || '-'}</div>
 					<div className={styles.badgeContainer}>
+						{isPersonA && (
+							<span className={styles.personABadge}>甲方</span>
+						)}
 						{schedule.rank && (
 							<span className={styles.rankBadge}>{schedule.rank}</span>
 						)}
@@ -1026,8 +1056,9 @@ export default function SchedulePage() {
 				);
 			})}
 		</tr>
+		);
 	// ── swapRequestMap added to dependency array ──────────────────────────────
-	), [scheduleData.allDates, selectedDuties, swapRequestMap, overrideMap, formatDutyText, getDutyBackgroundColor, getDutyFontSize, getEmployeesWithSameDuty, handleDutyCellClick, handleNameCellClick, isMobile]);
+	}, [scheduleData.allDates, selectedDuties, swapRequestMap, overrideMap, formatDutyText, getDutyBackgroundColor, getDutyFontSize, getEmployeesWithSameDuty, handleDutyCellClick, handleNameCellClick, isMobile, personA]);
 
 	// Table sync effects
 	useEffect(() => {
@@ -1459,6 +1490,13 @@ export default function SchedulePage() {
 
 						{/* Fixed submit button - always visible at bottom */}
 						<div className={styles.submitButtonFixed}>
+							{user?.id === 'admin' && (
+								<div className={styles.adminPersonAHint}>
+									{personA
+										? `甲方：${personA.name}（點擊姓名可更換）`
+										: '👆 請先點選甲方姓名'}
+								</div>
+							)}
 							<button 
 								className={styles.dutyChangeButtonFull}
 								onClick={handleDutyChangeClick}
