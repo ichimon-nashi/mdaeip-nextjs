@@ -609,6 +609,12 @@ export default function DispatchMonthView({
 		const from = duties.findIndex((d) => d.id === fromDutyId);
 		const to = duties.findIndex((d) => d.id === targetId);
 		if (from === -1 || to === -1) return;
+		// Only allow reorder within the same base
+		if (duties[from].base !== duties[to].base) {
+			setDragId(null);
+			setDragOverId(null);
+			return;
+		}
 
 		const reordered = [...duties];
 		const [moved] = reordered.splice(from, 1);
@@ -1133,151 +1139,65 @@ export default function DispatchMonthView({
 													{isCollapsed ? "▶" : "▼"}
 												</span>
 											</button>
-											{/* Accordion body */}
-											{!isCollapsed &&
-												baseDuties.map((duty) => (
-													<div
-														key={duty.id}
-														className={`${styles.dutyItem} ${selectedId === duty.id ? styles.active : ""} ${dragOverId === duty.id ? styles.dragOver : ""} ${styles["base" + duty.base] || ""}`}
-														onClick={() =>
-															setSelectedId(
-																duty.id,
-															)
-														}
-														draggable
-														onDragStart={() =>
-															setDragId(duty.id)
-														}
-														onDragOver={(e) => {
-															e.preventDefault();
-															setDragOverId(
-																duty.id,
+											{/* Accordion body — card grid, sorted alphabetically by duty_code */}
+											{!isCollapsed && (
+												<div className={styles.dutyCardGrid}>
+													{[...baseDuties]
+														.sort((a, b) =>
+															a.duty_code.localeCompare(b.duty_code),
+														)
+														.map((duty) => {
+															const sectorCount =
+																stats[duty.id]?.sector_count ?? null;
+															const sectorBadgeClass =
+																sectorCount === null
+																	? styles.dutyCardBadge
+																	: sectorCount <= 2
+																		? styles.dutyCardBadge2s
+																		: sectorCount <= 4
+																			? styles.dutyCardBadge4s
+																			: styles.dutyCardBadge6s;
+															return (
+																<div
+																	key={duty.id}
+																	className={`${styles.dutyCard} ${selectedId === duty.id ? styles.dutyCardActive : ""} ${styles["base" + duty.base] || ""}`}
+																	onClick={() =>
+																		setSelectedId(duty.id)
+																	}
+																>
+																	{/* Top row: code + badges */}
+																	<div className={styles.dutyCardTop}>
+																		<span className={styles.dutyCardCode}>
+																			{duty.duty_code}
+																		</span>
+																		<span className={sectorBadgeClass}>
+																			{sectorCount ?? "—"}s
+																		</span>
+																		{duty.aircraft_type === "B738" && (
+																			<span className={styles.dutyCardB738}>
+																				B738
+																			</span>
+																		)}
+																		{duty.label && (
+																			<span className={styles.dutyCardDot} />
+																		)}
+																	</div>
+
+																	{/* Route */}
+																	<div className={styles.dutyCardRoute}>
+																		{buildRoute(duty.id)}
+																	</div>
+
+																	{/* Label or date range */}
+																	<div className={styles.dutyCardMeta}>
+																		{duty.label ||
+																			`${duty.date_from?.slice(5)} – ${duty.date_to?.slice(5)}`}
+																	</div>
+																</div>
 															);
-														}}
-														onDragLeave={() =>
-															setDragOverId(null)
-														}
-														onDrop={() =>
-															handleDrop(duty.id)
-														}
-														onDragEnd={() => {
-															setDragId(null);
-															setDragOverId(null);
-														}}
-														style={{
-															opacity:
-																dragId ===
-																duty.id
-																	? 0.4
-																	: 1,
-															cursor: "grab",
-														}}
-													>
-														<div
-															className={
-																styles.dragHandle
-															}
-														>
-															<svg
-																width="10"
-																height="14"
-																viewBox="0 0 10 14"
-																fill="currentColor"
-															>
-																<circle
-																	cx="3"
-																	cy="2"
-																	r="1.2"
-																/>
-																<circle
-																	cx="7"
-																	cy="2"
-																	r="1.2"
-																/>
-																<circle
-																	cx="3"
-																	cy="7"
-																	r="1.2"
-																/>
-																<circle
-																	cx="7"
-																	cy="7"
-																	r="1.2"
-																/>
-																<circle
-																	cx="3"
-																	cy="12"
-																	r="1.2"
-																/>
-																<circle
-																	cx="7"
-																	cy="12"
-																	r="1.2"
-																/>
-															</svg>
-														</div>
-														{duty.label ? (
-															<div
-																className={
-																	styles.dutyItemOverrideDot
-																}
-															/>
-														) : (
-															<div
-																className={
-																	styles.dutyItemPlaceholder
-																}
-															/>
-														)}
-														<div
-															style={{
-																fontWeight: 600,
-																fontSize: 13,
-																color:
-																	selectedId ===
-																	duty.id
-																		? "#0f62fe"
-																		: "#1a1a1a",
-																minWidth: 28,
-															}}
-														>
-															{duty.duty_code}
-														</div>
-														<div
-															className={
-																styles.dutyItemMeta
-															}
-														>
-															<div
-																className={
-																	styles.dutyItemRoute
-																}
-															>
-																{buildRoute(
-																	duty.id,
-																)}
-															</div>
-															<div
-																className={
-																	styles.dutyItemRange
-																}
-															>
-																{duty.label ||
-																	`${duty.date_from?.slice(5)} – ${duty.date_to?.slice(5)}`}
-															</div>
-														</div>
-														<div
-															className={
-																styles.dutyItemSectors
-															}
-														>
-															{stats[duty.id]
-																?.sector_count ??
-																"—"}
-															s
-														</div>
-													</div>
-												))}
+														})}
+												</div>
+											)}
 										</div>
 									);
 								})
@@ -1685,7 +1605,7 @@ export default function DispatchMonthView({
 										<span
 											style={{
 												fontSize: 11,
-												color: "#777",
+												color: "#4b5563",
 												marginLeft: 8,
 											}}
 										>
