@@ -190,6 +190,26 @@
 	background: #ea5e2b;
 }
 
+.btnResetHighlight {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	padding: 8px 14px;
+	background: #fff;
+	color: #92400e;
+	border: 1px solid #fcd34d;
+	border-radius: 8px;
+	font-size: 13px;
+	font-weight: 500;
+	cursor: pointer;
+	transition: background 0.15s;
+	font-family: inherit;
+	white-space: nowrap;
+}
+.btnResetHighlight:hover {
+	background: #fffbeb;
+}
+
 .btnPublish {
 	display: flex;
 	align-items: center;
@@ -562,14 +582,6 @@
 }
 
 /* Amber dot indicator for special/override duties */
-.dutyCardDot {
-	width: 7px;
-	height: 7px;
-	background: #f59e0b;
-	border-radius: 50%;
-	flex-shrink: 0;
-	margin-left: auto;
-}
 
 /* Weekday text row */
 .dutyCardDots {
@@ -621,6 +633,55 @@
 		gap: 6px;
 		padding: 8px 8px;
 	}
+}
+
+/* Amber dot — absolute positioned, left of done button */
+.dutyCardDotAbs {
+	position: absolute;
+	top: 9px;
+	right: 27px;
+	width: 7px;
+	height: 7px;
+	background: #f59e0b;
+	border-radius: 50%;
+	flex-shrink: 0;
+}
+
+/* Done toggle button — top-right corner of card */
+.dutyCardDoneBtn {
+	position: absolute;
+	top: 6px;
+	right: 6px;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 16px;
+	height: 16px;
+	border-radius: 50%;
+	border: 1.5px solid #d1d5db;
+	background: #fff;
+	color: transparent;
+	font-size: 9px;
+	font-weight: 700;
+	cursor: pointer;
+	transition: all 0.15s;
+	flex-shrink: 0;
+	font-family: inherit;
+	z-index: 1;
+}
+.dutyCardDoneBtn:hover {
+	border-color: #16a34a;
+	color: #16a34a;
+}
+.dutyCardDoneBtnOn {
+	background: #16a34a;
+	border-color: #16a34a;
+	color: #fff;
+}
+.dutyCardDoneBtnOn:hover {
+	background: #dc2626;
+	border-color: #dc2626;
+	color: #fff;
 }
 
 /* ─── Detail Area ─────────────────────────── */
@@ -795,42 +856,65 @@
 }
 
 .sectorRow {
-	display: grid;
-	grid-template-columns: 44px 36px 14px 36px 1fr 44px;
+	display: flex;
 	align-items: center;
-	gap: 4px;
-	padding: 5px 0;
+	gap: 2.5rem;
+	padding: 8px 0;
 }
 
 .srDep {
-	font-size: 13px;
-	font-weight: 600;
-	color: #1a1a1a;
+	font-size: 15px;
+	font-weight: 700;
+	color: #17980b;
+	font-variant-numeric: tabular-nums;
+	white-space: nowrap;
+	flex-shrink: 0;
+}
+
+.srRoute {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	flex-shrink: 0;
 }
 .srFrom {
-	font-size: 13px;
+	font-size: 14px;
 	font-weight: 600;
-	color: #1a1a1a;
+	color: #2d63e0;
 }
 .srArrow {
-	font-size: 12px;
-	color: #777;
-	text-align: center;
+	font-size: 13px;
+	color: #818893;
 }
 .srTo {
-	font-size: 13px;
+	font-size: 14px;
 	font-weight: 600;
-	color: #1a1a1a;
-}
-.srFn {
-	font-size: 12px;
-	color: #555;
-	padding-left: 4px;
+	color: #a15fc5;
 }
 .srArr {
-	font-size: 13px;
-	color: #555;
-	text-align: right;
+	font-size: 15px;
+	font-weight: 700;
+	color: #a41919;
+	font-variant-numeric: tabular-nums;
+	white-space: nowrap;
+	flex-shrink: 0;
+}
+.srAcBadge {
+	font-size: 10px;
+	font-weight: 600;
+	color: #7c3aed;
+	background: #ede9fe;
+	border-radius: 4px;
+	padding: 1px 5px;
+	white-space: nowrap;
+	flex-shrink: 0;
+}
+.srFn {
+	font-size: 14px;
+	font-weight: 600;
+	color: #374151;
+	white-space: nowrap;
+	flex-shrink: 0;
 }
 
 .groundStop {
@@ -1418,24 +1502,17 @@
 }
 
 @media (max-width: 1024px) {
-	/* Tablet — stack vertically: sidebar on top (natural height), detail below */
+	/* Tablet — side-by-side split view, narrower sidebar */
 	.splitLayout {
-		grid-template-columns: 1fr;
-		height: auto;
-		overflow: visible;
-	}
-
-	.dutySidebar {
-		height: auto;
-		max-height: none;
-		border-right: none;
-		border-bottom: 1px solid #e8e8e8;
-		overflow-y: visible;
+		grid-template-columns: 220px 1fr;
+		height: calc(100vh - 114px);
 	}
 
 	.detailArea {
-		height: auto;
-		padding: 16px;
+		height: fit-content;
+		max-height: 100%;
+		overflow-y: auto;
+		align-self: start;
 	}
 }
 

@@ -152,6 +152,21 @@ export default function DispatchMonthView({
 	}
 	const lastEditedIdRef = useRef(null);
 
+	// Done/flagging state — persisted to localStorage per month
+	const doneStorageKey = `pdx_done_${month.id}`;
+	const [doneDutyIds, setDoneDutyIds] = useState(
+		() => new Set(JSON.parse(localStorage.getItem(doneStorageKey) || "[]")),
+	);
+	function toggleDone(dutyId, e) {
+		e.stopPropagation();
+		setDoneDutyIds((prev) => {
+			const next = new Set(prev);
+			next.has(dutyId) ? next.delete(dutyId) : next.add(dutyId);
+			localStorage.setItem(doneStorageKey, JSON.stringify([...next]));
+			return next;
+		});
+	}
+
 	// Cross-month duty loading: when week view shows adjacent months
 	const [crossMonthCache, setCrossMonthCache] = useState({}); // { "YYYY-MM": { duties, sectors } }
 	const [loadingCrossMonth, setLoadingCrossMonth] = useState(false);
@@ -599,6 +614,34 @@ export default function DispatchMonthView({
 		setSelectedId(data.id);
 	}
 
+	async function handleResetHighlights() {
+		const dutiesWithHighlights = duties.filter((d) =>
+			(sectors[d.id] || []).some((s) => s.is_highlight)
+		);
+		if (dutiesWithHighlights.length === 0) {
+			toast("目前沒有標記的航段");
+			return;
+		}
+		await Promise.all(
+			dutiesWithHighlights.map((d) =>
+				pdxSectorHelpers.replaceAll(
+					d.id,
+					(sectors[d.id] || []).map((s) => ({
+						flight_number: s.flight_number,
+						dep_airport: s.dep_airport,
+						dep_time: s.dep_time,
+						arr_airport: s.arr_airport,
+						arr_time: s.arr_time,
+						is_highlight: false,
+						aircraft_type: s.aircraft_type || null,
+					})),
+				)
+			),
+		);
+		toast.success("已清除所有航段標記");
+		await loadAll();
+	}
+
 	async function handleDrop(targetId, sourceId = null) {
 		const fromDutyId = sourceId || dragId;
 		if (!fromDutyId || fromDutyId === targetId) {
@@ -979,6 +1022,13 @@ export default function DispatchMonthView({
 				</div>
 				<div className={styles.topBarRight}>
 					<button
+						className={styles.btnResetHighlight}
+						onClick={handleResetHighlights}
+						title="清除本月所有航段星號標記"
+					>
+						清除 ★
+					</button>
+					<button
 						className={
 							monthState.status === "published"
 								? styles.btnUnpublish
@@ -1173,14 +1223,21 @@ export default function DispatchMonthView({
 																		<span className={sectorBadgeClass}>
 																			{sectorCount ?? "—"}s
 																		</span>
-																		{duty.aircraft_type === "B738" && (
-																			<span className={styles.dutyCardB738}>
-																				B738
-																			</span>
-																		)}
-																		{duty.label && (
-																			<span className={styles.dutyCardDot} />
-																		)}
+																		{(() => {
+																			const dutySectorTypes = new Set(
+																				(sectors[duty.id] || []).map((s) => s.aircraft_type).filter(Boolean)
+																			);
+																			const isMixed =
+																				dutySectorTypes.size > 1 ||
+																				(dutySectorTypes.size === 1 && !dutySectorTypes.has(duty.aircraft_type));
+																			if (isMixed) return (
+																				<span className={styles.dutyCardB738} style={{ background: "#ede9fe", color: "#7c3aed" }}>ATR/B738</span>
+																			);
+																			if (duty.aircraft_type === "B738") return (
+																				<span className={styles.dutyCardB738}>B738</span>
+																			);
+																			return null;
+																		})()}
 																	</div>
 
 																	{/* Route */}
@@ -1211,6 +1268,18 @@ export default function DispatchMonthView({
 																			})}
 																		</div>
 																	)}
+																	{/* Special date dot — absolute, left of done button */}
+																	{duty.label && (
+																		<span className={styles.dutyCardDotAbs} />
+																	)}
+																	{/* Done flag */}
+																	<button
+																		className={`${styles.dutyCardDoneBtn} ${doneDutyIds.has(duty.id) ? styles.dutyCardDoneBtnOn : ""}`}
+																		onClick={(e) => toggleDone(duty.id, e)}
+																		title={doneDutyIds.has(duty.id) ? "取消完成" : "標記完成"}
+																	>
+																		✓
+																	</button>
 																</div>
 															);
 														})}
@@ -1283,14 +1352,25 @@ export default function DispatchMonthView({
 												)}
 											</div>
 											<div className={styles.detailTags}>
-												<span
-													className={`${styles.tag} ${selectedDuty.aircraft_type === "B738" ? styles.tagB738 : styles.tagAtr}`}
-												>
-													{selectedDuty.aircraft_type ===
-													"B738"
-														? "B738"
-														: "ATR 72"}
-												</span>
+												{(() => {
+													const sectorAcTypes = new Set(
+														selectedSectors.map((s) => s.aircraft_type).filter(Boolean)
+													);
+													const isMixed =
+														sectorAcTypes.size > 1 ||
+														(sectorAcTypes.size === 1 && !sectorAcTypes.has(selectedDuty.aircraft_type));
+													if (isMixed) return (
+														<>
+															<span className={`${styles.tag} ${styles.tagAtr}`}>ATR 72</span>
+															<span className={`${styles.tag} ${styles.tagB738}`}>B738</span>
+														</>
+													);
+													return (
+														<span className={`${styles.tag} ${selectedDuty.aircraft_type === "B738" ? styles.tagB738 : styles.tagAtr}`}>
+															{selectedDuty.aircraft_type === "B738" ? "B738" : "ATR 72"}
+														</span>
+													);
+												})()}
 												<span
 													className={`${styles.tag} ${styles.tagBase}`}
 												>
@@ -1491,77 +1571,23 @@ export default function DispatchMonthView({
 														<div
 															className={`${styles.sectorRow} ${s.is_highlight ? styles.highlight : ""}`}
 														>
-															<span
-																className={
-																	styles.srDep
-																}
-															>
-																{s.dep_time?.slice(
-																	0,
-																	5,
-																)}
+															<span className={styles.srDep}>
+																{s.dep_time?.slice(0, 5)}
 															</span>
-															<span
-																className={
-																	styles.srFrom
-																}
-															>
-																{s.dep_airport}
+															<span className={styles.srFn}>
+																{s.flight_number}{s.is_highlight ? " ★" : ""}
 															</span>
-															<span
-																className={
-																	styles.srArrow
-																}
-															>
-																→
+															<span className={styles.srRoute}>
+																<span className={styles.srFrom}>{s.dep_airport}</span>
+																<span className={styles.srArrow}>→</span>
+																<span className={styles.srTo}>{s.arr_airport}</span>
 															</span>
-															<span
-																className={
-																	styles.srTo
-																}
-															>
-																{s.arr_airport}
+															<span className={styles.srArr}>
+																{s.arr_time?.slice(0, 5)}
 															</span>
-															<span
-																className={
-																	styles.srFn
-																}
-															>
-																{
-																	s.flight_number
-																}
-																{s.is_highlight
-																	? " ★"
-																	: ""}
-																{s.aircraft_type ? (
-																	<span
-																		style={{
-																			fontSize: 10,
-																			background:
-																				"#dbeafe",
-																			color: "#1d4ed8",
-																			borderRadius: 4,
-																			padding:
-																				"1px 5px",
-																			marginLeft: 4,
-																		}}
-																	>
-																		{
-																			s.aircraft_type
-																		}
-																	</span>
-																) : null}
-															</span>
-															<span
-																className={
-																	styles.srArr
-																}
-															>
-																{s.arr_time?.slice(
-																	0,
-																	5,
-																)}
-															</span>
+															{s.aircraft_type && s.aircraft_type !== selectedDuty.aircraft_type ? (
+																<span className={styles.srAcBadge}>{s.aircraft_type}</span>
+															) : null}
 														</div>
 														{i <
 															selectedSectors.length -

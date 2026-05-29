@@ -331,6 +331,7 @@ export const pdxSectorHelpers = {
 				arr_airport: s.arr_airport.toUpperCase(),
 				arr_time: s.arr_time,
 				is_highlight: s.is_highlight || false,
+				aircraft_type: s.aircraft_type || null,
 			}));
 
 			const { data, error } = await supabase
@@ -496,7 +497,7 @@ export async function getFlightDutiesForMRTByMonth(year, month) {
 	// 4. Fetch all sectors in one batch — attach as sectors_data per duty
 	const { data: allSectors } = await supabase
 		.from("pdx_sectors")
-		.select("duty_id, seq, flight_number, dep_airport, dep_time, arr_airport, arr_time, is_highlight")
+		.select("duty_id, seq, flight_number, dep_airport, dep_time, arr_airport, arr_time, is_highlight, aircraft_type")
 		.in("duty_id", dutyIds)
 		.order("seq", { ascending: true });
 

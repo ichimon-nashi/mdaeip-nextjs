@@ -1324,9 +1324,32 @@ export default function DispatchDutyBuilder({ month, duty, onBack, onSaved }) {
 				{/* Right: live stats panel */}
 				<div className={styles.statsPanel}>
 					<div className={styles.statsPanelTitle}>班型計算</div>
-					<div className={styles.statsPanelSub}>
-						{dutyCode || "—"} · {aircraft} · {base}
-					</div>
+					{(() => {
+						const sectorTypes = new Set(
+							sectors.map((s) => s.aircraft_type).filter(Boolean),
+						);
+						const isMixed =
+							sectorTypes.size > 1 ||
+							(sectorTypes.size === 1 && !sectorTypes.has(aircraft));
+						return (
+							<div className={styles.statsPanelSub}>
+								{dutyCode || "—"} ·{" "}
+								{isMixed ? (
+									<span style={{ color: "#7c3aed", fontWeight: 600 }}>
+										ATR / B738
+									</span>
+								) : (
+									aircraft
+								)}{" "}
+								· {base}
+								{isMixed && (
+									<div style={{ marginTop: 6, fontSize: 11, color: "#7c3aed", background: "#ede9fe", borderRadius: 6, padding: "3px 8px", display: "inline-block" }}>
+										混合機型（依航段設定）
+									</div>
+								)}
+							</div>
+						);
+					})()}
 
 					<div className={styles.statSection}>時間</div>
 					<div className={styles.statRow}>
