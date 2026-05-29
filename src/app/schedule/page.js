@@ -485,6 +485,7 @@ export default function SchedulePage() {
 	const empTooltipRef = useRef(null);
 	const [empTooltipData, setEmpTooltipData] = useState({
 		visible: false,
+		employeeId: '',
 		name: '',
 		totalFt: 0,
 		amCount: 0,
@@ -494,6 +495,7 @@ export default function SchedulePage() {
 		x: 0,
 		y: 0,
 		above: false,
+		days: {},     // schedule.days for CSV export
 	});
 	// ── PDX bulk-fetch for current month ────────────────────────────────────
 	// Runs when currentMonth changes. Stores data in a ref (no re-render needed).
@@ -681,8 +683,53 @@ export default function SchedulePage() {
 			duties4,
 			duties6,
 			x, y, above,
+			days: schedule.days || {},
 		});
 	}, [empTooltipData.visible, empTooltipData.employeeId, user?.id]);
+
+	// ── Export schedule to Google Calendar CSV ───────────────────────────────
+	const handleExportToGoogleCalendar = useCallback(() => {
+		const { days, employeeId, name } = empTooltipData;
+		if (!days || !Object.keys(days).length) {
+			toast('無班表資料可匯出', { icon: '⚠️' });
+			return;
+		}
+
+		const rows = [['Subject', 'Start Date']];
+
+		Object.entries(days)
+			.sort(([a], [b]) => a.localeCompare(b))
+			.forEach(([dateStr, dutyRaw]) => {
+				if (!dutyRaw) return;
+				// Replace backslashes and newlines with spaces (e.g. "會\一級" → "會 一級")
+				const subject = dutyRaw.toString().replace(/[\\n\n]/g, ' ').trim();
+				if (!subject || subject === '空') return;
+				// Convert YYYY-MM-DD → MM/DD/YYYY
+				const [y, m, d] = dateStr.split('-');
+				rows.push([subject, `${m}/${d}/${y}`]);
+			});
+
+		if (rows.length <= 1) {
+			toast('此月份無班表資料可匯出', { icon: '⚠️' });
+			return;
+		}
+
+		const csvContent = rows.map(r => r.join(',')).join('\r\n');
+		const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' });
+		const url = URL.createObjectURL(blob);
+		const link = document.createElement('a');
+		link.href = url;
+
+		// Filename: 2026年6月班表_51892.csv — strip leading zero from month
+		const monthDisplay = currentMonth.replace(/年0?(\d+)月/, '年$1月');
+		link.download = `${monthDisplay}班表_${employeeId}.csv`;
+		document.body.appendChild(link);
+		link.click();
+		document.body.removeChild(link);
+		URL.revokeObjectURL(url);
+
+		toast.success('班表已匯出！');
+	}, [empTooltipData, currentMonth]);
 
 	// Flight duty cache for performance
 	const flightDutyCache = useRef(new Map());
@@ -1182,6 +1229,12 @@ export default function SchedulePage() {
 						) : (
 							<div className={styles.empTooltipNoData}>無PDX飛行資料</div>
 						)}
+						<button
+							className={styles.empTooltipExportBtn}
+							onClick={handleExportToGoogleCalendar}
+						>
+							📅 匯出csv日曆
+						</button>
 					</div>
 				</div>
 			)}

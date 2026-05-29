@@ -175,9 +175,23 @@ export const patchUpdates = [
 		appName: "疲勞管理統",
 		updateInfo: ["修訂模擬換班檢視", "可手動調整組員任務互換"],
 	},
-		{
+	{
 		date: "2026-05-08",
 		appName: "EIP系統",
 		updateInfo: ["增加使用者gif頭像"],
+	},
+	{
+		date: "2026-05-29",
+		appName: "任務互換系統",
+		updateInfo: ["點選組員名字可匯出csv班表，方便快速匯入至Google月曆"],
+	},
+	{
+		date: "2026-05-29",
+		appName: "派遣表系統",
+		updateInfo: [
+			"更改派遣表系統UI",
+			"增加可混派機種辨識",
+			"增加編輯完成標籤以免漏掉更新",
+		],
 	},
 ];
