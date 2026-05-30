@@ -157,6 +157,21 @@ export default function DispatchMonthView({
 	const [doneDutyIds, setDoneDutyIds] = useState(
 		() => new Set(JSON.parse(localStorage.getItem(doneStorageKey) || "[]")),
 	);
+	function toggleAllDone(baseDutyIds, e) {
+		e.stopPropagation();
+		setDoneDutyIds((prev) => {
+			const next = new Set(prev);
+			const allDone = baseDutyIds.every((id) => next.has(id));
+			if (allDone) {
+				baseDutyIds.forEach((id) => next.delete(id));
+			} else {
+				baseDutyIds.forEach((id) => next.add(id));
+			}
+			localStorage.setItem(doneStorageKey, JSON.stringify([...next]));
+			return next;
+		});
+	}
+
 	function toggleDone(dutyId, e) {
 		e.stopPropagation();
 		setDoneDutyIds((prev) => {
@@ -1137,7 +1152,8 @@ export default function DispatchMonthView({
 									};
 									return (
 										<div key={base}>
-											{/* Accordion header */}
+											{/* Accordion header + toggle-all done */}
+											<div style={{ position: "relative" }}>
 											<button
 												onClick={() =>
 													setCollapsedBases(
@@ -1189,6 +1205,15 @@ export default function DispatchMonthView({
 													{isCollapsed ? "▶" : "▼"}
 												</span>
 											</button>
+											{/* Toggle-all done for this base */}
+											<button
+												className={styles.baseToggleDoneBtn}
+												onClick={(e) => toggleAllDone(baseDuties.map((d) => d.id), e)}
+												title={baseDuties.every((d) => doneDutyIds.has(d.id)) ? "取消全部完成" : "全部標記完成"}
+											>
+												{baseDuties.every((d) => doneDutyIds.has(d.id)) ? "✓ 全部完成" : "全部完成"}
+											</button>
+											</div>{/* /header wrapper */}
 											{/* Accordion body — card grid, sorted alphabetically by duty_code */}
 											{!isCollapsed && (
 												<div className={styles.dutyCardGrid}>

@@ -266,6 +266,7 @@ export default function DispatchDutyBuilder({ month, duty, onBack, onSaved }) {
 
 	// Saving state
 	const [saving, setSaving] = useState(false);
+	const [saveAttempted, setSaveAttempted] = useState(false);
 
 	// Load existing sectors if editing
 	useEffect(() => {
@@ -345,8 +346,8 @@ export default function DispatchDutyBuilder({ month, duty, onBack, onSaved }) {
 	}
 
 	function updateSector(i, field, value) {
-		setSectors((prev) =>
-			prev.map((s, idx) =>
+		setSectors((prev) => {
+			const next = prev.map((s, idx) =>
 				idx === i
 					? {
 							...s,
@@ -357,8 +358,15 @@ export default function DispatchDutyBuilder({ month, duty, onBack, onSaved }) {
 									: value,
 						}
 					: s,
-			),
-		);
+			);
+			if (field === "arr_airport" && next[i + 1] !== undefined) {
+				next[i + 1] = { ...next[i + 1], dep_airport: value.toUpperCase() };
+			}
+			if (field === "dep_airport" && next[i - 1] !== undefined) {
+				next[i - 1] = { ...next[i - 1], arr_airport: value.toUpperCase() };
+			}
+			return next;
+		});
 	}
 
 	// Auto-format time input: "0730" → "07:30", allow partial typing
@@ -397,6 +405,20 @@ export default function DispatchDutyBuilder({ month, duty, onBack, onSaved }) {
 			}
 		}
 	});
+	// Per-sector empty field errors — only shown after save attempted
+	const sectorEmptyErrors = {};
+	if (saveAttempted) {
+		sectors.forEach((s, i) => {
+			const empty = new Set();
+			if (!s.dep_airport) empty.add("dep_airport");
+			if (!s.dep_time || s.dep_time.length < 5) empty.add("dep_time");
+			if (!s.arr_airport) empty.add("arr_airport");
+			if (!s.arr_time || s.arr_time.length < 5) empty.add("arr_time");
+			if (!s.flight_number) empty.add("flight_number");
+			if (empty.size > 0) sectorEmptyErrors[i] = empty;
+		});
+	}
+
 	const computedStats = useCallback(() => {
 		if (!reportingTime || !dutyEndTime) return null;
 		const [rh, rm] = reportingTime.split(":").map(Number);
@@ -464,6 +486,20 @@ export default function DispatchDutyBuilder({ month, duty, onBack, onSaved }) {
 			}
 		}
 
+		setSaveAttempted(true);
+		// Check for empty required fields across all sectors
+		const hasEmptyFields = sectors.some(
+			(s) =>
+				!s.dep_airport ||
+				!s.dep_time ||
+				!s.arr_airport ||
+				!s.arr_time ||
+				!s.flight_number,
+		);
+		if (hasEmptyFields) {
+			toast.error("請填寫所有航段必填欄位");
+			return;
+		}
 		const validSectors = sectors.filter(
 			(s) =>
 				s.flight_number &&
@@ -849,6 +885,7 @@ export default function DispatchDutyBuilder({ month, duty, onBack, onSaved }) {
 							</div>
 						) : (
 							<>
+								<div className={styles.sectorsScrollArea}>
 								{/* Column headers */}
 								<div
 									style={{
@@ -863,11 +900,11 @@ export default function DispatchDutyBuilder({ month, duty, onBack, onSaved }) {
 									{[
 										"",
 										"#",
-										"起飛地",
+										"出發站",
 										"起飛",
 										"航空",
 										"班號",
-										"降落地",
+										"目的地",
 										"降落",
 										"★",
 										"機型",
@@ -955,6 +992,7 @@ export default function DispatchDutyBuilder({ month, duty, onBack, onSaved }) {
 															e.target.value,
 														)
 													}
+													style={sectorEmptyErrors[i]?.has("dep_airport") ? { border: "2px solid #dc2626", background: "#fef2f2" } : {}}
 												>
 													<option value="">
 														— 選擇 —
@@ -1004,13 +1042,8 @@ export default function DispatchDutyBuilder({ month, duty, onBack, onSaved }) {
 													)
 												}
 												style={
-													sectorErrors[i] === "dep" ||
-													sectorErrors[i] === "both"
-														? {
-																border: "2px solid #dc2626",
-																background:
-																	"#fef2f2",
-															}
+													(sectorErrors[i] === "dep" || sectorErrors[i] === "both" || sectorEmptyErrors[i]?.has("dep_time"))
+														? { border: "2px solid #dc2626", background: "#fef2f2" }
 														: {}
 												}
 											/>
@@ -1051,7 +1084,7 @@ export default function DispatchDutyBuilder({ month, duty, onBack, onSaved }) {
 												}
 												placeholder="301"
 												maxLength={6}
-												style={{ textAlign: "center" }}
+												style={{ textAlign: "center", ...(sectorEmptyErrors[i]?.has("flight_number") ? { border: "2px solid #dc2626", background: "#fef2f2" } : {}) }}
 											/>
 
 											{/* Arr airport — options show code only */}
@@ -1068,6 +1101,7 @@ export default function DispatchDutyBuilder({ month, duty, onBack, onSaved }) {
 															e.target.value,
 														)
 													}
+													style={sectorEmptyErrors[i]?.has("arr_airport") ? { border: "2px solid #dc2626", background: "#fef2f2" } : {}}
 												>
 													<option value="">
 														— 選擇 —
@@ -1117,13 +1151,8 @@ export default function DispatchDutyBuilder({ month, duty, onBack, onSaved }) {
 													)
 												}
 												style={
-													sectorErrors[i] === "arr" ||
-													sectorErrors[i] === "both"
-														? {
-																border: "2px solid #dc2626",
-																background:
-																	"#fef2f2",
-															}
+													(sectorErrors[i] === "arr" || sectorErrors[i] === "both" || sectorEmptyErrors[i]?.has("arr_time"))
+														? { border: "2px solid #dc2626", background: "#fef2f2" }
 														: {}
 												}
 											/>
@@ -1210,6 +1239,7 @@ export default function DispatchDutyBuilder({ month, duty, onBack, onSaved }) {
 										)}
 									</React.Fragment>
 								))}
+								</div>{/* /sectorsScrollArea */}
 								<div
 									style={{
 										display: "flex",
@@ -1244,7 +1274,7 @@ export default function DispatchDutyBuilder({ month, duty, onBack, onSaved }) {
 										type="button"
 										title="依起飛時間排序"
 									>
-										↕ 時間排序
+										↕ 排序
 									</button>
 								</div>
 							</>
@@ -1324,32 +1354,9 @@ export default function DispatchDutyBuilder({ month, duty, onBack, onSaved }) {
 				{/* Right: live stats panel */}
 				<div className={styles.statsPanel}>
 					<div className={styles.statsPanelTitle}>班型計算</div>
-					{(() => {
-						const sectorTypes = new Set(
-							sectors.map((s) => s.aircraft_type).filter(Boolean),
-						);
-						const isMixed =
-							sectorTypes.size > 1 ||
-							(sectorTypes.size === 1 && !sectorTypes.has(aircraft));
-						return (
-							<div className={styles.statsPanelSub}>
-								{dutyCode || "—"} ·{" "}
-								{isMixed ? (
-									<span style={{ color: "#7c3aed", fontWeight: 600 }}>
-										ATR / B738
-									</span>
-								) : (
-									aircraft
-								)}{" "}
-								· {base}
-								{isMixed && (
-									<div style={{ marginTop: 6, fontSize: 11, color: "#7c3aed", background: "#ede9fe", borderRadius: 6, padding: "3px 8px", display: "inline-block" }}>
-										混合機型（依航段設定）
-									</div>
-								)}
-							</div>
-						);
-					})()}
+					<div className={styles.statsPanelSub}>
+						{dutyCode || "—"} · {aircraft} · {base}
+					</div>
 
 					<div className={styles.statSection}>時間</div>
 					<div className={styles.statRow}>

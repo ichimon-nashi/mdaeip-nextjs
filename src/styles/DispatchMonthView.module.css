@@ -647,6 +647,29 @@
 	flex-shrink: 0;
 }
 
+/* Toggle-all done button on base header */
+.baseToggleDoneBtn {
+	position: absolute;
+	right: 32px;
+	top: 50%;
+	transform: translateY(-50%);
+	font-size: 10px;
+	font-weight: 600;
+	padding: 2px 7px;
+	border-radius: 8px;
+	border: 1.5px solid #d1d5db;
+	background: #fff;
+	color: #6b7280;
+	cursor: pointer;
+	font-family: inherit;
+	transition: all 0.15s;
+	white-space: nowrap;
+}
+.baseToggleDoneBtn:hover {
+	border-color: #16a34a;
+	color: #16a34a;
+}
+
 /* Done toggle button — top-right corner of card */
 .dutyCardDoneBtn {
 	position: absolute;
@@ -858,14 +881,14 @@
 .sectorRow {
 	display: flex;
 	align-items: center;
-	gap: 2.5rem;
+	gap: 14px;
 	padding: 8px 0;
 }
 
 .srDep {
 	font-size: 15px;
 	font-weight: 700;
-	color: #17980b;
+	color: #1a1a1a;
 	font-variant-numeric: tabular-nums;
 	white-space: nowrap;
 	flex-shrink: 0;
@@ -880,21 +903,21 @@
 .srFrom {
 	font-size: 14px;
 	font-weight: 600;
-	color: #2d63e0;
+	color: #1a1a1a;
 }
 .srArrow {
 	font-size: 13px;
-	color: #818893;
+	color: #9ca3af;
 }
 .srTo {
 	font-size: 14px;
 	font-weight: 600;
-	color: #a15fc5;
+	color: #1a1a1a;
 }
 .srArr {
 	font-size: 15px;
 	font-weight: 700;
-	color: #a41919;
+	color: #1a1a1a;
 	font-variant-numeric: tabular-nums;
 	white-space: nowrap;
 	flex-shrink: 0;
