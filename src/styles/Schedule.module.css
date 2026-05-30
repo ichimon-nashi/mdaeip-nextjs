@@ -1992,10 +1992,15 @@
 	padding: 0.25rem 0;
 }
 
-.empTooltipExportBtn {
-	display: block;
-	width: 100%;
+/* Two-button export row */
+.empTooltipExportRow {
+	display: grid;
+	grid-template-columns: 1fr auto;
+	gap: 0.4rem;
 	margin-top: 0.5rem;
+}
+
+.empTooltipGCalBtn {
 	padding: 0.45rem 0.5rem;
 	background: #1e40af;
 	color: white;
@@ -2006,33 +2011,32 @@
 	cursor: pointer;
 	text-align: center;
 	transition: background 0.15s;
+	white-space: nowrap;
 }
 
-.empTooltipExportBtn:hover {
+.empTooltipGCalBtn:hover {
 	background: #1d4ed8;
 }
 
-.empTooltipCancelBtn {
-	display: block;
-	width: 100%;
-	margin-top: 0.35rem;
-	padding: 0.4rem 0.5rem;
-	background: transparent;
-	color: #6b7280;
+.empTooltipCSVBtn {
+	padding: 0.45rem 0.6rem;
+	background: #f3f4f6;
+	color: #374151;
 	border: 1px solid #d1d5db;
 	border-radius: 0.5rem;
 	font-size: 0.75rem;
 	font-weight: 600;
 	cursor: pointer;
 	text-align: center;
-	transition: background 0.15s, color 0.15s;
+	transition: background 0.15s;
+	white-space: nowrap;
 }
 
-.empTooltipCancelBtn:hover {
-	background: #f3f4f6;
-	color: #374151;
+.empTooltipCSVBtn:hover {
+	background: #e5e7eb;
 }
 
+/* Calendar picker (shown after Google OAuth) */
 .empTooltipCalPicker {
 	margin-top: 0.5rem;
 	display: flex;
@@ -2055,6 +2059,45 @@
 	color: #111827;
 	background: white;
 	cursor: pointer;
+}
+
+.empTooltipExportBtn {
+	display: block;
+	width: 100%;
+	padding: 0.45rem 0.5rem;
+	background: #1e40af;
+	color: white;
+	border: none;
+	border-radius: 0.5rem;
+	font-size: 0.75rem;
+	font-weight: 600;
+	cursor: pointer;
+	text-align: center;
+	transition: background 0.15s;
+}
+
+.empTooltipExportBtn:hover {
+	background: #1d4ed8;
+}
+
+.empTooltipCancelBtn {
+	display: block;
+	width: 100%;
+	padding: 0.4rem 0.5rem;
+	background: transparent;
+	color: #6b7280;
+	border: 1px solid #d1d5db;
+	border-radius: 0.5rem;
+	font-size: 0.75rem;
+	font-weight: 600;
+	cursor: pointer;
+	text-align: center;
+	transition: background 0.15s, color 0.15s;
+}
+
+.empTooltipCancelBtn:hover {
+	background: #f3f4f6;
+	color: #374151;
 }
 
 /* ── Pending swap request — purple outline ───────────────── */

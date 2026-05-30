@@ -495,7 +495,8 @@ export default function SchedulePage() {
 		x: 0,
 		y: 0,
 		above: false,
-		days: {},     // schedule.days for Google Calendar export
+		days: {},        // schedule.days for export
+		calPicker: null, // null | { calendars, token, selectedId }
 	});
 	// ── PDX bulk-fetch for current month ────────────────────────────────────
 	// Runs when currentMonth changes. Stores data in a ref (no re-render needed).
@@ -684,6 +685,7 @@ export default function SchedulePage() {
 			duties6,
 			x, y, above,
 			days: schedule.days || {},
+			calPicker: null,
 		});
 	}, [empTooltipData.visible, empTooltipData.employeeId, user?.id]);
 
@@ -693,7 +695,7 @@ export default function SchedulePage() {
 
 	useEffect(() => {
 		if (typeof window === 'undefined') return;
-		if (document.getElementById('gsi-script')) return; // already loaded
+		if (document.getElementById('gsi-script')) return;
 		const script = document.createElement('script');
 		script.id = 'gsi-script';
 		script.src = 'https://accounts.google.com/gsi/client';
@@ -702,90 +704,127 @@ export default function SchedulePage() {
 		document.head.appendChild(script);
 	}, []);
 
-	// ── Add schedule to Google Calendar ──────────────────────────────────────
-	const handleAddToGoogleCalendar = useCallback(() => {
-		const { days, employeeId, name } = empTooltipData;
-		if (!days || !Object.keys(days).length) {
-			toast('無班表資料', { icon: '⚠️' });
-			return;
-		}
-
-		// Build event list — skip empty / 空
+	// ── Shared helper: build duty event list from days object ─────────────────
+	const buildEvents = useCallback((days) => {
 		const events = [];
 		Object.entries(days)
 			.sort(([a], [b]) => a.localeCompare(b))
 			.forEach(([dateStr, dutyRaw]) => {
 				if (!dutyRaw) return;
-				const subject = dutyRaw.toString().replace(/[\\]/g, ' ').replace(/\n/g, ' ').trim();
+				// Replace backslashes and newlines with space; keep forward slashes (flight numbers)
+				const subject = dutyRaw.toString().replace(/\\|\n/g, ' ').trim();
 				if (!subject || subject === '空') return;
-				// Google Calendar all-day event: date only, no time
-				events.push({
-					summary: subject,
-					start: { date: dateStr },
-					end:   { date: dateStr },
-				});
+				events.push({ summary: subject, dateStr });
 			});
+		return events;
+	}, []);
 
+	// ── CSV download ──────────────────────────────────────────────────────────
+	const handleDownloadCSV = useCallback(() => {
+		const { days, employeeId } = empTooltipData;
+		if (!days || !Object.keys(days).length) {
+			toast('無班表資料', { icon: '⚠️' });
+			return;
+		}
+		const events = buildEvents(days);
 		if (!events.length) {
 			toast('此月份無班表資料', { icon: '⚠️' });
 			return;
 		}
+		const rows = [['Subject', 'Start Date'],
+			...events.map(({ summary, dateStr }) => {
+				const [y, m, d] = dateStr.split('-');
+				return [summary, `${m}/${d}/${y}`];
+			})
+		];
+		const csv = rows.map(r => r.join(',')).join('\r\n');
+		const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
+		const url = URL.createObjectURL(blob);
+		const link = document.createElement('a');
+		link.href = url;
+		const monthDisplay = currentMonth.replace(/年0?(\d+)月/, '年$1月');
+		link.download = `${monthDisplay}班表_${employeeId}.csv`;
+		document.body.appendChild(link);
+		link.click();
+		document.body.removeChild(link);
+		URL.revokeObjectURL(url);
+		toast.success('班表已匯出！');
+	}, [empTooltipData, currentMonth, buildEvents]);
 
-		// Insert events one-by-one via Calendar API using the access token
-		const insertAll = async (accessToken) => {
-			const toastId = toast.loading(`新增中… (0/${events.length})`);
-			let successCount = 0;
-			for (let i = 0; i < events.length; i++) {
-				try {
-					const res = await fetch(
-						'https://www.googleapis.com/calendar/v3/calendars/primary/events',
-						{
-							method: 'POST',
-							headers: {
-								'Authorization': `Bearer ${accessToken}`,
-								'Content-Type': 'application/json',
-							},
-							body: JSON.stringify(events[i]),
-						}
-					);
-					if (res.ok) {
-						successCount++;
-						toast.loading(`新增中… (${successCount}/${events.length})`, { id: toastId });
+	// ── Google Calendar: insert events into chosen calendar ───────────────────
+	const insertAllEvents = useCallback(async (token, calendarId, days) => {
+		const events = buildEvents(days);
+		if (!events.length) {
+			toast('此月份無班表資料', { icon: '⚠️' });
+			return;
+		}
+		setEmpTooltipData(prev => ({ ...prev, calPicker: null }));
+		const toastId = toast.loading(`新增中… (0/${events.length})`);
+		let successCount = 0;
+		for (let i = 0; i < events.length; i++) {
+			try {
+				const res = await fetch(
+					`https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events`,
+					{
+						method: 'POST',
+						headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+						body: JSON.stringify({ summary: events[i].summary, start: { date: events[i].dateStr }, end: { date: events[i].dateStr } }),
 					}
-				} catch (err) {
-					console.error('Error inserting event:', events[i].summary, err);
+				);
+				if (res.ok) {
+					successCount++;
+					toast.loading(`新增中… (${successCount}/${events.length})`, { id: toastId });
 				}
+			} catch (err) {
+				console.error('Error inserting event:', events[i].summary, err);
 			}
-			toast.dismiss(toastId);
-			toast.success(`已新增 ${successCount} 筆至Google日曆！`);
-		};
+		}
+		toast.dismiss(toastId);
+		toast.success(`已新增 ${successCount} 筆至Google日曆！`);
+	}, [buildEvents]);
 
-		// Initialise token client on first use, then request token
+	// ── Google Calendar: OAuth + fetch calendar list ──────────────────────────
+	const handleAddToGoogleCalendar = useCallback(() => {
+		const { days } = empTooltipData;
+		if (!days || !Object.keys(days).length) {
+			toast('無班表資料', { icon: '⚠️' });
+			return;
+		}
+		const onToken = async (response) => {
+			if (response.error) {
+				toast.error('Google 授權失敗');
+				return;
+			}
+			const token = response.access_token;
+			let calendars = [{ id: 'primary', summary: '主要日曆' }];
+			try {
+				const res = await fetch(
+					'https://www.googleapis.com/calendar/v3/users/me/calendarList?minAccessRole=writer',
+					{ headers: { Authorization: `Bearer ${token}` } }
+				);
+				const data = await res.json();
+				if (data.items?.length) {
+					calendars = data.items.map(c => ({ id: c.id, summary: c.summary }));
+				}
+			} catch (err) {
+				console.error('Failed to fetch calendar list:', err);
+			}
+			setEmpTooltipData(prev => ({
+				...prev,
+				calPicker: { calendars, token, selectedId: calendars[0]?.id || 'primary' },
+			}));
+		};
 		if (!tokenClientRef.current) {
 			tokenClientRef.current = window.google.accounts.oauth2.initTokenClient({
 				client_id: GOOGLE_CLIENT_ID,
-				scope: 'https://www.googleapis.com/auth/calendar.events',
-				callback: (response) => {
-					if (response.error) {
-						toast.error('Google 授權失敗');
-						return;
-					}
-					insertAll(response.access_token);
-				},
+				scope: 'https://www.googleapis.com/auth/calendar.events https://www.googleapis.com/auth/calendar.readonly',
+				callback: onToken,
 			});
 		} else {
-			// Update callback for current empTooltipData closure
-			tokenClientRef.current.callback = (response) => {
-				if (response.error) {
-					toast.error('Google 授權失敗');
-					return;
-				}
-				insertAll(response.access_token);
-			};
+			tokenClientRef.current.callback = onToken;
 		}
-
 		tokenClientRef.current.requestAccessToken({ prompt: '' });
-	}, [empTooltipData, currentMonth]);
+	}, [empTooltipData]);
 
 	// Flight duty cache for performance
 	const flightDutyCache = useRef(new Map());
@@ -1285,12 +1324,54 @@ export default function SchedulePage() {
 						) : (
 							<div className={styles.empTooltipNoData}>無PDX飛行資料</div>
 						)}
-						<button
-							className={styles.empTooltipExportBtn}
-							onClick={handleAddToGoogleCalendar}
-						>
-							📅 新增至Google日曆
-						</button>
+						{empTooltipData.calPicker ? (
+							<div className={styles.empTooltipCalPicker}>
+								<label className={styles.empTooltipCalLabel}>選擇日曆</label>
+								<select
+									className={styles.empTooltipCalSelect}
+									value={empTooltipData.calPicker.selectedId}
+									onChange={e => setEmpTooltipData(prev => ({
+										...prev,
+										calPicker: { ...prev.calPicker, selectedId: e.target.value },
+									}))}
+								>
+									{empTooltipData.calPicker.calendars.map(cal => (
+										<option key={cal.id} value={cal.id}>{cal.summary}</option>
+									))}
+								</select>
+								<button
+									className={styles.empTooltipExportBtn}
+									onClick={() => insertAllEvents(
+										empTooltipData.calPicker.token,
+										empTooltipData.calPicker.selectedId,
+										empTooltipData.days,
+									)}
+								>
+									✅ 確認新增
+								</button>
+								<button
+									className={styles.empTooltipCancelBtn}
+									onClick={() => setEmpTooltipData(prev => ({ ...prev, calPicker: null }))}
+								>
+									取消
+								</button>
+							</div>
+						) : (
+							<div className={styles.empTooltipExportRow}>
+								<button
+									className={styles.empTooltipGCalBtn}
+									onClick={handleAddToGoogleCalendar}
+								>
+									📅 Google日曆
+								</button>
+								<button
+									className={styles.empTooltipCSVBtn}
+									onClick={handleDownloadCSV}
+								>
+									⬇️ CSV
+								</button>
+							</div>
+						)}
 					</div>
 				</div>
 			)}
