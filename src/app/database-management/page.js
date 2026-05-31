@@ -1,1678 +1,1455 @@
-'use client'
+"use client";
 
-import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { useAuth } from '../../contexts/AuthContext';
-import { hasAppAccess } from '../../lib/permissionHelpers';
-import { useRouter } from 'next/navigation';
-import toast from 'react-hot-toast';
-import { Plane, Clock, ChevronDown, ChevronUp, X } from 'lucide-react';
-import styles from '../../styles/Schedule.module.css';
-import { 
-	getAllSchedulesForMonth, 
-	getEmployeeSchedule, 
-	getSchedulesByBase,
-	getEmployeeById,
-	getAvailableMonths
-} from '../../lib/DataRoster';
-import { supabase, flightDutyHelpers } from '../../lib/supabase';
-import { minutesToDisplay } from '../../lib/pdxHelpers';
+import React, { useState, useEffect } from "react";
+import { useAuth } from "../../contexts/AuthContext";
+import { useRouter } from "next/navigation";
+import { hasAppAccess } from "../../lib/permissionHelpers";
+import toast from "react-hot-toast";
+import {
+	Upload,
+	Users,
+	Calendar,
+	Plane,
+	Database,
+	Trash2,
+	AlertTriangle,
+	CheckCircle,
+	X,
+	Plus,
+	Edit,
+	Search,
+	Eye,
+	EyeOff,
+} from "lucide-react";
+import styles from "../../styles/DatabaseManagement.module.css";
 
-
-// ─── PDX date-matching helpers (mirrors dashboard logic) ────────────────────
-const isoWeekday = (dateStr) => {
-	const [y, m, d] = dateStr.split('-').map(Number);
-	const dow = new Date(y, m - 1, d).getDay();
-	return dow === 0 ? 7 : dow;
+// All available gif keys, split by gender prefix
+const GIF_KEYS = {
+	M: [
+		"m_archer","m_bard","m_blackmage","m_calculator","m_chemist",
+		"m_darkknight","m_engineer","m_geomancer","m_hellknight","m_holyknight",
+		"m_hunter","m_knight","m_lancer","m_mediator","m_mimic","m_monk",
+		"m_monster","m_ninja","m_onionknight","m_oracle","m_pirate",
+		"m_ramza1","m_ramza2","m_ramza3","m_robot","m_samurai","m_soldier",
+		"m_squire","m_summoner","m_templeknight","m_thief","m_timemage","m_whitemage",
+	],
+	F: [
+		"f_archer","f_blackmage","f_calculator","f_chemist","f_dancer",
+		"f_darkknight","f_dragon","f_dragoner","f_geomancer","f_hellknight",
+		"f_holyknight","f_knight","f_lancer","f_mediator","f_mimic","f_monk",
+		"f_ninja","f_onionknight","f_oracle","f_samurai","f_squire","f_summoner",
+		"f_templeknight","f_thief","f_timemage","f_whitemage",
+	],
 };
 
-const pdxDutyAppliesToDate = (duty, dateStr) => {
-	if (duty.specific_dates?.length) return duty.specific_dates.includes(dateStr);
-	if (dateStr < duty.date_from || dateStr > duty.date_to) return false;
-	return duty.active_weekdays?.includes(isoWeekday(dateStr)) ?? false;
-};
-
-const findPdxDuty = (duties, dutyCode, dateStr) => {
-	const matches = duties.filter(d => d.duty_code === dutyCode && pdxDutyAppliesToDate(d, dateStr));
-	if (!matches.length) return null;
-	const specific = matches.find(d => d.specific_dates?.length);
-	return specific || matches[0];
-};
-
-const buildRouteString = (sectors) => {
-	if (!sectors?.length) return null;
-	const airports = [sectors[0].dep_airport];
-	sectors.forEach(s => airports.push(s.arr_airport));
-	return airports.join('→');
-};
-
-// ─── Ground duty default times (PDX only has flight duties) ────────────────
-const GROUND_DUTY_TIMES = {
-	"OD":   { start: "08:00", end: "17:00" },
-	"OFC":  { start: "08:00", end: "17:00" },
-	"訓":   { start: "08:00", end: "17:00" },
-	"課":   { start: "08:00", end: "17:00" },
-	"會":   { start: "08:00", end: "17:00" },
-	"公差": { start: "08:00", end: "17:00" },
-	"公出": { start: "08:00", end: "17:00" },
-	"體檢": { start: "08:00", end: "17:00" },
-	"職醫": { start: "08:00", end: "17:00" },
-	"陪訓": { start: "08:00", end: "17:00" },
-	"SA":   { start: "06:35", end: "12:00" },
-	"SP":   { start: "12:00", end: "17:00" },
-	"SH1":  { start: "06:00", end: "14:00" },
-	"SH2":  { start: "12:00", end: "20:00" },
-};
-
-const useIsMobile = () => {
-	const [isMobile, setIsMobile] = useState(() => {
-		if (typeof window !== 'undefined') {
-			return window.innerWidth <= 768;
-		}
-		return false;
-	});
-
-	useEffect(() => {
-		if (typeof window === 'undefined') return;
-		const checkDevice = () => setIsMobile(window.innerWidth <= 768);
-		checkDevice();
-		window.addEventListener('resize', checkDevice);
-		return () => window.removeEventListener('resize', checkDevice);
-	}, []);
-
-	return isMobile;
-};
-
-// ─── Helper: parse "2026年04月" → { year: 2026, month: 4 } ─────────────────
-const parseMonthString = (monthStr) => {
-	const match = monthStr?.match(/^(\d{4})年(\d{2})月$/);
-	if (!match) return null;
-	return { year: parseInt(match[1]), month: parseInt(match[2]) };
-};
-
-// ─── Helper: get current real-world year/month ───────────────────────────────
-const getCurrentYearMonth = () => {
-	const now = new Date();
-	return { year: now.getFullYear(), month: now.getMonth() + 1 };
-};
-
-
-export default function SchedulePage() {
+const DatabaseManagement = () => {
 	const { user, loading } = useAuth();
 	const router = useRouter();
-	const isMobile = useIsMobile();
-	
-	const userTableRef = useRef(null);
-	const crewTableRef = useRef(null);
-	const tooltipRef = useRef(null);
 
-	const [availableMonths, setAvailableMonths] = useState([]);
-	const [currentMonth, setCurrentMonth] = useState('');
-	const [activeTab, setActiveTab] = useState('TSA');
-	const [selectedDuties, setSelectedDuties] = useState([]);
-	const [highlightedDates, setHighlightedDates] = useState({});
-	const [scheduleLoading, setScheduleLoading] = useState(false);
-	const [initialLoad, setInitialLoad] = useState(true);
-	const [hasSetDefaultTab, setHasSetDefaultTab] = useState(false);
+	const [activeTab, setActiveTab] = useState("schedules");
+	const [showUploadModal, setShowUploadModal] = useState(false);
+	const [uploadType, setUploadType] = useState("");
+	const [jsonData, setJsonData] = useState("");
+	const [isUploading, setIsUploading] = useState(false);
+	const [availableScheduleMonths, setAvailableScheduleMonths] = useState([]);
+	const [availableDispatchMonths, setAvailableDispatchMonths] = useState([]);
+	const [isDeleting, setIsDeleting] = useState(false);
 
-	const [scheduleData, setScheduleData] = useState({
-		allSchedules: [],
-		hasScheduleData: false,
-		userSchedule: null,
-		allDates: [],
-		otherSchedules: []
+	// Excel file processing states (for upload modal)
+	const [xlsxFile, setXlsxFile] = useState(null);
+	const [xlsxDetectedMonth, setXlsxDetectedMonth] = useState(null);
+	const [xlsxStatus, setXlsxStatus] = useState(null); // { message, type } where type = 'processing'|'success'|'error'
+	const [isProcessingExcel, setIsProcessingExcel] = useState(false);
+
+	// User management states
+	const [users, setUsers] = useState([]);
+	const [isLoadingUsers, setIsLoadingUsers] = useState(false);
+	const [showUserModal, setShowUserModal] = useState(false);
+	const [userModalMode, setUserModalMode] = useState("add"); // "add" or "edit"
+	const [editingUser, setEditingUser] = useState(null);
+	const [userFormData, setUserFormData] = useState({
+		id: "",
+		name: "",
+		rank: "",
+		base: "",
+		access_level: 1,
+		password: "",
+		app_permissions: {
+			roster: { access: false },
+			mrt_checker: { access: false },
+			gday: { access: false },
+			etr_generator: { access: false },
+			dispatch: { access: false },
+			database_management: { access: false },
+			turtle_ranking: { access: false },
+		},
 	});
+	const [isLookingUp, setIsLookingUp] = useState(false);
+	const [showPassword, setShowPassword] = useState(false);
+	const [isProcessingUser, setIsProcessingUser] = useState(false);
 
-	// ── NEW: swap request overlay map ────────────────────────────────────────
-	// Key: "employeeId|date"  Value: "pending" | "approved"
-	// Populated for BOTH person_a and person_b of each request so both rows light up.
-	const [swapRequestMap, setSwapRequestMap] = useState({});
-
-	// Override map: { 'employeeId|YYYY-MM-DD': overrideRow } from schedule_day_overrides
-	const [overrideMap, setOverrideMap] = useState({});
-
-	// ── Admin proxy: Person A selection (admin only) ─────────────────────────
-	// null = not set; { id, name } = selected Person A
-	const [personA, setPersonA] = useState(null);
-
-	// Flight duty data state - REMOVED for performance
-	// const [flightDutyData, setFlightDutyData] = useState(new Map());
-	// const [flightDutyDetails, setFlightDutyDetails] = useState(new Map());
-
-	// Optimize initial load - load months only once
-	useEffect(() => {
-		const loadMonths = async () => {
-			if (!initialLoad) return;
-			
-			try {
-				console.log('Loading available months...');
-				const months = await getAvailableMonths();
-				console.log('Loaded months:', months);
-				
-				const sortedMonths = months.sort((a, b) => {
-					// Extract year and month from format "2026年01月"
-					const yearA = parseInt(a.match(/(\d{4})年/)?.[1] || '0');
-					const monthA = parseInt(a.match(/(\d{2})月/)?.[1] || '0');
-					const yearB = parseInt(b.match(/(\d{4})年/)?.[1] || '0');
-					const monthB = parseInt(b.match(/(\d{2})月/)?.[1] || '0');
-					
-					// Sort by year first, then by month
-					if (yearA !== yearB) {
-						return yearA - yearB;
-					}
-					return monthA - monthB;
-				});
-				
-				setAvailableMonths(sortedMonths);
-				
-				if (sortedMonths.length > 0) {
-					const latestMonth = sortedMonths[sortedMonths.length - 1];
-					setCurrentMonth(latestMonth);
-					console.log('Set current month to:', latestMonth);
-				}
-				
-				setInitialLoad(false);
-
-				// ── NEW: auto-purge old duty_change_requests records ──────
-				// Runs once on app load. Deletes records from months prior to
-				// the current real-world month (not the selected month).
-				purgeOldDutyChangeRequests();
-			} catch (error) {
-				console.error('Error loading months:', error);
-				toast.error('載入月份資料失敗');
-				setInitialLoad(false);
-			}
-		};
-		
-		loadMonths();
-	}, [initialLoad]);
-
-	// ── NEW: purge old duty_change_requests (prior months) ───────────────────
-	const purgeOldDutyChangeRequests = async () => {
-		try {
-			const { year: curYear, month: curMonth } = getCurrentYearMonth();
-
-			// Fetch all distinct months in the table
-			const { data: allRecords, error } = await supabase
-				.from('duty_change_requests')
-				.select('id, month, pdf_storage_path');
-
-			if (error || !allRecords?.length) return;
-
-			// Find records from months strictly before the current real month
-			const staleRecords = allRecords.filter(record => {
-				const parsed = parseMonthString(record.month);
-				if (!parsed) return false;
-				// Before current year, or same year but before current month
-				return parsed.year < curYear || (parsed.year === curYear && parsed.month < curMonth);
-			});
-
-			if (!staleRecords.length) return;
-
-			console.log(`Purging ${staleRecords.length} stale duty change request(s)...`);
-
-			// Delete PDFs from Storage first
-			const pathsToDelete = staleRecords
-				.map(r => r.pdf_storage_path)
-				.filter(Boolean);
-
-			if (pathsToDelete.length) {
-				const { error: storageErr } = await supabase.storage
-					.from('duty-change-pdfs')
-					.remove(pathsToDelete);
-				if (storageErr) {
-					console.error('Error deleting stale PDFs from storage:', storageErr);
-				}
-			}
-
-			// Delete DB records
-			const staleIds = staleRecords.map(r => r.id);
-			const { error: deleteErr } = await supabase
-				.from('duty_change_requests')
-				.delete()
-				.in('id', staleIds);
-
-			if (deleteErr) {
-				console.error('Error purging stale duty change requests:', deleteErr);
-			} else {
-				console.log('Stale duty change requests purged successfully.');
-			}
-		} catch (err) {
-			console.error('Unexpected error during duty change purge:', err);
-		}
+	// Helper function to get access level class
+	const getAccessLevelClass = (level) => {
+		if (level === 1) return 'level-basic';
+		if (level >= 2 && level <= 10) return 'level-regular';
+		if (level >= 11 && level <= 50) return 'level-advanced';
+		if (level >= 51 && level <= 98) return 'level-super';
+		if (level === 99) return 'level-admin';
+		return 'level-basic'; // fallback
 	};
 
-	// ── NEW: fetch swap requests for current month and build overlay map ──────
+	// Check access level and redirect if not admin
 	useEffect(() => {
-		if (!currentMonth) return;
-
-		const fetchSwapRequests = async () => {
-			try {
-				const { data, error } = await supabase
-					.from('duty_change_requests')
-					.select('person_a_id, person_b_id, selected_dates, all_duties, person_a_duties, status')
-					.eq('month', currentMonth)
-					.in('status', ['pending', 'approved']);
-
-				if (error) {
-					console.error('Error fetching swap requests:', error);
-					return;
-				}
-
-				if (!data?.length) {
-					setSwapRequestMap({});
-					return;
-				}
-
-				// map key: "employeeId|date"
-				// map value: { status, swappedDuty }
-				// swappedDuty = the duty the person RECEIVES after the approved swap
-				const map = {};
-
-				data.forEach(req => {
-					const status = req.status; // 'pending' | 'approved'
-
-					// Build lookup: date → duty for each party
-					// person_a_duties: [{date, duty}] — A's original duties
-					// all_duties:      [{date, duty}] — B's original duties
-					const aDuties = Array.isArray(req.person_a_duties) ? req.person_a_duties : [];
-					const bDuties = Array.isArray(req.all_duties)       ? req.all_duties       : [];
-
-					const aDutyByDate = {};
-					aDuties.forEach(d => { if (d?.date) aDutyByDate[d.date] = d.duty || ''; });
-
-					const bDutyByDate = {};
-					bDuties.forEach(d => { if (d?.date) bDutyByDate[d.date] = d.duty || ''; });
-
-					// Person A's cells: they RECEIVE B's duty on those dates
-					const selectedDates = Array.isArray(req.selected_dates) ? req.selected_dates : [];
-					selectedDates.forEach(date => {
-						const key = `${req.person_a_id}|${date}`;
-						const existing = map[key];
-						if (!existing || status === 'approved') {
-							map[key] = {
-								status,
-								// A receives B's duty for this date
-								swappedDuty: status === 'approved' ? (bDutyByDate[date] ?? null) : null,
-							};
-						}
-					});
-
-					// Person B's cells: they RECEIVE A's duty on those dates
-					bDuties.forEach(dutyItem => {
-						if (!dutyItem?.date) return;
-						const date = dutyItem.date;
-						const key = `${req.person_b_id}|${date}`;
-						const existing = map[key];
-						if (!existing || status === 'approved') {
-							map[key] = {
-								status,
-								// B receives A's duty for this date
-								swappedDuty: status === 'approved' ? (aDutyByDate[date] ?? null) : null,
-							};
-						}
-					});
-				});
-
-				setSwapRequestMap(map);
-			} catch (err) {
-				console.error('Unexpected error fetching swap requests:', err);
-			}
-		};
-
-		fetchSwapRequests();
-	}, [currentMonth]);
-
-	// Set user's base as default tab only once after initial load
-	useEffect(() => {
-		if (user?.base && !initialLoad && !hasSetDefaultTab && activeTab === 'TSA' && user.base !== 'TSA') {
-			setActiveTab(user.base);
-			setHasSetDefaultTab(true);
-		}
-	}, [user?.base, initialLoad, hasSetDefaultTab, activeTab]);
-
-	// Redirect handling
-	useEffect(() => {
-		if (!loading && (!user || !hasAppAccess(user, 'roster'))) {
-			console.log('User not authenticated or no roster access, redirecting...');
-			router.replace('/dashboard');
+		if (!loading && (!user || !hasAppAccess(user, "database_management"))) {
+			router.replace("/schedule");
 		}
 	}, [user, loading, router]);
 
-	// Parse flight duty details from the flight duty string
-	const parseFlightDutyDetails = useCallback((flightDutyString) => {
-		if (!flightDutyString || flightDutyString.trim() === '') {
-			return null;
-		}
-
-		// Parse newline-separated format: "A2\n06:35:00-12:55:00\nAM"
-		const lines = flightDutyString.split('\n').map(line => line.trim());
-		
-		if (lines.length >= 3) {
-			const dutyCode = lines[0];
-			const timeRange = lines[1];
-			const dutyType = lines[2];
-			
-			// Parse time range "06:35:00-12:55:00"
-			const timeMatch = timeRange.match(/^(\d{2}:\d{2}:\d{2})-(\d{2}:\d{2}:\d{2})$/);
-			let reportingTime = null;
-			let endTime = null;
-			
-			if (timeMatch) {
-				reportingTime = timeMatch[1].substring(0, 5); // Convert "06:35:00" to "06:35"
-				endTime = timeMatch[2].substring(0, 5); // Convert "12:55:00" to "12:55"
-			}
-			
-			// Calculate total sectors (simplified estimation based on duty code)
-			let totalSectors = 1;
-			if (dutyCode.includes('2')) totalSectors = 2;
-			else if (dutyCode.includes('3')) totalSectors = 3;
-			else if (dutyCode.includes('4')) totalSectors = 4;
-			
-			return {
-				dutyCode: dutyCode,
-				reportingTime: reportingTime,
-				endTime: endTime,
-				dutyType: dutyType,
-				totalSectors: totalSectors
-			};
-		}
-		
-		// If no specific pattern matches, return the original string as duty code
-		return {
-			dutyCode: flightDutyString,
-			reportingTime: null,
-			endTime: null,
-			dutyType: null,
-			totalSectors: null
-		};
-	}, []);
-
-	// Main data loading effect - only runs when month or tab changes
+	// Load available months
 	useEffect(() => {
-		const loadScheduleData = async () => {
-			if (!currentMonth || initialLoad) {
-				return;
-			}
-
-			console.log('Loading schedule data for:', currentMonth, activeTab);
-			setScheduleLoading(true);
-
+		const loadData = async () => {
 			try {
-				// Load all schedules for the month (cached)
-				let allSchedules = await getAllSchedulesForMonth(currentMonth);
-				
-				const hasScheduleData = allSchedules.length > 0;
-				
-				// Get user schedule
-				const userSchedule = user?.id ? await getEmployeeSchedule(user.id, currentMonth) : null;
+				// Load schedule months
+				const scheduleResponse = await fetch("/api/schedule/months");
+				const scheduleResult = await scheduleResponse.json();
+				if (scheduleResult.success) {
+					setAvailableScheduleMonths(scheduleResult.data);
+				}
 
-				// Calculate dates from schedules
-				const allDates = hasScheduleData ? 
-					(() => {
-						const firstSchedule = allSchedules[0];
-						if (firstSchedule && firstSchedule.days) {
-							const dates = Object.keys(firstSchedule.days).sort();
-							// Extract year from month string (e.g., "2026年01月")
-							const yearMatch = currentMonth.match(/(\d{4})年/);
-							const currentYear = yearMatch ? parseInt(yearMatch[1]) : new Date().getFullYear();
-							const monthNumber = currentMonth.match(/(\d{2})月/)?.[1];
-							
-							if (monthNumber) {
-								return dates.filter(date => {
-									const dateObj = new Date(date);
-									return dateObj.getFullYear() === currentYear && 
-										   (dateObj.getMonth() + 1) === parseInt(monthNumber);
-								});
-							}
-							return dates;
-						}
-						return [];
-					})() : [];
-
-				// Get schedules by base
-				const otherSchedules = hasScheduleData ? 
-					await getSchedulesByBase(currentMonth, activeTab).then(schedules => {
-						return schedules
-							.filter(schedule => schedule.employeeID !== user?.id)
-					}) : [];
-
-				setScheduleData({
-					allSchedules,
-					hasScheduleData,
-					userSchedule,
-					allDates,
-					otherSchedules
-				});
-				
-				console.log('Schedule data loaded successfully');
-				
+				// Load dispatch months
+				const dispatchResponse = await fetch("/api/flight-duty/months");
+				const dispatchResult = await dispatchResponse.json();
+				if (dispatchResult.success) {
+					setAvailableDispatchMonths(dispatchResult.data);
+				}
 			} catch (error) {
-				console.error('Error loading schedule data:', error);
-				toast.error('載入班表資料失敗');
-			} finally {
-				setScheduleLoading(false);
+				console.error("Error loading data:", error);
 			}
 		};
 
-		loadScheduleData();
-	}, [currentMonth, activeTab, user?.id, initialLoad]);
+		if (hasAppAccess(user, "database_management")) {
+			loadData();
+		}
+	}, [user]);
 
-	// PDX data for current month (bulk-fetched, stored in ref to avoid re-renders)
-	const pdxMonthDataRef = useRef(null);   // { duties, sectorsById } | null
-	const pdxMonthLoadedFor = useRef('');   // which month it was loaded for
-
-	// Rich tooltip state — declared early so effects and handlers below can reference it
-	const [tooltipData, setTooltipData] = useState({
-		visible: false,
-		employeeId: '',
-		name: '',
-		dutyCode: '',
-		date: '',
-		reportingTime: '',
-		endTime: '',
-		pdxDutyRow: null,
-		pdxSectors: null,
-		sameEmployees: [],
-		isUserSchedule: false,
-		x: 0,
-		y: 0,
-		above: false,
-	});
-	const [sectorsExpanded, setSectorsExpanded] = useState(false);
-
-
-	// Employee name-cell tooltip (separate from duty tooltip)
-	const empTooltipRef = useRef(null);
-	const [empTooltipData, setEmpTooltipData] = useState({
-		visible: false,
-		employeeId: '',
-		name: '',
-		totalFt: 0,
-		amCount: 0,
-		pmCount: 0,
-		duties4: 0,   // duties with sector_count <= 4
-		duties6: 0,   // duties with sector_count <= 6 (but > 4)
-		x: 0,
-		y: 0,
-		above: false,
-		days: {},          // schedule.days for Google Calendar export
-		calPicker: null,   // null | { calendars: [{id,summary}], token: string, selectedId: string }
-	});
-	// ── PDX bulk-fetch for current month ────────────────────────────────────
-	// Runs when currentMonth changes. Stores data in a ref (no re-render needed).
+	// Load users when users tab is active
 	useEffect(() => {
-		if (!currentMonth) return;
-		// Already loaded for this month
-		if (pdxMonthLoadedFor.current === currentMonth) return;
-
-		const loadPdx = async () => {
-			pdxMonthLoadedFor.current = currentMonth;
-			pdxMonthDataRef.current = null;
-
-			const match = currentMonth.match(/^(\d{4})年(\d{2})月$/);
-			if (!match) return;
-			const yr = parseInt(match[1]);
-			const mo = parseInt(match[2]);
-
-			const { data: monthRow, error: monthErr } = await supabase
-				.from('pdx_months')
-				.select('id')
-				.eq('year', yr)
-				.eq('month', mo)
-				.eq('status', 'published')
-				.single();
-
-			if (monthErr || !monthRow) return; // No published PDX for this month — silent
-
-			const { data: fullDuties, error: dutiesErr } = await supabase
-				.from('pdx_duties')
-				.select('*')
-				.eq('month_id', monthRow.id);
-			if (dutiesErr || !fullDuties?.length) return;
-
-			const { data: stats } = await supabase
-				.from('pdx_duty_stats')
-				.select('*')
-				.eq('month_id', monthRow.id);
-
-			const dutyIds = fullDuties.map(d => d.id);
-			const { data: sectors } = await supabase
-				.from('pdx_sectors')
-				.select('*')
-				.in('duty_id', dutyIds)
-				.order('seq', { ascending: true });
-
-			const statsById = {};
-			(stats || []).forEach(s => { statsById[s.duty_id] = s; });
-
-			const mergedDuties = fullDuties.map(d => ({ ...d, ...(statsById[d.id] || {}) }));
-
-			const sectorsById = {};
-			(sectors || []).forEach(s => {
-				if (!sectorsById[s.duty_id]) sectorsById[s.duty_id] = [];
-				sectorsById[s.duty_id].push(s);
-			});
-
-			pdxMonthDataRef.current = { duties: mergedDuties, sectorsById };
-
-			// ── Fetch schedule_day_overrides for this month ──────────────────
-			try {
-				const { data: ovs } = await supabase
-					.from('schedule_day_overrides')
-					.select('employee_id, day, start_time, end_time, extra_sectors, additional_tasks')
-					.eq('month_id', monthRow.id);
-				const newOverrideMap = {};
-				(ovs || []).forEach(ov => {
-					const dateStr = `${yr}-${String(mo).padStart(2,'0')}-${String(ov.day).padStart(2,'0')}`;
-					newOverrideMap[`${ov.employee_id}|${dateStr}`] = ov;
-				});
-				setOverrideMap(newOverrideMap);
-			} catch (ovErr) {
-				console.error('Error fetching overrides:', ovErr);
-			}
-		};
-
-		loadPdx();
-	}, [currentMonth]);
-
-	// ── Close tooltip on outside click ─────────────────────────────────────
-	useEffect(() => {
-		const handleOutsideClick = (e) => {
-			if (tooltipRef.current && !tooltipRef.current.contains(e.target)) {
-				setTooltipData(prev => ({ ...prev, visible: false }));
-			}
-		};
-		if (tooltipData.visible) {
-			document.addEventListener('mousedown', handleOutsideClick);
-			document.addEventListener('touchstart', handleOutsideClick);
+		if (activeTab === "users" && hasAppAccess(user, "database_management")) {
+			loadUsers();
 		}
-		return () => {
-			document.removeEventListener('mousedown', handleOutsideClick);
-			document.removeEventListener('touchstart', handleOutsideClick);
-		};
-	}, [tooltipData.visible]);
+	}, [activeTab, user]);
 
-	// ── Close employee tooltip on outside click ─────────────────────────────
-	useEffect(() => {
-		const handleOutsideClick = (e) => {
-			if (empTooltipRef.current && !empTooltipRef.current.contains(e.target)) {
-				setEmpTooltipData(prev => ({ ...prev, visible: false }));
-			}
-		};
-		if (empTooltipData.visible) {
-			document.addEventListener('mousedown', handleOutsideClick);
-			document.addEventListener('touchstart', handleOutsideClick);
-		}
-		return () => {
-			document.removeEventListener('mousedown', handleOutsideClick);
-			document.removeEventListener('touchstart', handleOutsideClick);
-		};
-	}, [empTooltipData.visible]);
-
-	// ── Name cell click: compute monthly stats from PDX data ─────────────────
-	const handleNameCellClick = useCallback((e, schedule) => {
-		e.stopPropagation();
-
-		// ── Admin mode: click name to set/unset Person A ──────────────────────
-		if (user?.id === 'admin') {
-			setEmpTooltipData(prev => ({ ...prev, visible: false }));
-			setPersonA(prev =>
-				prev?.id === schedule.employeeID
-					? null
-					: { id: schedule.employeeID, name: schedule.name || schedule.employeeID }
-			);
-			return;
-		}
-
-		// Toggle off if same employee clicked again
-		if (empTooltipData.visible && empTooltipData.employeeId === schedule.employeeID) {
-			setEmpTooltipData(prev => ({ ...prev, visible: false }));
-			return;
-		}
-
-		const pdx = pdxMonthDataRef.current;
-
-		// Non-flight duty codes to skip entirely
-		const NON_FLIGHT = new Set(['OFF', '休', '例', 'G', 'A/L', '福補', '年假', '空', 'RESV',
-			'OD', '會', '課', '訓', 'P/L', 'S/L', 'SH1', 'SH2', '']);
-
-		let totalFt = 0, amCount = 0, pmCount = 0, duties4 = 0, duties6 = 0;
-
-		Object.entries(schedule.days || {}).forEach(([date, dutyRaw]) => {
-			if (!dutyRaw) return;
-			const code = dutyRaw.toString().split(/[\\\n]/)[0].trim();
-			if (NON_FLIGHT.has(code)) return;
-			// Skip anything that doesn't start with a letter (guard against date strings etc.)
-			if (!/^[A-Za-z]/.test(code)) return;
-
-			if (pdx) {
-				const matched = findPdxDuty(pdx.duties, code, date);
-				if (matched) {
-					totalFt += matched.ft_minutes || 0;
-					// AM = reporting before 12:00, PM = 12:00 or later
-					const rt = matched.reporting_time || '';
-					const hour = parseInt(rt.substring(0, 2), 10);
-					if (!isNaN(hour)) {
-						if (hour < 12) amCount++; else pmCount++;
-					}
-					const sc = matched.sector_count || 0;
-					if (sc <= 4) duties4++;
-					else if (sc <= 6) duties6++;
-				}
-			}
-		});
-
-		// Position tooltip: flip above if near bottom
-		const rect = e.currentTarget.getBoundingClientRect();
-		const tooltipHeight = 200;
-		const tooltipWidth  = 220;
-		const viewportH = window.innerHeight;
-		const viewportW = window.innerWidth;
-		let x = rect.right + 8; // default: pop out to the right of the name cell
-		if (x + tooltipWidth > viewportW - 8) x = rect.left - tooltipWidth - 8; // flip left
-		const spaceBelow = viewportH - rect.top;
-		const above = spaceBelow < tooltipHeight + 16;
-		const y = above ? rect.bottom - tooltipHeight : rect.top;
-
-		setEmpTooltipData({
-			visible: true,
-			employeeId: schedule.employeeID,
-			name: schedule.name || schedule.employeeID,
-			totalFt,
-			amCount,
-			pmCount,
-			duties4,
-			duties6,
-			x, y, above,
-			days: schedule.days || {},
-			calPicker: null,
-		});
-	}, [empTooltipData.visible, empTooltipData.employeeId, user?.id]);
-
-	// ── Google Identity Services: load script once ────────────────────────────
-	const GOOGLE_CLIENT_ID = '238053199889-um5ssk3eprda6epciv8r5kcvia71t9oi.apps.googleusercontent.com';
-	const tokenClientRef = useRef(null);
-
-	useEffect(() => {
-		if (typeof window === 'undefined') return;
-		if (document.getElementById('gsi-script')) return;
-		const script = document.createElement('script');
-		script.id = 'gsi-script';
-		script.src = 'https://accounts.google.com/gsi/client';
-		script.async = true;
-		script.defer = true;
-		document.head.appendChild(script);
-	}, []);
-
-	// Insert all events into the chosen calendar
-	const insertAllEvents = useCallback(async (token, calendarId, days) => {
-		const events = [];
-		Object.entries(days)
-			.sort(([a], [b]) => a.localeCompare(b))
-			.forEach(([dateStr, dutyRaw]) => {
-				if (!dutyRaw) return;
-				// Replace backslashes and newlines with space; keep forward slashes (flight numbers)
-				const subject = dutyRaw.toString().replace(/\\|\n/g, ' ').trim();
-				if (!subject || subject === '空') return;
-				events.push({ summary: subject, start: { date: dateStr }, end: { date: dateStr } });
-			});
-
-		if (!events.length) {
-			toast('此月份無班表資料', { icon: '⚠️' });
-			return;
-		}
-
-		// Hide picker before inserting
-		setEmpTooltipData(prev => ({ ...prev, calPicker: null }));
-
-		const toastId = toast.loading(`新增中… (0/${events.length})`);
-		let successCount = 0;
-		for (let i = 0; i < events.length; i++) {
-			try {
-				const res = await fetch(
-					`https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events`,
-					{
-						method: 'POST',
-						headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-						body: JSON.stringify(events[i]),
-					}
-				);
-				if (res.ok) {
-					successCount++;
-					toast.loading(`新增中… (${successCount}/${events.length})`, { id: toastId });
-				}
-			} catch (err) {
-				console.error('Error inserting event:', events[i].summary, err);
-			}
-		}
-		toast.dismiss(toastId);
-		toast.success(`已新增 ${successCount} 筆至Google日曆！`);
-	}, []);
-
-	const handleAddToGoogleCalendar = useCallback(() => {
-		const { days } = empTooltipData;
-		if (!days || !Object.keys(days).length) {
-			toast('無班表資料', { icon: '⚠️' });
-			return;
-		}
-
-		const onToken = async (response) => {
-			if (response.error) {
-				toast.error('Google 授權失敗');
-				return;
-			}
-			const token = response.access_token;
-
-			// Fetch user's writable calendars
-			let calendars = [{ id: 'primary', summary: '主要日曆' }];
-			try {
-				const res = await fetch(
-					'https://www.googleapis.com/calendar/v3/users/me/calendarList?minAccessRole=writer',
-					{ headers: { Authorization: `Bearer ${token}` } }
-				);
-				const data = await res.json();
-				if (data.items?.length) {
-					calendars = data.items.map(c => ({ id: c.id, summary: c.summary }));
-				}
-			} catch (err) {
-				console.error('Failed to fetch calendar list:', err);
-			}
-
-			// Store picker inside empTooltipData so tooltip stays open and visible
-			setEmpTooltipData(prev => ({
-				...prev,
-				calPicker: {
-					calendars,
-					token,
-					selectedId: calendars[0]?.id || 'primary',
-				},
-			}));
-		};
-
-		if (!tokenClientRef.current) {
-			tokenClientRef.current = window.google.accounts.oauth2.initTokenClient({
-				client_id: GOOGLE_CLIENT_ID,
-				scope: 'https://www.googleapis.com/auth/calendar.events https://www.googleapis.com/auth/calendar.readonly',
-				callback: onToken,
-			});
-		} else {
-			tokenClientRef.current.callback = onToken;
-		}
-
-		tokenClientRef.current.requestAccessToken({ prompt: '' });
-	}, [empTooltipData]);
-
-	// Flight duty cache for performance
-	const flightDutyCache = useRef(new Map());
-
-	// Fetch flight duty details for a specific duty and date
-	const getFlightDutyDetails = useCallback(async (dutyCode, date) => {
-		const cacheKey = `${dutyCode}-${date}-${currentMonth}`;
-		if (flightDutyCache.current.has(cacheKey)) {
-			return flightDutyCache.current.get(cacheKey);
-		}
+	const loadUsers = async () => {
 		try {
-			const { data, error } = await flightDutyHelpers.getFlightDutyDetails(dutyCode, date, currentMonth);
-			if (error) {
-				console.error('Error fetching flight duty details:', error);
-				return null;
+			setIsLoadingUsers(true);
+			const response = await fetch(`/api/users?userAccessLevel=${user.access_level}`);
+			const result = await response.json();
+
+			if (result.success) {
+				setUsers(result.data);
+			} else {
+				toast.error("載入使用者失敗: " + result.error);
 			}
-			flightDutyCache.current.set(cacheKey, data);
-			return data;
 		} catch (error) {
-			console.error('Error in getFlightDutyDetails:', error);
-			return null;
+			console.error("Error loading users:", error);
+			toast.error("載入使用者錯誤: " + error.message);
+		} finally {
+			setIsLoadingUsers(false);
 		}
-	}, [currentMonth]);
-
-	// ── Unified click handler: show tooltip on any device ───────────────────
-	const handleDutyCellClick = useCallback((e, employeeId, name, date, duty, sameEmployees, isUserSchedule) => {
-		e.stopPropagation();
-
-		// Toggle off if same cell clicked again
-		if (tooltipData.visible && tooltipData.date === date && tooltipData.employeeId === employeeId) {
-			setTooltipData(prev => ({ ...prev, visible: false }));
-			return;
-		}
-
-		const baseDutyCode = duty ? duty.split(/[\\\n]/)[0].trim() : '';
-		let reportingTime = '';
-		let endTime = '';
-		let pdxDutyRow = null;
-		let pdxSectors = null;
-
-		// PDX lookup (primary)
-		const pdx = pdxMonthDataRef.current;
-		if (pdx && baseDutyCode && /^[A-Z]/.test(baseDutyCode)) {
-			const matched = findPdxDuty(pdx.duties, baseDutyCode, date);
-			if (matched) {
-				pdxDutyRow = matched;
-				pdxSectors = pdx.sectorsById[matched.id] || [];
-				if (matched.reporting_time) reportingTime = matched.reporting_time.substring(0, 5);
-				if (matched.duty_end_time)  endTime = matched.duty_end_time.substring(0, 5);
-			}
-		}
-
-		// Ground duty time fallback (OD, 課, 訓, etc. are not in PDX)
-		if (!reportingTime && !endTime && GROUND_DUTY_TIMES[baseDutyCode]) {
-			reportingTime = GROUND_DUTY_TIMES[baseDutyCode].start;
-			endTime       = GROUND_DUTY_TIMES[baseDutyCode].end;
-		}
-
-		// Apply schedule_day_overrides times if present
-		let overrideEntry = null;
-		if (overrideMap[`${employeeId}|${date}`]) {
-			overrideEntry = overrideMap[`${employeeId}|${date}`];
-			if (overrideEntry.start_time) reportingTime = overrideEntry.start_time.substring(0, 5);
-			if (overrideEntry.end_time)   endTime       = overrideEntry.end_time.substring(0, 5);
-			// Q1: Filter pdxSectors to only kept flights from override
-			if (pdxSectors?.length) {
-				// Extract kept flight numbers from duty string e.g. "I4\7931.2" → ["7931","7932"]
-				const dutyParts = (duty || "").split(/[\\\n]/);
-				if (dutyParts.length > 1) {
-					const keptNums = new Set(
-						dutyParts.slice(1).join("").split("/").map(s => s.trim()).filter(Boolean)
-					);
-					if (keptNums.size > 0) {
-						pdxSectors = pdxSectors.filter(s =>
-							keptNums.has(s.flight_number.replace(/^AE-/, ""))
-						);
-					}
-				}
-			}
-		}
-
-		// Position: flip above if near bottom
-		const rect = e.currentTarget.getBoundingClientRect();
-		const tooltipHeight = 320;
-		const tooltipWidth  = 300;
-		const viewportH = window.innerHeight;
-		const viewportW = window.innerWidth;
-		let x = rect.left + rect.width / 2;
-		if (x - tooltipWidth / 2 < 8) x = tooltipWidth / 2 + 8;
-		if (x + tooltipWidth / 2 > viewportW - 8) x = viewportW - tooltipWidth / 2 - 8;
-		const spaceBelow = viewportH - rect.bottom;
-		const above = spaceBelow < tooltipHeight + 16;
-		const y = above ? rect.top - 8 : rect.bottom + 8;
-
-		setSectorsExpanded(false);
-		setTooltipData({
-			visible: true,
-			employeeId,
-			name,
-			dutyCode: duty || '空',
-			date,
-			reportingTime,
-			endTime,
-			pdxDutyRow,
-			pdxSectors,
-			sameEmployees,
-			isUserSchedule,
-			override: overrideEntry,
-			x, y, above,
-		});
-	}, [tooltipData.visible, tooltipData.date, tooltipData.employeeId, overrideMap]);
-
-	const getDayOfWeek = useCallback((dateStr) => {
-		const date = new Date(dateStr);
-		const days = ['日', '一', '二', '三', '四', '五', '六'];
-		return days[date.getDay()];
-	}, []);
-
-	const formatDate = useCallback((dateStr) => {
-		const date = new Date(dateStr);
-		return (date.getMonth() + 1).toString().padStart(2, '0') + '/' + date.getDate().toString().padStart(2, '0');
-	}, []);
-
-	const isValidDate = useCallback((text) => {
-		const datePattern = /^(\d{1,2})\/(\d{1,2})$/;
-		const match = text.match(datePattern);
-		if (!match) return false;
-		const month = parseInt(match[1]);
-		const day = parseInt(match[2]);
-		return month >= 1 && month <= 12 && day >= 1 && day <= 31;
-	}, []);
-
-	const formatDutyText = useCallback((duty) => {
-		if (!duty) return duty;
-		const keepSlashDuties = ['P/L', 'A/L', 'S/L'];
-		if (keepSlashDuties.includes(duty)) return duty;
-		if (isValidDate(duty)) return duty;
-		return duty.replace(/\\/g, '\n');
-	}, [isValidDate]);
-
-	const getDutyFontSize = useCallback((duty) => {
-		if (!duty) return 'dutyFontNormal';
-		const length = duty.length;
-		if (length <= 2) return 'dutyFontNormal';
-		if (length <= 3) return 'dutyFontMedium';
-		if (length <= 4) return 'dutyFontSmall';
-		return 'dutyFontTiny';
-	}, []);
-
-	const getDutyBackgroundColor = useCallback((duty) => {
-		if (duty === '休' || duty === '例' || duty === 'G') return styles.dutyOff;
-		if (duty === 'A/L') return styles.dutyLeave;
-		if (duty === '福補') return styles.dutyWelfare;
-		if (duty === '空' || duty === '') return styles.dutyEmpty;
-		if (duty === 'SH1' || duty === 'SH2') return styles.dutyHomestandby;
-		if (duty === '課' || duty === '訓' || duty === '訓D1' || duty === '訓D2' || duty === '訓D3' || duty === '會務') return styles.dutyTraining;
-		return '';
-	}, []);
-
-	const getEmployeesWithSameDuty = useCallback((date, duty, excludeEmployeeId = null) => {
-		if (!duty || !scheduleData.hasScheduleData) return [];
-		const baseDuty = duty.split(/[\\\n]/)[0].trim();
-		return scheduleData.allSchedules
-			.filter(schedule => 
-				(schedule.days[date] || '').split(/[\\\n]/)[0].trim() === baseDuty && 
-				schedule.employeeID !== user?.id &&
-				schedule.employeeID !== excludeEmployeeId
-			)
-			.map(schedule => ({
-				id: schedule.employeeID,
-				name: schedule.name || '',
-				rank: schedule.rank || '',
-				base: schedule.base || '',
-				duty: schedule.days[date]
-			}));
-	}, [scheduleData.allSchedules, scheduleData.hasScheduleData, user?.id]);
-
-	// PDX data for current month (bulk-fetched, stored in ref to avoid re-renders)
-
-
-
-
-	const handleDutySelect = useCallback((employeeId, name, date, duty) => {
-		if (!scheduleData.hasScheduleData) {
-			toast("此月份沒有班表資料！", { icon: '📅', duration: 3000 });
-			return;
-		}
-		if (window.navigator && window.navigator.vibrate) {
-			window.navigator.vibrate(50);
-		}
-		const displayDuty = duty === "" ? "空" : duty.replace(/\\/g, ' ');
-		const existingIndex = selectedDuties.findIndex(item =>
-			item.employeeId === employeeId && item.date === date
-		);
-		if (existingIndex >= 0) {
-			const newSelectedDuties = [...selectedDuties];
-			newSelectedDuties.splice(existingIndex, 1);
-			setSelectedDuties(newSelectedDuties);
-		} else {
-			setSelectedDuties(prev => [...prev, { employeeId, name, date, duty: displayDuty }]);
-		}
-	}, [scheduleData.hasScheduleData, selectedDuties, formatDate]);
-
-	const handleTabChange = useCallback(async (base) => {
-		if (scheduleLoading || activeTab === base) return;
-		setActiveTab(base);
-		setSelectedDuties([]);
-		setHighlightedDates({});
-		setPersonA(null);
-	}, [activeTab, scheduleLoading]);
-
-	const handleDutyChangeClick = useCallback(() => {
-	if (!scheduleData.hasScheduleData) {
-		toast("此月份沒有班表資料！無法申請換班！", { icon: '⌚', duration: 3000 });
-		return;
-	}
-
-	if (selectedDuties.length === 0) {
-		toast("想換班還不選人喔!搞屁啊!", { icon: '🙄', duration: 3000 });
-		return;
-	}
-
-	const uniqueEmployeeIds = [...new Set(selectedDuties.map(duty => duty.employeeId))];
-	if (uniqueEmployeeIds.length > 1) {
-		toast("這位太太！一張換班單只能跟一位換班!", { icon: '🤨', duration: 3000 });
-		return;
-	}
-
-	// ── Admin proxy: must select Person A first ───────────────────────────
-	if (user?.id === 'admin' && !personA) {
-		toast("請先點選甲方姓名！", { icon: '👆', duration: 3000 });
-		return;
-	}
-
-	const isAdminProxy = user?.id === 'admin' && personA;
-
-	const dutyChangeData = {
-		firstID:   isAdminProxy ? personA.id   : (user?.id   || ""),
-		firstName: isAdminProxy ? personA.name : (user?.name || ""),
-		selectedMonth: currentMonth,
-		allDuties: selectedDuties,
-		userSchedule: scheduleData.userSchedule  // ← FIX: Include Person A's schedule
 	};
 
-	console.log('Duty change data being saved:', dutyChangeData); // For debugging
+	const handleUploadClick = (type) => {
+		setUploadType(type);
+		setShowUploadModal(true);
+		setJsonData("");
+		setXlsxFile(null);
+		setXlsxDetectedMonth(null);
+		setXlsxStatus(null);
+	};
 
-	localStorage.setItem('dutyChangeData', JSON.stringify(dutyChangeData));
-	router.push('/duty-change');
-}, [selectedDuties, router, user, currentMonth, scheduleData.hasScheduleData, scheduleData.userSchedule, personA]);
+	const handleUpload = async () => {
+		if (!jsonData.trim()) {
+			toast.error("請輸入資料");
+			return;
+		}
 
-	const handleMonthChange = useCallback(async (event) => {
-		const newMonth = event.target.value;
-		if (newMonth === currentMonth) return;
-		
-		setCurrentMonth(newMonth);
-		setSelectedDuties([]);
-		setHighlightedDates({});
-		setPersonA(null);
-	}, [currentMonth]);
+		try {
+			setIsUploading(true);
+			const data = JSON.parse(jsonData);
 
-	const handleClearAll = useCallback(() => {
-		setSelectedDuties([]);
-		toast('已清除所有選擇', { icon: '🗑️', duration: 2000 });
-	}, []);
+			const endpoint =
+				uploadType === "schedule"
+					? "/api/schedule/upload"
+					: "/api/flight-duty/upload";
 
-	const renderTableHeader = useCallback(() => (
-		<thead className={styles.stickyTableHeader}>
-			<tr className={styles.tableHeader}>
-				{!isMobile && (
-					<th className={styles.stickyCol + ' ' + styles.employeeId}>員編</th>
-				)}
-				<th className={styles.stickyCol + ' ' + styles.employeeName}>姓名</th>
-				{scheduleData.allDates.map(date => (
-					<th key={date} className={styles.dateCol}>
-						<div>{formatDate(date)}</div>
-						<div className={styles.dayOfWeek}>({getDayOfWeek(date)})</div>
-					</th>
-				))}
-			</tr>
-		</thead>
-	), [scheduleData.allDates, formatDate, getDayOfWeek, isMobile]);
+			const response = await fetch(endpoint, {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({
+					scheduleData: data,
+					flightDutyData: data,
+					userId: user.id,
+					userAccessLevel: user.access_level,
+				}),
+			});
 
-	// ── UPDATED renderTableRow: reads swapRequestMap for outline classes ──────
-	const renderTableRow = useCallback((schedule, isUserSchedule = false) => {
-		const isPersonA = personA?.id === schedule.employeeID;
-		return (
-		<tr key={schedule.employeeID} className={isPersonA ? styles.personARow : ''}>
-			{!isMobile && (
-				<td className={styles.stickyCol + ' ' + styles.employeeIdCell}>
-					{schedule.employeeID}
-				</td>
-			)}
-			<td
-				className={styles.stickyCol + ' ' + styles.employeeNameCell + ' ' + styles.clickableNameCell + (isPersonA ? ' ' + styles.personANameCell : '')}
-				onClick={(e) => handleNameCellClick(e, schedule)}
-			>
-				<div className={styles.nameContainer}>
-					<div className={styles.employeeName}>{schedule.name || '-'}</div>
-					<div className={styles.badgeContainer}>
-						{isPersonA && (
-							<span className={styles.personABadge}>甲方</span>
-						)}
-						{schedule.rank && (
-							<span className={styles.rankBadge}>{schedule.rank}</span>
-						)}
-						<span className={styles.baseBadge + ' ' + styles['base' + schedule.base]}>
-							{schedule.base}
-						</span>
-					</div>
-				</div>
-			</td>
-			{scheduleData.allDates.map(date => {
-				const duty = schedule.days[date];
-				const displayDuty = duty || "空";
-				const formattedDuty = formatDutyText(displayDuty);
-				const bgColorClass = getDutyBackgroundColor(duty);
-				const fontSizeClass = getDutyFontSize(displayDuty);
-				const sameEmployees = getEmployeesWithSameDuty(date, duty);
-				const isSelected = !isUserSchedule && selectedDuties.some(item =>
-					item.employeeId === schedule.employeeID && item.date === date
+			const result = await response.json();
+
+			if (result.success) {
+				toast.success(
+					`${uploadType === "schedule" ? "班表" : "派遣表"}上傳成功！`
+				);
+				setJsonData("");
+				setShowUploadModal(false);
+
+				// Reload data
+				if (uploadType === "schedule") {
+					const scheduleResponse = await fetch("/api/schedule/months");
+					const scheduleResult = await scheduleResponse.json();
+					if (scheduleResult.success) {
+						setAvailableScheduleMonths(scheduleResult.data);
+					}
+				} else {
+					const dispatchResponse = await fetch("/api/flight-duty/months");
+					const dispatchResult = await dispatchResponse.json();
+					if (dispatchResult.success) {
+						setAvailableDispatchMonths(dispatchResult.data);
+					}
+				}
+			} else {
+				toast.error("上傳失敗: " + result.error);
+			}
+		} catch (error) {
+			toast.error("JSON格式錯誤: " + error.message);
+		} finally {
+			setIsUploading(false);
+		}
+	};
+
+	const handleDelete = async (month, type) => {
+		if (
+			!confirm(
+				`確定要刪除 ${month} 的${type === "schedule" ? "班表" : "派遣表"}資料嗎？`
+			)
+		) {
+			return;
+		}
+
+		try {
+			setIsDeleting(true);
+			const endpoint =
+				type === "schedule"
+					? "/api/schedule/delete"
+					: "/api/flight-duty/delete";
+
+			const response = await fetch(endpoint, {
+				method: "DELETE",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({
+					month,
+					userId: user.id,
+					userAccessLevel: user.access_level,
+				}),
+			});
+
+			const result = await response.json();
+
+			if (result.success) {
+				toast.success(`${month} ${type === "schedule" ? "班表" : "派遣表"}已刪除`);
+
+				// Reload data
+				if (type === "schedule") {
+					setAvailableScheduleMonths((prev) =>
+						prev.filter((m) => m !== month)
+					);
+				} else {
+					setAvailableDispatchMonths((prev) =>
+						prev.filter((m) => m !== month)
+					);
+				}
+			} else {
+				toast.error("刪除失敗: " + result.error);
+			}
+		} catch (error) {
+			toast.error("刪除錯誤: " + error.message);
+		} finally {
+			setIsDeleting(false);
+		}
+	};
+
+	const handleCleanup = async (type) => {
+		if (
+			!confirm(
+				`確定要清理舊的${type === "schedule" ? "班表" : "派遣表"}資料嗎？只會保留前月、當月、次月的資料。`
+			)
+		) {
+			return;
+		}
+
+		try {
+			setIsDeleting(true);
+			const endpoint =
+				type === "schedule"
+					? "/api/schedule/cleanup"
+					: "/api/flight-duty/cleanup";
+
+			const response = await fetch(endpoint, {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({
+					userId: user.id,
+					userAccessLevel: user.access_level,
+				}),
+			});
+
+			const result = await response.json();
+
+			if (result.success) {
+				toast.success(
+					`清理完成，刪除了 ${result.deleted || 0} 個月份的資料`
 				);
 
-				// ── Swap request overlay ─────────────────────────────────
-				const swapEntry     = swapRequestMap[`${schedule.employeeID}|${date}`];
-				const swapStatus    = swapEntry?.status;
-				const isSwapPending  = swapStatus === 'pending';
-				const isSwapApproved = swapStatus === 'approved';
+				// Reload data
+				if (type === "schedule") {
+					const scheduleResponse = await fetch("/api/schedule/months");
+					const scheduleResult = await scheduleResponse.json();
+					if (scheduleResult.success) {
+						setAvailableScheduleMonths(scheduleResult.data);
+					}
+				} else {
+					const dispatchResponse = await fetch("/api/flight-duty/months");
+					const dispatchResult = await dispatchResponse.json();
+					if (dispatchResult.success) {
+						setAvailableDispatchMonths(dispatchResult.data);
+					}
+				}
+			} else {
+				toast.error("清理失敗: " + result.error);
+			}
+		} catch (error) {
+			toast.error("清理錯誤: " + error.message);
+		} finally {
+			setIsDeleting(false);
+		}
+	};
 
-				// For approved swaps: display the received duty instead of the original.
-				// Fall back to original if swappedDuty is null (e.g. old records without person_a_duties).
-				// Keep original `duty` for click handler so PDX tooltip still works correctly.
-				// For overridden duties: show base code + * to avoid messy encoded string display
-				const rawDisplayDuty = (isSwapApproved && swapEntry?.swappedDuty != null)
-					? swapEntry.swappedDuty
-					: (duty || '空');
-				const hasOverrideStar = !!overrideMap[`${schedule.employeeID}|${date}`];
-				const displayedDuty = hasOverrideStar
-					? (rawDisplayDuty.split(/[\\\n]/)[0].trim() || rawDisplayDuty) + '*'
-					: rawDisplayDuty;
-				const formattedDisplayDuty = hasOverrideStar ? displayedDuty : formatDutyText(rawDisplayDuty);
-				const displayFontSizeClass = getDutyFontSize(displayedDuty);
-				// Background color follows the displayed duty so colours stay meaningful
-				const displayBgClass = isSwapApproved && swapEntry?.swappedDuty != null
-					? getDutyBackgroundColor(swapEntry.swappedDuty)
-					: bgColorClass;
+	// ── Excel file processing helpers (for upload modal) ──
 
-				let className = styles.dutyCell;
-				if (!isUserSchedule) className += ' ' + styles.selectable;
-				if (displayBgClass) className += ' ' + displayBgClass;
-				if (isSelected) className += ' ' + styles.selected;
-					if (hasOverrideStar) className += ' ' + styles.dutyCellOverride;
-				if (isSwapApproved) className += ' ' + styles.dutyCellApproved;
-				else if (isSwapPending) className += ' ' + styles.dutyCellPending;
+	const getDaysInMonthFromStr = (monthStr) => {
+		const yearMatch = monthStr.match(/(\d{4})年/);
+		const monthMatch = monthStr.match(/(\d{2})月/);
+		if (!yearMatch || !monthMatch) return 31;
+		return new Date(parseInt(yearMatch[1]), parseInt(monthMatch[1]), 0).getDate();
+	};
 
-				return (
-					<td
-						key={date}
-						className={className}
-						// Pass original duty to click handler so PDX tooltip data is correct
-						onClick={(e) => handleDutyCellClick(e, schedule.employeeID, schedule.name, date, duty, sameEmployees, isUserSchedule)}
-					>
-						<div className={styles.dutyContent + ' ' + styles[displayFontSizeClass]}>
-							{formattedDisplayDuty.split('\n').map((line, index) => (
-								<React.Fragment key={index}>
-									{line}
-									{index < formattedDisplayDuty.split('\n').length - 1 && <br />}
-								</React.Fragment>
-							))}
-						</div>
-					</td>
+	const convertToDataRoster = (worksheet, month) => {
+		try {
+			const XLSX = window.XLSX;
+			const employees = [];
+			let totalDuties = 0;
+			let completeEmployees = 0;
+			const daysInMonth = getDaysInMonthFromStr(month);
+			const range = XLSX.utils.decode_range(worksheet["!ref"]);
+			for (let row = 0; row <= range.e.r; row++) {
+				const empCell = worksheet[XLSX.utils.encode_cell({ r: row, c: 5 })];
+				if (empCell && empCell.v && /^\d{5}$/.test(empCell.v.toString().trim())) {
+					const employeeID = empCell.v.toString().trim();
+					const nameCell = worksheet[XLSX.utils.encode_cell({ r: row, c: 6 })];
+					const employeeName = nameCell && nameCell.v ? nameCell.v.toString().trim() : "";
+					const duties = [];
+					for (let day = 0; day < daysInMonth; day++) {
+						const dutyCol = 7 + day;
+						const mainCell = worksheet[XLSX.utils.encode_cell({ r: row, c: dutyCol })];
+						const mainDuty = mainCell ? (mainCell.w || (mainCell.v ? mainCell.v.toString() : "")).trim() : "";
+						const nextCell = worksheet[XLSX.utils.encode_cell({ r: row + 1, c: dutyCol })];
+						const nextDuty = nextCell ? (nextCell.w || (nextCell.v ? nextCell.v.toString() : "")).trim() : "";
+						let combinedDuty = "";
+						if (mainDuty && nextDuty) {
+							combinedDuty = `${mainDuty.replace(/\n/g, "\\")}\\${nextDuty.replace(/\n/g, "\\")}`;
+						} else if (mainDuty) {
+							combinedDuty = mainDuty.replace(/\n/g, "\\");
+						} else if (nextDuty) {
+							combinedDuty = nextDuty.replace(/\n/g, "\\");
+						}
+						duties.push(combinedDuty);
+						if (combinedDuty) totalDuties++;
+					}
+					const nonEmptyDuties = duties.filter((d) => d !== "").length;
+					if (nonEmptyDuties > 0) {
+						employees.push({ employeeID, employeeName, duties });
+						if (nonEmptyDuties >= 15) completeEmployees++;
+					}
+				}
+			}
+			if (employees.length === 0) return { success: false, error: "找不到組員資料" };
+			const seenIDs = new Set();
+			const uniqueEmployees = [];
+			employees.forEach((emp) => {
+				if (!seenIDs.has(emp.employeeID)) {
+					seenIDs.add(emp.employeeID);
+					uniqueEmployees.push({ employeeID: emp.employeeID, duties: emp.duties });
+				}
+			});
+			return { success: true, data: { month, crew_schedules: uniqueEmployees } };
+		} catch (error) {
+			return { success: false, error: error.message };
+		}
+	};
+
+	const extractFlightDutiesCompanyFormat = (workbook, monthStr) => {
+		const formatTime = (excelDate) => {
+			if (!excelDate) return null;
+			try { return new Date(excelDate).toTimeString().substring(0, 5); } catch { return null; }
+		};
+		const getDayFromSheetName = (sheetName) => {
+			const dayMap = { "週一": 1, "週二": 2, "週三": 3, "週四": 4, "週五": 5, "週六": 6, "週日": 7 };
+			for (const [chinese, dayNum] of Object.entries(dayMap)) {
+				if (sheetName.includes(chinese)) return dayNum;
+			}
+			return null;
+		};
+		const dutyRecords = [];
+		const amDutyRows = [4,8,12,16,20,24,28,32,36,40,44,48,52,56,60,64,68,72,76,80];
+		const pmDutyRows = [5,9,13,17,21,25,29,33,37,41,45,49,53,57,61,65,69,73,77,81];
+		workbook.SheetNames.forEach((sheetName) => {
+			const sheet = workbook.Sheets[sheetName];
+			const dayOfWeek = getDayFromSheetName(sheetName);
+			if (!dayOfWeek) return;
+			let scheduleType = "regular";
+			let specialDate = null;
+			if (sheetName.includes("22日")) { scheduleType = "special"; specialDate = 22; }
+			else if (sheetName.includes("29日")) { scheduleType = "special"; specialDate = 29; }
+			const foundDuties = new Set();
+			amDutyRows.forEach((row) => {
+				const dutyCell = sheet["B" + row];
+				if (!dutyCell || !dutyCell.w) return;
+				const dutyCode = dutyCell.w.toString().replace("-", "").trim();
+				if (!dutyCode.match(/^[A-Z][2]$/) || foundDuties.has(dutyCode) || ["U2","U4","U6","U8"].includes(dutyCode)) return;
+				const reportCell = sheet["C" + row];
+				const reportTime = reportCell && reportCell.v ? formatTime(reportCell.v) : null;
+				if (!reportTime || reportTime === "00:00") return;
+				const sectors = [];
+				for (let col = 5; col <= 10; col++) {
+					const timeCell = sheet[String.fromCharCode(64 + col) + (row + 2)];
+					if (timeCell && timeCell.w && timeCell.w.match(/^\d{1,2}:\d{2}$/)) sectors.push(timeCell.w);
+					else break;
+				}
+				if (sectors.length > 0 && [2, 4, 6].includes(sectors.length)) {
+					dutyRecords.push({ month_id: monthStr, duty_code: dutyCode, day_of_week: dayOfWeek, schedule_type: scheduleType, special_date: specialDate, reporting_time: reportTime, end_time: sectors[sectors.length - 1], total_sectors: sectors.length, duty_type: "AM", priority: scheduleType === "special" ? 1 : 0 });
+					foundDuties.add(dutyCode);
+				}
+			});
+			pmDutyRows.forEach((row) => {
+				const dutyCell = sheet["B" + row];
+				if (!dutyCell || !dutyCell.w) return;
+				const dutyCode = dutyCell.w.toString().replace("-", "").trim();
+				if (!dutyCode.match(/^[A-Z][4]$/) || foundDuties.has(dutyCode) || ["U2","U4","U6","U8"].includes(dutyCode)) return;
+				const reportCell = sheet["C" + row];
+				const reportTime = reportCell && reportCell.v ? formatTime(reportCell.v) : null;
+				if (!reportTime || reportTime === "00:00") return;
+				const sectors = [];
+				for (let col = 12; col <= 17; col++) {
+					const timeCell = sheet[String.fromCharCode(64 + col) + (row + 1)];
+					if (timeCell && timeCell.w && timeCell.w.match(/^\d{1,2}:\d{2}$/)) sectors.push(timeCell.w);
+					else break;
+				}
+				if (sectors.length > 0 && [2, 4, 6].includes(sectors.length)) {
+					dutyRecords.push({ month_id: monthStr, duty_code: dutyCode, day_of_week: dayOfWeek, schedule_type: scheduleType, special_date: specialDate, reporting_time: reportTime, end_time: sectors[sectors.length - 1], total_sectors: sectors.length, duty_type: "PM", priority: scheduleType === "special" ? 1 : 0 });
+					foundDuties.add(dutyCode);
+				}
+			});
+		});
+		if (dutyRecords.length === 0) return { success: false, error: "未找到任何班務記錄" };
+		return { success: true, data: dutyRecords };
+	};
+
+	const loadXLSX = () => new Promise((resolve, reject) => {
+		if (window.XLSX) { resolve(window.XLSX); return; }
+		const script = document.createElement("script");
+		script.src = "https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js";
+		script.onload = () => resolve(window.XLSX);
+		script.onerror = () => reject(new Error("無法載入 XLSX 套件"));
+		document.head.appendChild(script);
+	});
+
+	const handleExcelFileChange = (e) => {
+		const file = e.target.files[0];
+		if (!file) { setXlsxFile(null); setXlsxDetectedMonth(null); setXlsxStatus(null); return; }
+		setXlsxFile(file);
+		setXlsxDetectedMonth(null);
+		setXlsxStatus({ message: `已選擇: ${file.name}，正在偵測月份...`, type: "processing" });
+
+		loadXLSX().then((XLSX) => {
+			const reader = new FileReader();
+			reader.onload = (ev) => {
+				try {
+					const data = new Uint8Array(ev.target.result);
+					const workbook = XLSX.read(data, { type: "array" });
+					const monthMap = { JAN:"01",FEB:"02",MAR:"03",APR:"04",MAY:"05",JUN:"06",JUL:"07",AUG:"08",SEP:"09",OCT:"10",NOV:"11",DEC:"12" };
+
+					let detectedYear = null, detectedMonthNum = null;
+
+					if (uploadType === "dispatch-duty") {
+						for (const sheetName of workbook.SheetNames) {
+							const yearMatch = sheetName.match(/(\d{4})/);
+							if (yearMatch && !detectedYear) detectedYear = yearMatch[1];
+							for (const [abbr, num] of Object.entries(monthMap)) {
+								if (sheetName.toUpperCase().includes(abbr) && !detectedMonthNum) { detectedMonthNum = num; break; }
+							}
+						}
+						if (!detectedYear && workbook.SheetNames.length > 0) {
+							const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
+							const o1Cell = firstSheet && firstSheet["O1"];
+							if (o1Cell && o1Cell.v) {
+								const m = o1Cell.v.toString().match(/(\d{4})/);
+								if (m) detectedYear = m[1];
+							}
+						}
+					} else {
+						const ws = workbook.Sheets["班表輸入"] || workbook.Sheets[workbook.SheetNames[0]];
+						const e1Cell = ws && ws["E1"];
+						if (e1Cell && e1Cell.v) {
+							const val = e1Cell.v.toString();
+							const ym = val.match(/(\d{4})/);
+							const mm = val.match(/(\d{1,2})月/);
+							if (ym) detectedYear = ym[1];
+							if (mm) detectedMonthNum = mm[1].padStart(2, "0");
+						}
+					}
+
+					if (!detectedYear) detectedYear = new Date().getFullYear().toString();
+					if (!detectedMonthNum) detectedMonthNum = (new Date().getMonth() + 1).toString().padStart(2, "0");
+
+					const month = `${detectedYear}年${detectedMonthNum}月`;
+					setXlsxDetectedMonth(month);
+					setXlsxStatus({ message: `偵測到月份：${month}，點選「轉換並填入」以產生JSON`, type: "success" });
+				} catch (err) {
+					setXlsxStatus({ message: `檔案分析失敗: ${err.message}`, type: "error" });
+				}
+			};
+			reader.readAsArrayBuffer(file);
+		}).catch((err) => {
+			setXlsxStatus({ message: err.message, type: "error" });
+		});
+	};
+
+	const handleExcelConvert = () => {
+		if (!xlsxFile || !xlsxDetectedMonth) return;
+
+		setIsProcessingExcel(true);
+		setXlsxStatus({ message: "正在轉換...", type: "processing" });
+
+		loadXLSX().then((XLSX) => {
+			const reader = new FileReader();
+			reader.onload = (ev) => {
+				try {
+					const data = new Uint8Array(ev.target.result);
+					const workbook = XLSX.read(data, { cellStyles: true, cellFormulas: true, cellDates: true, cellNF: true, sheetStubs: true });
+					let result;
+					if (uploadType === "dispatch-duty") {
+						result = extractFlightDutiesCompanyFormat(workbook, xlsxDetectedMonth);
+					} else {
+						const ws = workbook.Sheets["班表輸入"] || workbook.Sheets[workbook.SheetNames[0]];
+						result = convertToDataRoster(ws, xlsxDetectedMonth);
+					}
+					if (result.success) {
+						setJsonData(JSON.stringify(result.data, null, 2));
+						setXlsxStatus({ message: `轉換成功！JSON已填入下方，確認後點選「確認上傳」`, type: "success" });
+					} else {
+						setXlsxStatus({ message: `轉換失敗: ${result.error}`, type: "error" });
+					}
+				} catch (err) {
+					setXlsxStatus({ message: `處理失敗: ${err.message}`, type: "error" });
+				} finally {
+					setIsProcessingExcel(false);
+				}
+			};
+			reader.readAsArrayBuffer(xlsxFile);
+		}).catch((err) => {
+			setXlsxStatus({ message: err.message, type: "error" });
+			setIsProcessingExcel(false);
+		});
+	};
+
+	// User management functions
+	const handleAddUser = () => {
+		setUserModalMode("add");
+		setEditingUser(null);
+		setUserFormData({
+			id: "",
+			name: "",
+			rank: "",
+			base: "",
+			access_level: 1,
+			password: "",
+			gender: "",
+			avatar_gif: "",
+			app_permissions: {
+				roster: { access: false },
+				mrt_checker: { access: false },
+				gday: { access: false },
+				etr_generator: { access: false },
+				dispatch: { access: false },
+				duty_change_review: { access: false },
+				database_management: { access: false },
+				turtle_ranking: { access: false },
+			},
+		});
+		setShowUserModal(true);
+	};
+
+	const handleEditUser = (user) => {
+		setUserModalMode("edit");
+		setEditingUser(user);
+		setUserFormData({
+			id: user.id,
+			name: user.name,
+			rank: user.rank,
+			base: user.base,
+			access_level: user.access_level,
+			password: "",
+			gender: user.gender || "",
+			avatar_gif: user.avatar_gif || "",
+			app_permissions: user.app_permissions || {
+				roster: { access: false },
+				mrt_checker: { access: false },
+				gday: { access: false },
+				etr_generator: { access: false },
+				dispatch: { access: false },
+				duty_change_review: { access: false },
+				database_management: { access: false },
+				turtle_ranking: { access: false },
+			},
+		});
+		setShowUserModal(true);
+	};
+
+	const handleLookupEmployee = async () => {
+		if (!userFormData.id.trim()) {
+			toast.error("請輸入員工編號");
+			return;
+		}
+
+		try {
+			setIsLookingUp(true);
+			const response = await fetch(
+				`/api/users/lookup?employeeId=${userFormData.id}&userAccessLevel=${user.access_level}`
+			);
+			const result = await response.json();
+
+			if (result.success) {
+				const employee = result.data;
+				setUserFormData(prev => ({
+					...prev,
+					name: employee.name,
+					rank: employee.rank,
+					base: employee.base,
+				}));
+				toast.success("員工資料已自動填入");
+			} else {
+				if (result.error === "Employee not found in roster") {
+					toast.error("員工編號不存在於名冊中");
+				} else {
+					toast.error("查詢失敗: " + result.error);
+				}
+			}
+		} catch (error) {
+			console.error("Error looking up employee:", error);
+			toast.error("查詢錯誤: " + error.message);
+		} finally {
+			setIsLookingUp(false);
+		}
+	};
+
+	const handleUserFormSubmit = async () => {
+		// Validation
+		if (!userFormData.id || !userFormData.name) {
+			toast.error("員工編號和姓名為必填欄位");
+			return;
+		}
+
+		if (userModalMode === "add" && !userFormData.password) {
+			toast.error("新增使用者時密碼為必填欄位");
+			return;
+		}
+
+		try {
+			setIsProcessingUser(true);
+
+			const method = userModalMode === "add" ? "POST" : "PUT";
+			const response = await fetch("/api/users", {
+				method,
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({
+					userData: userFormData,
+					userAccessLevel: user.access_level,
+				}),
+			});
+
+			const result = await response.json();
+
+			if (result.success) {
+				toast.success(
+					userModalMode === "add" ? "使用者新增成功" : "使用者更新成功"
 				);
-			})}
-		</tr>
-		);
-	// ── swapRequestMap added to dependency array ──────────────────────────────
-	}, [scheduleData.allDates, selectedDuties, swapRequestMap, overrideMap, formatDutyText, getDutyBackgroundColor, getDutyFontSize, getEmployeesWithSameDuty, handleDutyCellClick, handleNameCellClick, isMobile, personA]);
-
-	// Table sync effects
-	useEffect(() => {
-		const userTable = userTableRef.current;
-		const crewTable = crewTableRef.current;
-		
-		if (!userTable || !crewTable) return;
-		
-		let isUserScrolling = false;
-		let isCrewScrolling = false;
-		
-		const syncUserToCrew = () => {
-			if (!isCrewScrolling) {
-				isUserScrolling = true;
-				crewTable.scrollLeft = userTable.scrollLeft;
-				setTimeout(() => { isUserScrolling = false; }, 50);
+				setShowUserModal(false);
+				loadUsers(); // Reload users list
+			} else {
+				toast.error(
+					(userModalMode === "add" ? "新增" : "更新") + "失敗: " + result.error
+				);
 			}
-		};
-		
-		const syncCrewToUser = () => {
-			if (!isUserScrolling) {
-				isCrewScrolling = true;
-				userTable.scrollLeft = crewTable.scrollLeft;
-				setTimeout(() => { isCrewScrolling = false; }, 50);
-			}
-		};
-		
-		userTable.addEventListener('scroll', syncUserToCrew, { passive: true });
-		crewTable.addEventListener('scroll', syncCrewToUser, { passive: true });
-		
-		return () => {
-			userTable.removeEventListener('scroll', syncUserToCrew);
-			crewTable.removeEventListener('scroll', syncCrewToUser);
-		};
-	}, [scheduleData.userSchedule, scheduleData.otherSchedules]);
+		} catch (error) {
+			console.error("Error processing user:", error);
+			toast.error("處理錯誤: " + error.message);
+		} finally {
+			setIsProcessingUser(false);
+		}
+	};
 
-	// Loading states
+	const handleDeleteUser = async (userId, userName) => {
+		if (!confirm(`確定要刪除使用者 ${userName} (${userId}) 嗎？`)) {
+			return;
+		}
+
+		try {
+			const response = await fetch("/api/users", {
+				method: "DELETE",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({
+					userId,
+					userAccessLevel: user.access_level,
+				}),
+			});
+
+			const result = await response.json();
+
+			if (result.success) {
+				toast.success("使用者已刪除");
+				loadUsers(); // Reload users list
+			} else {
+				toast.error("刪除失敗: " + result.error);
+			}
+		} catch (error) {
+			console.error("Error deleting user:", error);
+			toast.error("刪除錯誤: " + error.message);
+		}
+	};
+
 	if (loading) {
 		return (
 			<div className={styles.loadingScreen}>
 				<div className={styles.loadingContent}>
 					<div className={styles.loadingSpinner}></div>
-					<p className={styles.loadingScreenText}>驗證登入狀態...</p>
+					<p>載入中...</p>
 				</div>
 			</div>
 		);
 	}
 
-	if (!user) {
+	if (!user || !hasAppAccess(user, "database_management")) {
 		return (
-			<div className={styles.loadingScreen}>
-				<div className={styles.loadingContent}>
-					<div className={styles.loadingSpinner}></div>
-					<p className={styles.loadingScreenText}>轉向登入頁面...</p>
-				</div>
-			</div>
-		);
-	}
-
-	if (!hasAppAccess(user, 'roster')) {
-		return (
-			<div className={styles.loadingScreen}>
-				<div className={styles.loadingContent}>
-					<div className={styles.loadingSpinner}></div>
-					<p className={styles.loadingScreenText}>轉向主頁面...</p>
-				</div>
-			</div>
-		);
-	}
-
-	if (initialLoad || (!currentMonth && availableMonths.length === 0)) {
-		return (
-			<div className={styles.loadingScreen}>
-				<div className={styles.loadingContent}>
-					<div className={styles.loadingSpinner}></div>
-					<p className={styles.loadingScreenText}>載入班表資料中...</p>
-				</div>
+			<div className={styles.accessDenied}>
+				<AlertTriangle size={48} />
+				<h2>存取被拒</h2>
+				<p>您沒有權限存取此頁面</p>
 			</div>
 		);
 	}
 
 	return (
-		<div className={styles.mainContainer}>
-			{/* ── Employee Stats Tooltip ── */}
-			{empTooltipData.visible && (
-				<div
-					ref={empTooltipRef}
-					className={styles.empTooltip}
-					style={{ left: empTooltipData.x, top: empTooltipData.y }}
-				>
-					<div className={styles.empTooltipHeader}>
-						<span className={styles.empTooltipName}>{empTooltipData.name}</span>
-						<button
-							className={styles.empTooltipClose}
-							onClick={() => setEmpTooltipData(prev => ({ ...prev, visible: false }))}
-							aria-label="關閉"
-						>
-							<X size={13} />
-						</button>
+		<div className={styles.container}>
+			<div className={styles.header}>
+				<div className={styles.headerContent}>
+					<Database size={32} className={styles.headerIcon} />
+					<div className={styles.headerText}>
+						<h1>資料庫管理</h1>
+						<p>管理班表、派遣表和使用者資料</p>
 					</div>
-					<div className={styles.empTooltipBody}>
-						{empTooltipData.totalFt > 0 ? (
-							<>
-								<div className={styles.empTooltipRow}>
-									<span className={styles.empTooltipLabel}>總飛時</span>
-									<span className={styles.empTooltipValue}>{minutesToDisplay(empTooltipData.totalFt)}</span>
-								</div>
-								<div className={styles.empTooltipRow}>
-									<span className={styles.empTooltipLabel}>早/晚班</span>
-									<span className={styles.empTooltipValue}>{empTooltipData.amCount}早 / {empTooltipData.pmCount}晚</span>
-								</div>
-								<div className={styles.empTooltipRow}>
-									<span className={styles.empTooltipLabel}>4腿以下</span>
-									<span className={styles.empTooltipValue}>{empTooltipData.duties4} 班</span>
-								</div>
-								<div className={styles.empTooltipRow}>
-									<span className={styles.empTooltipLabel}>5-6腿</span>
-									<span className={styles.empTooltipValue}>{empTooltipData.duties6} 班</span>
-								</div>
-							</>
-						) : (
-							<div className={styles.empTooltipNoData}>無PDX飛行資料</div>
-						)}
-						{empTooltipData.calPicker ? (
-							<div className={styles.empTooltipCalPicker}>
-								<label className={styles.empTooltipCalLabel}>選擇日曆</label>
-								<select
-									className={styles.empTooltipCalSelect}
-									value={empTooltipData.calPicker.selectedId}
-									onChange={e => setEmpTooltipData(prev => ({
-										...prev,
-										calPicker: { ...prev.calPicker, selectedId: e.target.value },
-									}))}
-								>
-									{empTooltipData.calPicker.calendars.map(cal => (
-										<option key={cal.id} value={cal.id}>{cal.summary}</option>
-									))}
-								</select>
+				</div>
+			</div>
+
+			<div className={styles.tabContainer}>
+				<button
+					className={`${styles.tab} ${
+						activeTab === "schedules" ? styles.active : ""
+					}`}
+					onClick={() => setActiveTab("schedules")}
+				>
+					<Calendar size={20} />
+					班表管理
+				</button>
+				<button
+					className={`${styles.tab} ${
+						activeTab === "dispatch-duties" ? styles.active : ""
+					}`}
+					onClick={() => setActiveTab("dispatch-duties")}
+				>
+					<Plane size={20} />
+					派遣表管理
+				</button>
+				<button
+					className={`${styles.tab} ${
+						activeTab === "users" ? styles.active : ""
+					}`}
+					onClick={() => setActiveTab("users")}
+				>
+					<Users size={20} />
+					使用者管理
+				</button>
+			</div>
+
+			<div className={styles.content}>
+				{activeTab === "schedules" && (
+					<div className={styles.tabContent}>
+						<div className={styles.sectionHeader}>
+							<h2>班表管理</h2>
+							<div className={styles.sectionActions}>
 								<button
-									className={styles.empTooltipExportBtn}
-									onClick={() => insertAllEvents(
-										empTooltipData.calPicker.token,
-										empTooltipData.calPicker.selectedId,
-										empTooltipData.days,
-									)}
+									className={styles.uploadButton}
+									onClick={() => handleUploadClick("schedule")}
 								>
-									✅ 確認新增
+									<Upload size={18} />
+									上傳班表
 								</button>
 								<button
-									className={styles.empTooltipCancelBtn}
-									onClick={() => setEmpTooltipData(prev => ({ ...prev, calPicker: null }))}
+									className={styles.cleanupButton}
+									onClick={() => handleCleanup("schedule")}
+									disabled={isDeleting}
 								>
-									取消
+									<Trash2 size={18} />
+									清理舊資料
 								</button>
 							</div>
+						</div>
+
+						<div className={styles.dataGrid}>
+							{availableScheduleMonths.length === 0 ? (
+								<div className={styles.emptyState}>
+									<Calendar size={48} />
+									<h3>尚無班表資料</h3>
+									<p>點選上傳班表按鈕開始新增資料</p>
+								</div>
+							) : (
+								availableScheduleMonths.map((month) => (
+									<div key={month} className={styles.dataCard}>
+										<div className={styles.cardHeader}>
+											<Calendar size={20} />
+											<h3>{month}</h3>
+										</div>
+										<div className={styles.cardContent}>
+											<p>班表資料</p>
+										</div>
+										<div className={styles.cardActions}>
+											<button
+												className={styles.deleteButton}
+												onClick={() => handleDelete(month, "schedule")}
+												disabled={isDeleting}
+											>
+												<Trash2 size={16} />
+												刪除
+											</button>
+										</div>
+									</div>
+								))
+							)}
+						</div>
+					</div>
+				)}
+
+				{activeTab === "dispatch-duties" && (
+					<div className={styles.tabContent}>
+						<div className={styles.sectionHeader}>
+							<h2>派遣表管理</h2>
+							<div className={styles.sectionActions}>
+								<button
+									className={styles.uploadButton}
+									onClick={() => handleUploadClick("dispatch-duty")}
+								>
+									<Upload size={18} />
+									上傳派遣表
+								</button>
+								<button
+									className={styles.cleanupButton}
+									onClick={() => handleCleanup("dispatch-duty")}
+									disabled={isDeleting}
+								>
+									<Trash2 size={18} />
+									清理舊資料
+								</button>
+							</div>
+						</div>
+
+						<div className={styles.dataGrid}>
+							{availableDispatchMonths.length === 0 ? (
+								<div className={styles.emptyState}>
+									<Plane size={48} />
+									<h3>尚無派遣表資料</h3>
+									<p>點選上傳派遣表按鈕開始新增資料</p>
+								</div>
+							) : (
+								availableDispatchMonths.map((month) => (
+									<div key={month} className={styles.dataCard}>
+										<div className={styles.cardHeader}>
+											<Plane size={20} />
+											<h3>{month}</h3>
+										</div>
+										<div className={styles.cardContent}>
+											<p>派遣表資料</p>
+										</div>
+										<div className={styles.cardActions}>
+											<button
+												className={styles.deleteButton}
+												onClick={() => handleDelete(month, "dispatch-duty")}
+												disabled={isDeleting}
+											>
+												<Trash2 size={16} />
+												刪除
+											</button>
+										</div>
+									</div>
+								))
+							)}
+						</div>
+					</div>
+				)}
+
+				{activeTab === "users" && (
+					<div className={styles.tabContent}>
+						<div className={styles.sectionHeader}>
+							<h2>使用者管理</h2>
+							<div className={styles.sectionActions}>
+								<button
+									className={styles.uploadButton}
+									onClick={handleAddUser}
+								>
+									<Plus size={18} />
+									新增使用者
+								</button>
+							</div>
+						</div>
+
+						{isLoadingUsers ? (
+							<div className={styles.loadingState}>
+								<div className={styles.loadingSpinner}></div>
+								<p>載入使用者資料中...</p>
+							</div>
+						) : users.length === 0 ? (
+							<div className={styles.emptyState}>
+								<Users size={48} />
+								<h3>尚無使用者資料</h3>
+								<p>點選新增使用者按鈕開始新增</p>
+							</div>
 						) : (
-							<button
-								className={styles.empTooltipExportBtn}
-								onClick={handleAddToGoogleCalendar}
-							>
-								📅 新增至Google日曆
-							</button>
+							<div className={styles.userCards}>
+								{users.map((userData) => {
+									const avatarUrl = `https://rhdpkxkmugimtlbdizfp.supabase.co/storage/v1/object/public/avatars/${userData.id}.png`;
+									const initials = userData.name ? userData.name.slice(0, 2) : userData.id.slice(0, 2);
+									const enabledPerms = [
+										{ key: "roster", label: "換班" },
+										{ key: "mrt_checker", label: "休時" },
+										{ key: "gday", label: "GDay" },
+										{ key: "etr_generator", label: "eTR" },
+										{ key: "dispatch", label: "派遣" },
+										{ key: "duty_change_review", label: "審核" },
+										{ key: "turtle_ranking", label: "🐢" },
+										{ key: "database_management", label: "DB" },
+									].filter(({ key }) => userData.app_permissions?.[key]?.access === true);
+
+									return (
+										<div key={userData.id} className={styles.userCard}>
+											<div className={styles.userCardTop}>
+												<div className={styles.userCardAvatar}>
+													<img
+														src={avatarUrl}
+														alt={userData.name}
+														className={styles.userCardAvatarImg}
+														onError={(e) => {
+															e.currentTarget.style.display = "none";
+															e.currentTarget.nextSibling.style.display = "flex";
+														}}
+													/>
+													<div className={styles.userCardAvatarInitials}>{initials}</div>
+												</div>
+												<div className={styles.userCardIdentity}>
+													<span className={styles.userCardName}>{userData.name}</span>
+													<span className={styles.userCardId}>#{userData.id}</span>
+												</div>
+											</div>
+
+											<div className={styles.userCardBadges}>
+												{userData.rank && (
+													<span className={styles.rankBadge}>{userData.rank}</span>
+												)}
+												{userData.base && (
+													<span className={`${styles.baseBadge} ${styles["base" + userData.base]}`}>
+														{userData.base}
+													</span>
+												)}
+												<span className={`${styles.accessLevelBadge} ${styles[getAccessLevelClass(userData.access_level)]}`}>
+													Lv {userData.access_level}
+												</span>
+											</div>
+
+											{enabledPerms.length > 0 && (
+												<div className={styles.userCardPermissions}>
+													{enabledPerms.map(({ key, label }) => (
+														<span key={key} className={styles.userCardPermChip}>{label}</span>
+													))}
+												</div>
+											)}
+
+											<div className={styles.userCardActions}>
+												<button
+													className={styles.editButton}
+													onClick={() => handleEditUser(userData)}
+													title="編輯使用者"
+												>
+													<Edit size={15} />
+													編輯
+												</button>
+												<button
+													className={styles.deleteButton}
+													onClick={() => handleDeleteUser(userData.id, userData.name)}
+													title="刪除使用者"
+												>
+													<Trash2 size={15} />
+													刪除
+												</button>
+											</div>
+										</div>
+									);
+								})}
+							</div>
 						)}
+					</div>
+				)}
+			</div>
+
+			{/* Upload Modal */}
+			{showUploadModal && (
+				<div
+					className={styles.modalOverlay}
+					onClick={() => setShowUploadModal(false)}
+				>
+					<div
+						className={styles.modalContent}
+						onClick={(e) => e.stopPropagation()}
+					>
+						<div className={styles.modalHeader}>
+							<h3>
+								{uploadType === "schedule"
+									? "上傳班表資料"
+									: "上傳派遣表資料"}
+								{uploadType === "schedule" && <Calendar size={20} />}
+								{uploadType === "dispatch-duty" && <Plane size={20} />}
+							</h3>
+							<button
+								className={styles.modalClose}
+								onClick={() => setShowUploadModal(false)}
+							>
+								<X size={20} />
+							</button>
+						</div>
+						<div className={styles.modalBody}>
+							{/* Excel file upload shortcut */}
+							<div className={styles.excelUploadSection}>
+								<div className={styles.excelUploadRow}>
+									<label className={styles.excelFileLabel}>
+										<Upload size={15} />
+										選擇Excel檔案
+										<input
+											type="file"
+											accept=".xlsx,.xls"
+											className={styles.excelFileInput}
+											onChange={handleExcelFileChange}
+										/>
+									</label>
+									{xlsxDetectedMonth && (
+										<span className={styles.excelDetectedMonth}>偵測月份：{xlsxDetectedMonth}</span>
+									)}
+									<button
+										className={styles.excelConvertButton}
+										onClick={handleExcelConvert}
+										disabled={!xlsxFile || !xlsxDetectedMonth || isProcessingExcel}
+									>
+										{isProcessingExcel ? <div className={styles.buttonSpinner}></div> : null}
+										轉換並填入
+									</button>
+								</div>
+								{xlsxStatus && (
+									<p className={`${styles.excelStatus} ${styles["excelStatus_" + xlsxStatus.type]}`}>
+										{xlsxStatus.message}
+									</p>
+								)}
+								<div className={styles.excelDivider}><span>或手動貼上JSON</span></div>
+							</div>
+							<div className={styles.uploadInstructions}>
+								<h4>上傳說明：</h4>
+								<ul>
+									{uploadType === "schedule" ? (
+										<>
+											<li>請貼上從Excel擷取器產生的JSON格式資料</li>
+											<li>
+												班表格式: {`{"month": "2025年09月", "employees": [...]}`}
+											</li>
+											<li>資料將會覆蓋同月份的現有資料</li>
+										</>
+									) : (
+										<>
+											<li>請貼上飛行班表的JSON陣列格式資料</li>
+											<li>
+												派遣表格式:
+												直接貼上JSON陣列，每個物件包含
+												duty_code, day_of_week, month_id 等欄位
+											</li>
+											<li>範例格式:</li>
+											<li
+												style={{
+													fontFamily: "monospace",
+													fontSize: "0.8rem",
+													color: "#666",
+												}}
+											>
+												{`[{"month_id": "2025年09月", "duty_code": "H2", "day_of_week": 1, ...}, ...]`}
+											</li>
+											<li>資料將會覆蓋同月份的現有資料</li>
+										</>
+									)}
+									<li>上傳前請確認資料格式正確</li>
+								</ul>
+							</div>
+							<textarea
+								value={jsonData}
+								onChange={(e) => setJsonData(e.target.value)}
+								placeholder="請貼上JSON格式的資料..."
+								className={styles.jsonTextarea}
+								rows={15}
+							/>
+						</div>
+						<div className={styles.modalFooter}>
+							<button
+								className={styles.cancelButton}
+								onClick={() => setShowUploadModal(false)}
+								disabled={isUploading}
+							>
+								取消
+							</button>
+							<button
+								className={styles.confirmButton}
+								onClick={handleUpload}
+								disabled={isUploading}
+							>
+								{isUploading ? (
+									<>
+										<div className={styles.buttonSpinner}></div>
+										上傳中...
+									</>
+								) : (
+									<>
+										<CheckCircle size={18} />
+										確認上傳
+									</>
+								)}
+							</button>
+						</div>
 					</div>
 				</div>
 			)}
 
-			{/* ── Rich Tooltip (all devices) ── */}
-			{tooltipData.visible && (() => {
-				const td = tooltipData;
-				const pdx = td.pdxDutyRow;
-				const sectors = td.pdxSectors;
-				const routeStr = pdx ? buildRouteString(sectors) : null;
-				const baseDuty = td.dutyCode?.split(/[\\\n]/)[0].trim() || '';
-				const WEEKDAYS = ['日','一','二','三','四','五','六'];
-				const dateDisplay = (() => {
-					if (!td.date) return '';
-					const [y, m, d] = td.date.split('-').map(Number);
-					const dow = new Date(y, m - 1, d).getDay();
-					return `${m}月${d}日 (${WEEKDAYS[dow]})`;
-				})();
-				const isAlreadySelected = selectedDuties.some(
-					item => item.employeeId === td.employeeId && item.date === td.date
-				);
-				return (
+			{/* User Modal */}
+			{showUserModal && (
+				<div
+					className={styles.modalOverlay}
+					onClick={() => setShowUserModal(false)}
+				>
 					<div
-						ref={tooltipRef}
-						className={styles.schedTooltip}
-						style={{
-							left: td.x,
-							...(td.above
-								? { bottom: `calc(100vh - ${td.y}px)`, top: 'auto' }
-								: { top: td.y }),
-							transform: 'translateX(-50%)',
-						}}
+						className={`${styles.modalContent} ${styles.userModalContent}`}
+						onClick={(e) => e.stopPropagation()}
 					>
-						{/* Arrow */}
-						<div className={td.above ? styles.schedTooltipArrowDown : styles.schedTooltipArrowUp} />
-
-						{/* Header */}
-						<div className={styles.schedTooltipHeader}>
-							<div className={styles.schedTooltipHeaderLeft}>
-								<span className={styles.schedTooltipIcon}><Plane size={14} /></span>
-								<div>
-									<div className={styles.schedTooltipDate}>{dateDisplay}</div>
-									<div className={styles.schedTooltipDutyCode}>
-										{baseDuty}
-										{td.override && (
-											<span style={{ marginLeft: 5, fontSize: '0.75rem', color: '#7c3aed' }} title="航段已修改">✎</span>
-										)}
-									</div>
-								</div>
-							</div>
+						<div className={styles.modalHeader}>
+							<h3>
+								{userModalMode === "add" ? "新增使用者" : "編輯使用者"}
+								<Users size={20} />
+							</h3>
 							<button
-								className={styles.schedTooltipClose}
-								onClick={() => setTooltipData(prev => ({ ...prev, visible: false }))}
-								aria-label="關閉"
+								className={styles.modalClose}
+								onClick={() => setShowUserModal(false)}
 							>
-								<X size={14} />
+								<X size={20} />
 							</button>
 						</div>
+						<div className={styles.modalBody}>
+							<div className={styles.userForm}>
 
-						{/* Body */}
-						<div className={styles.schedTooltipBody}>
-							{/* Time */}
-							{(td.reportingTime || td.endTime) && (
-								<div className={styles.schedTooltipRow}>
-									<Clock size={12} className={styles.schedTooltipRowIcon} />
-									<span className={styles.schedTooltipRowLabel}>時間</span>
-									<span className={styles.schedTooltipRowValue}>
-										{td.reportingTime || '—'} → {td.endTime || '—'}
-									</span>
-								</div>
-							)}
-							{/* Aircraft type (PDX) */}
-							{pdx?.aircraft_type && (
-								<div className={styles.schedTooltipRow}>
-									<Plane size={12} className={styles.schedTooltipRowIcon} />
-									<span className={styles.schedTooltipRowLabel}>機型</span>
-									<span className={styles.schedTooltipRowValue}>
-										{pdx.aircraft_type}
-										{pdx.is_international && (
-											<span className={styles.schedTooltipIntlBadge}>國際</span>
-										)}
-									</span>
-								</div>
-							)}
-							{/* Route string (PDX) */}
-							{routeStr && (
-								<div className={styles.schedTooltipRow}>
-									<span className={styles.schedTooltipRowIcon} style={{ fontSize: '0.7rem' }}>🗺</span>
-									<span className={styles.schedTooltipRowLabel}>航路</span>
-									<span className={styles.schedTooltipRouteValue}>{routeStr}</span>
-								</div>
-							)}
-							{/* FT / FDP (PDX) */}
-							{pdx && (pdx.ft_minutes > 0 || pdx.fdp_minutes > 0) && (
-								<div className={styles.schedTooltipRow}>
-									<span className={styles.schedTooltipRowIcon} style={{ fontSize: '0.7rem' }}>⏱</span>
-									<span className={styles.schedTooltipRowLabel}>FT / FDP</span>
-									<span className={styles.schedTooltipRowValue}>
-										{minutesToDisplay(pdx.ft_minutes)} / {minutesToDisplay(pdx.fdp_minutes)}
-									</span>
-								</div>
-							)}
-							{/* Expandable sectors (PDX) */}
-							{pdx && sectors?.length > 0 && (
-								<div className={styles.schedTooltipSectorSection}>
-									<button
-										className={styles.schedTooltipSectorToggle}
-										onClick={() => setSectorsExpanded(v => !v)}
-									>
-										<span style={{ fontSize: '0.7rem' }}>✈</span>
-										<span>航段明細 ({sectors.length + (td.override?.extra_sectors?.length || 0)} 段){td.override?.extra_sectors?.length > 0 && ' ✎'}</span>
-										{sectorsExpanded ? <ChevronUp size={11} /> : <ChevronDown size={11} />}
-									</button>
-									{sectorsExpanded && (
-										<div className={styles.schedTooltipSectorList}>
-											{sectors.map((s, i) => (
-												<div key={i} className={`${styles.schedTooltipSectorRow}${s.is_highlight ? ' ' + styles.schedTooltipSectorHighlight : ''}`}>
-													<span className={styles.schedTooltipSectorFlight}>{s.flight_number}</span>
-													<span className={styles.schedTooltipSectorRoute}>
-														{s.dep_airport}
-														<span className={styles.schedTooltipSectorArrow}>→</span>
-														{s.arr_airport}
-													</span>
-													<span className={styles.schedTooltipSectorTimes}>
-														{s.dep_time?.substring(0,5)} – {s.arr_time?.substring(0,5)}
-													</span>
-												</div>
+								{/* ── Section 0: 角色頭像 ── */}
+								<div className={styles.formSection}>
+									<span className={styles.formSectionLabel}>角色頭像</span>
+
+									{/* Gender selector */}
+									<div className={styles.formGroup}>
+										<label>性別</label>
+										<div className={styles.genderToggleRow}>
+											{[{ value: "M", label: "♂ 男" }, { value: "F", label: "♀ 女" }].map(({ value, label }) => (
+												<button
+													key={value}
+													type="button"
+													className={`${styles.genderToggleBtn} ${userFormData.gender === value ? styles.genderToggleBtnActive : ""}`}
+													onClick={() => setUserFormData(prev => ({
+														...prev,
+														gender: value,
+														// Clear gif if it no longer belongs to the new gender
+														avatar_gif: prev.avatar_gif && prev.avatar_gif.startsWith(value.toLowerCase() + "_") ? prev.avatar_gif : "",
+													}))}
+												>
+													{label}
+												</button>
 											))}
-											{/* Extra sectors from dispatch overrides */}
-											{(td.override?.extra_sectors || []).map((s, idx) => (
-												<div key={`ex-${idx}`} className={styles.schedTooltipSectorRow} style={{ borderLeft: '2px solid #7c3aed', paddingLeft: '4px' }}>
-													<span className={styles.schedTooltipSectorFlight} style={{ color: '#7c3aed' }}>AE-{s.flight_number}</span>
-													<span className={styles.schedTooltipSectorRoute}>
-														{s.dep_airport}
-														<span className={styles.schedTooltipSectorArrow}>→</span>
-														{s.arr_airport}
-													</span>
-													<span className={styles.schedTooltipSectorTimes}>{s.dep_time} – {s.arr_time}</span>
+											{userFormData.gender && (
+												<button
+													type="button"
+													className={styles.genderClearBtn}
+													onClick={() => setUserFormData(prev => ({ ...prev, gender: "", avatar_gif: "" }))}
+												>
+													清除
+												</button>
+											)}
+										</div>
+									</div>
+
+									{/* Gif grid — only shown when gender is selected */}
+									{userFormData.gender && (
+										<div className={styles.formGroup}>
+											<label>選擇角色</label>
+											{userFormData.avatar_gif && (
+												<div className={styles.gifPreviewRow}>
+													<img
+														src={`/assets/level_gif/${userFormData.avatar_gif}`}
+														alt={userFormData.avatar_gif}
+														className={styles.gifPreviewLarge}
+													/>
+													<div className={styles.gifPreviewInfo}>
+														<span className={styles.gifPreviewName}>{userFormData.avatar_gif.replace(/^[mf]_/, "").replace(".gif", "")}</span>
+														<button
+															type="button"
+															className={styles.gifClearBtn}
+															onClick={() => setUserFormData(prev => ({ ...prev, avatar_gif: "" }))}
+														>
+															移除頭像
+														</button>
+													</div>
 												</div>
-											))}
+											)}
+											<div className={styles.gifGrid}>
+												{(GIF_KEYS[userFormData.gender] || []).map((key) => {
+													const filename = `${key}.gif`;
+													const isSelected = userFormData.avatar_gif === filename;
+													return (
+														<button
+															key={key}
+															type="button"
+															className={`${styles.gifGridItem} ${isSelected ? styles.gifGridItemSelected : ""}`}
+															onClick={() => setUserFormData(prev => ({ ...prev, avatar_gif: filename }))}
+															title={key.replace(/^[mf]_/, "")}
+														>
+															<img
+																src={`/assets/level_gif/${filename}`}
+																alt={key}
+																className={styles.gifGridImg}
+															/>
+														</button>
+													);
+												})}
+											</div>
 										</div>
 									)}
 								</div>
-							)}
-							{/* Additional tasks */}
-							{(td.override?.additional_tasks || []).filter(t => t.title).map((t, i) => {
-								const baseDutyEnd = td.endTime || "";
-								const isBefore = t.start_time && td.reportingTime && t.start_time < td.reportingTime;
-								const isAfter  = t.end_time && baseDutyEnd && t.end_time > baseDutyEnd;
-								const tag = isBefore ? "前" : isAfter ? "後" : "中";
-								return (
-									<div key={i} className={styles.schedTooltipAdditionalTask}>
-										<span className={styles.schedTooltipAdditionalTag}>{tag}</span>
-										<span className={styles.schedTooltipAdditionalTitle}>{t.title}</span>
-										{t.start_time && t.end_time && (
-											<span className={styles.schedTooltipAdditionalTime}>{t.start_time}–{t.end_time}</span>
-										)}
+
+								{/* ── Section 1: 基本資料 ── */}
+								<div className={styles.formSection}>
+									<span className={styles.formSectionLabel}>基本資料</span>
+
+									<div className={styles.formGroup}>
+										<label>員工編號 *</label>
+										<div className={styles.inputGroup}>
+											<input
+												type="text"
+												value={userFormData.id}
+												onChange={(e) =>
+													setUserFormData((prev) => ({ ...prev, id: e.target.value }))
+												}
+												placeholder="請輸入員工編號"
+												disabled={userModalMode === "edit"}
+											/>
+											{userModalMode === "add" && (
+												<button
+													className={styles.lookupButton}
+													onClick={handleLookupEmployee}
+													disabled={isLookingUp}
+													title="從員工名冊查詢"
+												>
+													{isLookingUp ? <div className={styles.buttonSpinner}></div> : <Search size={16} />}
+												</button>
+											)}
+										</div>
 									</div>
-								);
-							})}
-							{/* 加入換班 button — only for crew rows, not user's own schedule */}
-							{!td.isUserSchedule && (
-								<button
-									className={isAlreadySelected ? styles.schedTooltipRemoveBtn : styles.schedTooltipAddBtn}
-									onClick={() => {
-										handleDutySelect(td.employeeId, td.name, td.date, td.dutyCode);
-										setTooltipData(prev => ({ ...prev, visible: false }));
-									}}
-								>
-									{isAlreadySelected ? '✕ 移除換班' : '＋ 加入換班'}
-								</button>
-							)}
 
-							{/* Crewmates with same duty */}
-							<div className={styles.schedTooltipCrewSection}>
-								<div className={styles.schedTooltipCrewLabel}>同勤組員</div>
-								{td.sameEmployees?.length > 0 ? (
-									<div className={styles.schedTooltipCrewList}>
-										{td.sameEmployees.map((emp, i) => {
-											const baseColors = {
-												TSA: { bg: '#fee2e2', text: '#991b1b' },
-												RMQ: { bg: '#d1fae5', text: '#065f46' },
-												KHH: { bg: '#dbeafe', text: '#1e40af' },
-											};
-											const bc = baseColors[emp.base] || { bg: '#f3f4f6', text: '#374151' };
-											return (
-												<span key={i} className={styles.schedTooltipCrewBadge}
-													style={{ backgroundColor: bc.bg, color: bc.text }}>
-													{emp.name || emp.id}
-												</span>
-											);
-										})}
+									<div className={styles.formRow}>
+										<div className={styles.formGroup}>
+											<label>姓名 *</label>
+											<input
+												type="text"
+												value={userFormData.name}
+												onChange={(e) =>
+													setUserFormData((prev) => ({ ...prev, name: e.target.value }))
+												}
+												placeholder="請輸入姓名"
+											/>
+										</div>
+										<div className={styles.formGroup}>
+											<label>職位</label>
+											<select
+												value={userFormData.rank}
+												onChange={(e) =>
+													setUserFormData((prev) => ({ ...prev, rank: e.target.value }))
+												}
+											>
+												<option value="">請選擇職位</option>
+												<option value="經理">經理</option>
+												<option value="組長">組長</option>
+												<option value="FI">FI</option>
+												<option value="PR">PR</option>
+												<option value="LF">LF</option>
+												<option value="FS">FS</option>
+												<option value="FA">FA</option>
+											</select>
+										</div>
 									</div>
-								) : (
-									<span className={styles.schedTooltipNoCrewText}>無同勤組員</span>
-								)}
-							</div>
-						</div>
-					</div>
-				);
-			})()}
-			
-			<div className={styles.scheduleContainer}>
-				<div className={styles.monthSelectionContainer}>
-					<div className={styles.monthSelector}>
-						<label htmlFor="month-select" className={styles.monthLabel}>選擇月份:</label>
-						<select
-							id="month-select"
-							value={currentMonth}
-							onChange={handleMonthChange}
-							className={styles.monthDropdown}
-							disabled={scheduleLoading}
-						>
-							{availableMonths.map(month => (
-								<option key={month} value={month}>{month}</option>
-							))}
-						</select>
-					</div>
-					<h1 className={styles.scheduleHeading}>{currentMonth}班表</h1>
-					{!scheduleData.hasScheduleData && !scheduleLoading && (
-						<div className={styles.noDataWarning}>
-							⚠️ 此月份尚無班表資料
-						</div>
-					)}
-				</div>
 
-				{scheduleLoading ? (
-					<div className={styles.loadingContainer}>
-						<div className={styles.loadingSpinner}></div>
-						<span className={styles.loadingText}>載入{activeTab}班表資料...</span>
-					</div>
-				) : scheduleData.hasScheduleData ? (
-					<>
-						{scheduleData.userSchedule && (
-							<div className={styles.userScheduleContainer}>
-								<h2 className={styles.sectionTitle}>Your Schedule</h2>
-								<div className={styles.tableContainer} ref={userTableRef}>
-									<table className={styles.scheduleTable}>
-										{renderTableHeader()}
-										<tbody>
-											{renderTableRow(scheduleData.userSchedule, true)}
-										</tbody>
-									</table>
+									<div className={styles.formRow}>
+										<div className={styles.formGroup}>
+											<label>基地</label>
+											<select
+												value={userFormData.base}
+												onChange={(e) =>
+													setUserFormData((prev) => ({ ...prev, base: e.target.value }))
+												}
+											>
+												<option value="">請選擇基地</option>
+												<option value="TSA">TSA</option>
+												<option value="KHH">KHH</option>
+												<option value="RMQ">RMQ</option>
+											</select>
+										</div>
+										<div className={styles.formGroup}>
+											<label>權限等級</label>
+											<input
+												type="number"
+												value={userFormData.access_level}
+												onChange={(e) =>
+													setUserFormData((prev) => ({ ...prev, access_level: parseInt(e.target.value) || 1 }))
+												}
+												placeholder="1"
+												min="1"
+												max="99"
+											/>
+											<small className={styles.fieldHint}>1 = 一般，99 = 管理員</small>
+										</div>
+									</div>
 								</div>
-							</div>
-						)}
 
-						<div className={styles.crewSection}>
-							<h2 className={styles.sectionTitle}>Crew Members&apos; Schedule</h2>
-							<div className={styles.tabContainer}>
-								<button
-									className={styles.tab + ' ' + styles.TSATab + (activeTab === 'TSA' ? ' ' + styles.active : '')}
-									onClick={() => handleTabChange('TSA')}
-									disabled={scheduleLoading}
-								>
-									TSA
-								</button>
-								<button
-									className={styles.tab + ' ' + styles.RMQTab + (activeTab === 'RMQ' ? ' ' + styles.active : '')}
-									onClick={() => handleTabChange('RMQ')}
-									disabled={scheduleLoading}
-								>
-									RMQ
-								</button>
-								<button
-									className={styles.tab + ' ' + styles.KHHTab + (activeTab === 'KHH' ? ' ' + styles.active : '')}
-									onClick={() => handleTabChange('KHH')}
-									disabled={scheduleLoading}
-								>
-									KHH
-								</button>
-								<button
-									className={styles.tab + ' ' + styles.AllTab + (activeTab === 'ALL' ? ' ' + styles.active : '')}
-									onClick={() => handleTabChange('ALL')}
-									disabled={scheduleLoading}
-								>
-									ALL
-								</button>
-							</div>
-						</div>
-
-						<div className={styles.crewScheduleSection}>
-							<div className={styles.tableContainer} ref={crewTableRef}>
-								<table className={styles.scheduleTable}>
-									{renderTableHeader()}
-									<tbody>
-										{scheduleData.otherSchedules.map(schedule => 
-											renderTableRow(schedule, false)
-										)}
-									</tbody>
-								</table>
-							</div>
-						</div>
-
-						{/* ── Swap status legend ── */}
-						<div className={styles.swapLegend}>
-							<span className={styles.swapLegendItem}>
-								<span className={styles.swapLegendDotPending} />
-								審核中
-							</span>
-							<span className={styles.swapLegendItem}>
-								<span className={styles.swapLegendDotApproved} />
-								已核准
-							</span>
-						</div>
-
-						{/* Fixed submit button - always visible at bottom */}
-						<div className={styles.submitButtonFixed}>
-							{user?.id === 'admin' && (
-								<div className={styles.adminPersonAHint}>
-									{personA
-										? `甲方：${personA.name}（點擊姓名可更換）`
-										: '👆 請先點選甲方姓名'}
+								{/* ── Section 2: 應用程式權限 ── */}
+								<div className={styles.formSection}>
+									<span className={styles.formSectionLabel}>應用程式權限</span>
+									<div className={styles.permissionsGrid}>
+										{[
+											{ key: "roster", label: "換班系統" },
+											{ key: "mrt_checker", label: "疲勞管理系統" },
+											{ key: "gday", label: "GDay劃假" },
+											{ key: "etr_generator", label: "eTR產生器" },
+											{ key: "dispatch", label: "派遣表系統" },
+											{ key: "duty_change_review", label: "換班審核" },
+											{ key: "turtle_ranking", label: "烏龜排行榜 🐢" },
+											{ key: "database_management", label: "資料庫管理" },
+										].map(({ key, label }) => (
+											<label key={key} className={styles.permissionToggle}>
+												<input
+													type="checkbox"
+													checked={userFormData.app_permissions?.[key]?.access === true}
+													onChange={(e) =>
+														setUserFormData((prev) => ({
+															...prev,
+															app_permissions: { ...prev.app_permissions, [key]: { access: e.target.checked } },
+														}))
+													}
+													className={styles.formCheckbox}
+												/>
+												<span className={styles.permissionLabel}>{label}</span>
+											</label>
+										))}
+									</div>
 								</div>
-							)}
-							<button 
-								className={styles.dutyChangeButtonFull}
-								onClick={handleDutyChangeClick}
-								disabled={scheduleLoading || selectedDuties.length === 0}
+
+								{/* ── Section 3: 密碼 ── */}
+								<div className={styles.formSection}>
+									<span className={styles.formSectionLabel}>
+										{userModalMode === "add" ? "密碼" : "變更密碼"}
+									</span>
+									<div className={styles.formGroup}>
+										<label>{userModalMode === "add" ? "密碼 *" : "新密碼"}</label>
+										<div className={styles.passwordGroup}>
+											<input
+												type={showPassword ? "text" : "password"}
+												value={userFormData.password}
+												onChange={(e) =>
+													setUserFormData((prev) => ({ ...prev, password: e.target.value }))
+												}
+												placeholder={userModalMode === "add" ? "請輸入密碼" : "留空則不更改密碼"}
+											/>
+											<button
+												type="button"
+												className={styles.passwordToggle}
+												onClick={() => setShowPassword(!showPassword)}
+											>
+												{showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+											</button>
+										</div>
+									</div>
+								</div>
+
+							</div>
+						</div>
+						<div className={styles.modalFooter}>
+							<button
+								className={styles.cancelButton}
+								onClick={() => setShowUserModal(false)}
+								disabled={isProcessingUser}
 							>
-								提交換班申請 ({selectedDuties.length} 項選擇)
+								取消
+							</button>
+							<button
+								className={styles.confirmButton}
+								onClick={handleUserFormSubmit}
+								disabled={isProcessingUser}
+							>
+								{isProcessingUser ? (
+									<>
+										<div className={styles.buttonSpinner}></div>
+										{userModalMode === "add" ? "新增中..." : "更新中..."}
+									</>
+								) : (
+									<>
+										<CheckCircle size={18} />
+										{userModalMode === "add" ? "確認新增" : "確認更新"}
+									</>
+								)}
 							</button>
 						</div>
-					</>
-				) : (
-					<div className={styles.noDataContainer}>
-						<div className={styles.noDataMessage}>
-							<h3>📅 此月份暫無班表資料</h3>
-							<p>請選擇其他月份或等待資料更新</p>
-						</div>
 					</div>
-				)}
-			</div>
+				</div>
+			)}
 		</div>
 	);
-}
+};
+
+export default DatabaseManagement;
