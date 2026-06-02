@@ -958,6 +958,13 @@ const DatabaseManagement = () => {
 
 									return (
 										<div key={userData.id} className={styles.userCard}>
+											{userData.avatar_gif && (
+												<img
+													src={`/assets/level_gif/${userData.avatar_gif}`}
+													alt=""
+													className={styles.userCardGif}
+												/>
+											)}
 											<div className={styles.userCardTop}>
 												<div className={styles.userCardAvatar}>
 													<img

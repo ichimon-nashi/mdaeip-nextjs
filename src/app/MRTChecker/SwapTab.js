@@ -240,12 +240,12 @@ function CrewColumn({
 												const sign = ftDelta > 0 ? "+" : ftDelta < 0 ? "" : "±";
 												const h = Math.floor(Math.abs(ftDelta) / 60);
 												const m = Math.abs(ftDelta) % 60;
-												const label = `${sign}${h > 0 ? h + "h" : ""}${m > 0 ? m + "m" : h === 0 ? "0" : ""}`;
+												const label = `${sign}${h > 0 ? h + "h" : ""}${m > 0 ? m : h === 0 ? "0" : ""}`;
 												const isPos = ftDelta > 0;
 												const isNeg = ftDelta < 0;
 												return (
 													<div className={`${styles.calDeltaBadge} ${isPos ? styles.calDeltaPos : isNeg ? styles.calDeltaNeg : styles.calDeltaZero}`}>
-														△FT {label}
+														△{label}
 													</div>
 												);
 											})()}
@@ -286,7 +286,7 @@ function CrewColumn({
 				const sign = totalFtDelta > 0 ? "+" : totalFtDelta < 0 ? "" : "±";
 				const h = Math.floor(Math.abs(totalFtDelta) / 60);
 				const m = Math.abs(totalFtDelta) % 60;
-				const label = `${sign}${h > 0 ? h + "h" : ""}${m > 0 ? m + "m" : h === 0 ? "0" : ""}`;
+				const label = `${sign}${h > 0 ? h + "h" : ""}${m > 0 ? m : h === 0 ? "0" : ""}`;
 				const isPos = totalFtDelta > 0, isNeg = totalFtDelta < 0;
 				return (
 					<div className={`${styles.totalDeltaBar} ${isPos ? styles.calDeltaPos : isNeg ? styles.calDeltaNeg : styles.calDeltaZero}`}>
@@ -335,6 +335,8 @@ export default function SwapTab() {
 	const [pendingRequests, setPendingRequests] = useState([]);
 	const [showImport, setShowImport] = useState(false);
 	const [importLoading, setImportLoading] = useState(false);
+	const [importedReqId, setImportedReqId] = useState(null); // id of imported pending request
+	const [reviewLoading, setReviewLoading] = useState(false); // approve/deny in progress
 
 
 	// Month navigation
@@ -452,6 +454,7 @@ export default function SwapTab() {
 		};
 		setSelA(new Set((req.selected_dates || []).map(d => toKey(d))));
 		setSelB(new Set((req.all_duties || []).map(d => toKey(d.date))));
+		setImportedReqId(req.id); // remember which request was imported
 	}, [loadCrew, month]);
 
 	const clearCrew = useCallback((side) => {
@@ -465,6 +468,7 @@ export default function SwapTab() {
 			setSearchB(""); setErrB([]); setViolB(new Set());
 		}
 		setSwapApplied(false);
+		setImportedReqId(null);
 	}, []);
 
 	// Search handlers
@@ -533,9 +537,110 @@ export default function SwapTab() {
 		setSimA(null); setSimB(null);
 		setSelA(new Set()); setSelB(new Set());
 		setSwapApplied(false);
+		setImportedReqId(null);
 	};
 
 	const [saving, setSaving] = useState(false);
+
+	// ── Approve imported request ─────────────────────────────────────────────
+	const handleApproveImported = useCallback(async () => {
+		if (!importedReqId || !simA || !simB || !crewA || !crewB) return;
+		setReviewLoading(true);
+		try {
+			const { supabase } = await import("../../lib/supabase");
+			const { clearScheduleCache } = await import("../../lib/DataRoster");
+			const monthStr = `${year}年${String(month + 1).padStart(2, "0")}月`;
+			const totalDays = new Date(year, month + 1, 0).getDate();
+
+			// 1. Mark request as approved
+			const { error: approveErr } = await supabase
+				.from("duty_change_requests")
+				.update({ status: "approved", reviewed_at: new Date().toISOString() })
+				.eq("id", importedReqId);
+			if (approveErr) throw approveErr;
+
+			// 2. Write swapped schedules (same as saveSwap)
+			const { data: monthRow } = await supabase
+				.from("mdaeip_schedule_months").select("id").eq("month", monthStr).maybeSingle();
+			if (!monthRow) throw new Error("找不到月份資料");
+
+			const buildDuties = (items) => {
+				const arr = Array(totalDays).fill("");
+				Object.entries(items).forEach(([key, duty]) => {
+					const day = parseInt(key.split("-")[2]);
+					if (day >= 1 && day <= totalDays) arr[day - 1] = duty.code || "";
+				});
+				return arr;
+			};
+
+			await Promise.all([
+				supabase.from("mdaeip_schedules").upsert(
+					{ employee_id: crewA.id, month_id: monthRow.id, duties: buildDuties(simA) },
+					{ onConflict: "month_id,employee_id" }
+				),
+				supabase.from("mdaeip_schedules").upsert(
+					{ employee_id: crewB.id, month_id: monthRow.id, duties: buildDuties(simB) },
+					{ onConflict: "month_id,employee_id" }
+				),
+			]);
+
+			// 3. Delete PDF from storage
+			const { data: reqRow } = await supabase
+				.from("duty_change_requests").select("pdf_storage_path").eq("id", importedReqId).maybeSingle();
+			if (reqRow?.pdf_storage_path) {
+				await supabase.storage.from("duty-change-pdfs").remove([reqRow.pdf_storage_path]);
+				await supabase.from("duty_change_requests").update({ pdf_storage_path: null }).eq("id", importedReqId);
+			}
+
+			// 4. Clear cache and apply sim as new base
+			clearScheduleCache(monthStr);
+			setSchedA(simA); setSimA(null);
+			setSchedB(simB); setSimB(null);
+			setSelA(new Set()); setSelB(new Set());
+			setSwapApplied(false);
+			setImportedReqId(null);
+			alert(`✅ 已核准 ${crewA.name} 與 ${crewB.name} 的換班申請，班表已更新`);
+		} catch (err) {
+			console.error("handleApproveImported:", err);
+			alert("核准失敗：" + err.message);
+		} finally {
+			setReviewLoading(false);
+		}
+	}, [importedReqId, simA, simB, crewA, crewB, year, month]);
+
+	// ── Deny imported request ─────────────────────────────────────────────────
+	const handleDenyImported = useCallback(async () => {
+		if (!importedReqId || !crewA) return;
+		if (!window.confirm(`確定要拒絕 ${crewA.name} 與 ${crewB?.name} 的換班申請嗎？`)) return;
+		setReviewLoading(true);
+		try {
+			const { supabase } = await import("../../lib/supabase");
+
+			// 1. Mark as denied
+			const { error: denyErr } = await supabase
+				.from("duty_change_requests")
+				.update({ status: "denied", reviewed_at: new Date().toISOString() })
+				.eq("id", importedReqId);
+			if (denyErr) throw denyErr;
+
+			// 2. Delete PDF
+			const { data: reqRow } = await supabase
+				.from("duty_change_requests").select("pdf_storage_path").eq("id", importedReqId).maybeSingle();
+			if (reqRow?.pdf_storage_path) {
+				await supabase.storage.from("duty-change-pdfs").remove([reqRow.pdf_storage_path]);
+				await supabase.from("duty_change_requests").update({ pdf_storage_path: null }).eq("id", importedReqId);
+			}
+
+			// 3. Reset UI (keep schedules visible, just clear swap state)
+			resetSwap();
+			alert(`已拒絕換班申請`);
+		} catch (err) {
+			console.error("handleDenyImported:", err);
+			alert("拒絕失敗：" + err.message);
+		} finally {
+			setReviewLoading(false);
+		}
+	}, [importedReqId, crewA, crewB, resetSwap]);
 
 	const saveSwap = useCallback(async () => {
 		if (!simA || !simB || !crewA || !crewB) return;
@@ -740,7 +845,7 @@ export default function SwapTab() {
 								const fmt = (min) => {
 									const sign = min >= 0 ? "+" : "−";
 									const abs = Math.abs(min);
-									return `${sign}${Math.floor(abs/60)}h${abs%60 > 0 ? `${abs%60}m` : ""}`;
+									return `${sign}${Math.floor(abs/60)}h${abs%60 > 0 ? abs%60 : ""}`;
 								};
 								const color = (d) => d > 0 ? "#16a34a" : d < 0 ? "#dc2626" : "#64748b";
 								return (
@@ -773,14 +878,33 @@ export default function SwapTab() {
 								<RefreshCw size={13} />
 								重置
 							</button>
-							<button
-								className={`${styles.saveSwapBtn} ${saving ? styles.swapBtnDisabled : ""}`}
-								onClick={saveSwap}
-								disabled={saving}
-								title="將模擬結果儲存至排班系統"
-							>
-								{saving ? "儲存中…" : "✓ 儲存換班"}
-							</button>
+							{importedReqId ? (
+								<div className={styles.reviewBtns}>
+									<button
+										className={`${styles.approveBtn} ${reviewLoading ? styles.swapBtnDisabled : ""}`}
+										onClick={handleApproveImported}
+										disabled={reviewLoading}
+									>
+										{reviewLoading ? "處理中…" : "✅ 核准"}
+									</button>
+									<button
+										className={`${styles.denyBtn} ${reviewLoading ? styles.swapBtnDisabled : ""}`}
+										onClick={handleDenyImported}
+										disabled={reviewLoading}
+									>
+										{reviewLoading ? "處理中…" : "❌ 拒絕"}
+									</button>
+								</div>
+							) : (
+								<button
+									className={`${styles.saveSwapBtn} ${saving ? styles.swapBtnDisabled : ""}`}
+									onClick={saveSwap}
+									disabled={saving}
+									title="將模擬結果儲存至排班系統"
+								>
+									{saving ? "儲存中…" : "✓ 儲存換班"}
+								</button>
+							)}
 						</>
 					)}
 

@@ -658,3 +658,67 @@
 	font-size: 0.897rem;
 	font-weight: 600;
 }
+/* ── Month selector tabs ─────────────────────────────────── */
+.monthTabContainer {
+	display: flex;
+	gap: 8px;
+	flex-wrap: wrap;
+	justify-content: center;
+	margin-bottom: 12px;
+}
+
+.monthTab {
+	padding: 6px 16px;
+	border-radius: 20px;
+	border: 1px solid rgba(255, 255, 255, 0.2);
+	background: rgba(255, 255, 255, 0.06);
+	backdrop-filter: blur(8px);
+	color: rgba(255, 255, 255, 0.65);
+	font-size: 0.85rem;
+	font-weight: 500;
+	cursor: pointer;
+	transition: all 0.2s ease;
+	white-space: nowrap;
+}
+
+.monthTab:hover {
+	background: rgba(255, 255, 255, 0.15);
+	color: rgba(255, 255, 255, 0.9);
+}
+
+.monthTabActive {
+	background: rgba(255, 255, 255, 0.22);
+	border-color: rgba(255, 255, 255, 0.55);
+	color: #ffffff;
+	font-weight: 700;
+}
+
+/* ── Deny All button ─────────────────────────────────────── */
+.denyAllContainer {
+	display: flex;
+	justify-content: center;
+	margin-bottom: 16px;
+}
+
+.denyAllBtn {
+	padding: 9px 20px;
+	border-radius: 10px;
+	border: 1px solid rgba(239, 68, 68, 0.5);
+	background: rgba(239, 68, 68, 0.15);
+	color: #fecaca;
+	font-size: 0.9rem;
+	font-weight: 600;
+	cursor: pointer;
+	transition: all 0.2s ease;
+	backdrop-filter: blur(4px);
+}
+
+.denyAllBtn:hover:not(:disabled) {
+	background: rgba(239, 68, 68, 0.3);
+	border-color: rgba(239, 68, 68, 0.7);
+}
+
+.denyAllBtn:disabled {
+	opacity: 0.45;
+	cursor: not-allowed;
+}

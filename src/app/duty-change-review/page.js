@@ -31,6 +31,7 @@ export default function DutyChangeReviewPage() {
 	const [statusFilter, setStatusFilter]   = useState('pending');
 	const [actionLoading, setActionLoading] = useState(null);
 	const [activeCardIndex, setActiveCardIndex] = useState(0);
+	const [selectedMonth, setSelectedMonth] = useState(null);
 
 	// ── Indexed single-card navigation ──────────────────────────────────────
 	const goToPrev = useCallback(() => {
@@ -41,10 +42,10 @@ export default function DutyChangeReviewPage() {
 		setActiveCardIndex(i => Math.min(total - 1, i + 1));
 	}, []);
 
-	// Reset to first card when filter changes
+	// Reset to first card when filter or month changes
 	useEffect(() => {
 		setActiveCardIndex(0);
-	}, [statusFilter]);
+	}, [statusFilter, selectedMonth]);
 
 	// ── Access guard ─────────────────────────────────────────────────────────
 	useEffect(() => {
@@ -63,7 +64,20 @@ export default function DutyChangeReviewPage() {
 				.order('submitted_at', { ascending: true }); // oldest first → carousel reads left to right
 
 			if (error) throw error;
-			setRequests(data || []);
+			const fetched = data || [];
+			setRequests(fetched);
+
+			// Auto-select the newest month (only on first load — don't override user selection)
+			if (fetched.length > 0) {
+				const months = [...new Set(fetched.map(r => r.month))].sort((a, b) => {
+					const parse = (s) => {
+						const m = s.match(/(\d{4})年(\d{2})月/);
+						return m ? parseInt(m[1]) * 100 + parseInt(m[2]) : 0;
+					};
+					return parse(b) - parse(a); // descending → newest first
+				});
+				setSelectedMonth(prev => prev ?? months[0]);
+			}
 		} catch (err) {
 			console.error('Error fetching duty change requests:', err);
 			toast.error('載入申請資料失敗');
@@ -239,6 +253,52 @@ export default function DutyChangeReviewPage() {
 		}
 	};
 
+	// ── Deny All pending in selected month ─────────────────────────────────────
+	const handleDenyAll = async () => {
+		const pendingInMonth = requests.filter(r => r.month === selectedMonth && r.status === 'pending');
+		if (pendingInMonth.length === 0) return;
+
+		const confirmed = window.confirm(
+			`確定要拒絕 ${selectedMonth} 的全部 ${pendingInMonth.length} 筆待審核申請嗎？`
+		);
+		if (!confirmed) return;
+
+		setActionLoading('deny-all');
+		try {
+			const ids = pendingInMonth.map(r => r.id);
+			const { error } = await supabase
+				.from('duty_change_requests')
+				.update({
+					status:      'denied',
+					reviewed_at: new Date().toISOString(),
+					reviewed_by: user.id,
+				})
+				.in('id', ids);
+
+			if (error) throw error;
+
+			// Clean up PDFs for each
+			await Promise.all(
+				pendingInMonth.map(async (r) => {
+					if (!r.pdf_storage_path) return;
+					await deletePdfFromStorage(r.pdf_storage_path);
+					await supabase
+						.from('duty_change_requests')
+						.update({ pdf_storage_path: null })
+						.eq('id', r.id);
+				})
+			);
+
+			toast.success(`已拒絕 ${selectedMonth} 全部 ${pendingInMonth.length} 筆待審核申請`);
+			fetchRequests();
+		} catch (err) {
+			console.error('Error denying all:', err);
+			toast.error('批次拒絕失敗，請稍後再試');
+		} finally {
+			setActionLoading(null);
+		}
+	};
+
 	// ── Download PDF — filename matches original duty-change output ───────────
 	const handleDownloadPdf = async (req) => {
 		if (!req.pdf_storage_path) {
@@ -296,16 +356,41 @@ export default function DutyChangeReviewPage() {
 		return { text: '±0', color: '#94a3b8' };
 	};
 
-	// ── Filtered list & counts ────────────────────────────────────────────────
+	// ── Sorted unique months for the month selector ──────────────────────────
+	const sortedMonths = [...new Set(requests.map(r => r.month))].sort((a, b) => {
+		const parse = (s) => {
+			const m = s.match(/(\d{4})年(\d{2})月/);
+			return m ? parseInt(m[1]) * 100 + parseInt(m[2]) : 0;
+		};
+		return parse(b) - parse(a); // newest first
+	});
+
+	// Determine if selected month is past (for deny-all button visibility)
+	const isSelectedMonthPast = (() => {
+		if (!selectedMonth) return false;
+		const m = selectedMonth.match(/(\d{4})年(\d{2})月/);
+		if (!m) return false;
+		const now = new Date();
+		const selYear = parseInt(m[1]);
+		const selMonth = parseInt(m[2]);
+		return selYear < now.getFullYear() ||
+			(selYear === now.getFullYear() && selMonth < now.getMonth() + 1);
+	})();
+
+	// ── Filtered list & counts (scoped to selectedMonth) ─────────────────────
+	const monthRequests = selectedMonth
+		? requests.filter(r => r.month === selectedMonth)
+		: requests;
+
 	const filteredRequests = statusFilter === 'all'
-		? requests
-		: requests.filter(r => r.status === statusFilter);
+		? monthRequests
+		: monthRequests.filter(r => r.status === statusFilter);
 
 	const counts = {
-		pending:  requests.filter(r => r.status === 'pending').length,
-		approved: requests.filter(r => r.status === 'approved').length,
-		denied:   requests.filter(r => r.status === 'denied').length,
-		all:      requests.length,
+		pending:  monthRequests.filter(r => r.status === 'pending').length,
+		approved: monthRequests.filter(r => r.status === 'approved').length,
+		denied:   monthRequests.filter(r => r.status === 'denied').length,
+		all:      monthRequests.length,
 	};
 
 	// ── Loading / access ──────────────────────────────────────────────────────
@@ -327,6 +412,21 @@ export default function DutyChangeReviewPage() {
 				<p className={styles.pageSubtitle}>管派組審核組員換班申請</p>
 			</div>
 
+			{/* ── Month selector tabs ── */}
+			{sortedMonths.length > 1 && (
+				<div className={styles.monthTabContainer}>
+					{sortedMonths.map(month => (
+						<button
+							key={month}
+							className={`${styles.monthTab} ${selectedMonth === month ? styles.monthTabActive : ''}`}
+							onClick={() => setSelectedMonth(month)}
+						>
+							{month}
+						</button>
+					))}
+				</div>
+			)}
+
 			{/* ── Status filter tabs ── */}
 			<div className={styles.filterTabContainer}>
 				{STATUS_FILTER_TABS.map(tab => (
@@ -342,6 +442,19 @@ export default function DutyChangeReviewPage() {
 					</button>
 				))}
 			</div>
+
+			{/* ── Deny All button — only for past months with pending items ── */}
+			{isSelectedMonthPast && counts.pending > 0 && statusFilter === 'pending' && (
+				<div className={styles.denyAllContainer}>
+					<button
+						className={styles.denyAllBtn}
+						onClick={handleDenyAll}
+						disabled={actionLoading === 'deny-all'}
+					>
+						{actionLoading === 'deny-all' ? '處理中...' : `❌ 全部拒絕 ${selectedMonth} 待審核申請（${counts.pending} 筆）`}
+					</button>
+				</div>
+			)}
 
 			{/* ── Request cards — indexed single-card view ── */}
 			{filteredRequests.length === 0 ? (

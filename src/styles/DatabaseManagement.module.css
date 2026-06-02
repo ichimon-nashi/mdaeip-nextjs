@@ -1922,11 +1922,23 @@
 	gap: 12px;
 	transition: box-shadow 0.2s ease, border-color 0.2s ease;
 	box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+	position: relative;
 }
 
 .userCard:hover {
 	box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
 	border-color: #cbd5e1;
+}
+
+.userCardGif {
+	position: absolute;
+	top: 12px;
+	right: 12px;
+	width: 48px;
+	height: 48px;
+	object-fit: contain;
+	pointer-events: none;
+	image-rendering: pixelated;
 }
 
 .userCardTop {
