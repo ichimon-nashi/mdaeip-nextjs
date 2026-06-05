@@ -194,4 +194,12 @@ export const patchUpdates = [
 			"增加編輯完成標籤以免漏掉更新",
 		],
 	},
+		{
+		date: "2026-06-04",
+		appName: "GDay劃假系統",
+		updateInfo: [
+			"更改統UI",
+			'增加"複訓G"、"指定任務"',
+		],
+	},
 ];

@@ -771,63 +771,97 @@ export default function DashboardPage() {
 						</div>
 					) : (
 						<div className={styles.welcomeDutyRows}>
-							{[
-								{ item: todayItem,    label: '今天',    isTomorrow: false,
-								  dateStr: `${today.getMonth()+1}月${today.getDate()}日 (${WEEKDAY_LABELS[today.getDay()]})` },
-								{ item: tomorrowItem, label: '明天',    isTomorrow: true,
-								  dateStr: (() => { const d = new Date(); d.setDate(d.getDate()+1); return `${d.getMonth()+1}月${d.getDate()}日 (${WEEKDAY_LABELS[d.getDay()]})`; })() },
-							].map(({ item, label, isTomorrow, dateStr }) => {
-								const colors = item ? getDutyColors(item) : null;
-								// Flight duty = has data, not OFF, not RESV, not leave, has PDX sectors
-								const isFlightDuty = item && item.hasData && !item.isDutyOff && !item.isResv
+							{(() => {
+								// ── shared helpers ──
+								const isFlightDuty = (item) => item && item.hasData && !item.isDutyOff && !item.isResv
 									&& item.dutyCode !== 'N/A' && item.dutyCode !== '空'
 									&& !['A/L','例','休','G','福補','年假','ANNUAL'].some(t => item.dutyCode.includes(t) || item.rawDuty.includes(t))
 									&& !['OD','會','課','教師會','訓'].some(t => item.dutyCode.startsWith(t));
-								const routeStr = isFlightDuty ? buildRouteString(item.pdxSectors) : null;
-								const crewmates = isFlightDuty ? (item.crewmates || []) : [];
+
+								const todayColors    = todayItem    ? getDutyColors(todayItem)    : null;
+								const tomorrowColors = tomorrowItem ? getDutyColors(tomorrowItem) : null;
+								const todayFlight    = isFlightDuty(todayItem);
+								const tmrFlight      = isFlightDuty(tomorrowItem);
+								const todayRoute     = todayFlight    ? buildRouteString(todayItem.pdxSectors)    : null;
+								const todayCrewmates = todayFlight    ? (todayItem.crewmates    || []) : [];
+								const todayDateStr   = `${today.getMonth()+1}月${today.getDate()}日 (${WEEKDAY_LABELS[today.getDay()]})`;
+								const tmrDate        = new Date(); tmrDate.setDate(tmrDate.getDate() + 1);
+								const tmrDateStr     = `${tmrDate.getMonth()+1}月${tmrDate.getDate()}日 (${WEEKDAY_LABELS[tmrDate.getDay()]})`;
+
 								return (
-									<div key={label} className={`${styles.welcomeDutyRow} ${isTomorrow ? styles.welcomeDutyRowSecondary : ''}`}>
-										{/* Day label column */}
-										<div className={styles.welcomeDayLabel}>
-											<span className={`${styles.welcomeDayBadge} ${isTomorrow ? styles.welcomeDayBadgeTomorrow : ''}`}>{label}</span>
-											<span className={styles.welcomeDayDate}>{dateStr}</span>
-										</div>
-										{/* Duty info column */}
-										<div className={styles.welcomeDutyInfo}>
-											{/* Top line: duty chip + crew badges side by side */}
-											<div className={styles.welcomeDutyTopLine}>
-												<div
-													className={styles.welcomeDutyChip}
-													style={colors ? {
-														backgroundColor: colors.bg,
-														color: colors.text,
-														borderColor: colors.border,
-													} : { backgroundColor: 'rgba(255,255,255,0.15)', color: '#9ca3af', borderColor: 'rgba(255,255,255,0.2)' }}
-												>
-													{item ? formatDutyCardText(item) : '無資料'}
+									<>
+										{/* ── Hero today card ── */}
+										<div className={styles.heroTodayCard}>
+											<div className={styles.heroTodayInner}>
+												<div className={styles.heroTodayContent}>
+													<div className={styles.heroDateRow}>
+														<span className={styles.heroDayBadge}>今天</span>
+														<span className={styles.heroDateText}>{todayDateStr}</span>
+													</div>
+													<div className={styles.heroDutyRow}>
+														<div
+															className={styles.heroDutyPill}
+															style={todayColors ? {
+																backgroundColor: todayColors.bg,
+																color: todayColors.text,
+																borderColor: todayColors.border,
+															} : { backgroundColor: 'rgba(255,255,255,0.15)', color: '#9ca3af', borderColor: 'rgba(255,255,255,0.2)' }}
+														>
+															{todayItem ? formatDutyCardText(todayItem) : '無資料'}
+														</div>
+													</div>
+													{todayRoute && (
+														<div className={styles.heroRoute}>{todayRoute}</div>
+													)}
+													{todayCrewmates.length > 0 && (
+														<div className={styles.heroCrewRow}>
+															{todayCrewmates.slice(0, 5).map((c, i) => {
+																const bc = getBaseColor(c.base);
+																return (
+																	<span key={i} className={styles.welcomeCrewBadge}
+																		style={{ backgroundColor: bc.bg, color: bc.text }}>
+																		{c.name}
+																	</span>
+																);
+															})}
+															{todayCrewmates.length > 5 && (
+																<span className={styles.welcomeCrewMore}>+{todayCrewmates.length - 5}</span>
+															)}
+														</div>
+													)}
 												</div>
-												{/* Crew badges — right of chip, flight duties only */}
-												{crewmates.slice(0, 4).map((c, i) => {
-													const bc = getBaseColor(c.base);
-													return (
-														<span key={i} className={styles.welcomeCrewBadge}
-															style={{ backgroundColor: bc.bg, color: bc.text }}>
-															{c.name}
-														</span>
-													);
-												})}
-												{crewmates.length > 4 && (
-													<span className={styles.welcomeCrewMore}>+{crewmates.length - 4}</span>
+												{user?.avatar_gif && (
+													<div className={styles.heroGifAvatar}>
+														<img
+															src={`/assets/level_gif/${user.avatar_gif}`}
+															alt="character"
+															className={styles.heroGifAvatarImg}
+														/>
+													</div>
 												)}
 											</div>
-											{/* Route — below, flight duties with PDX data only */}
-											{routeStr && (
-												<div className={styles.welcomeRoute}>{routeStr}</div>
+										</div>
+
+										{/* ── Slim tomorrow row ── */}
+										<div className={styles.slimTomorrowRow}>
+											<span className={styles.slimTmrBadge}>明天</span>
+											<span className={styles.slimTmrDate}>{tmrDateStr}</span>
+											<div
+												className={styles.slimTmrDuty}
+												style={tomorrowColors ? {
+													backgroundColor: tomorrowColors.bg,
+													color: tomorrowColors.text,
+												} : { backgroundColor: 'rgba(255,255,255,0.12)', color: 'rgba(255,255,255,0.5)' }}
+											>
+												{tomorrowItem ? formatDutyCardText(tomorrowItem) : '無資料'}
+											</div>
+											{tomorrowItem?.reportingTime && tomorrowItem.reportingTime !== 'N/A' && tomorrowItem.reportingTime !== '無' && !tomorrowItem.isDutyOff && (
+												<span className={styles.slimTmrTime}>{tomorrowItem.reportingTime}</span>
 											)}
 										</div>
-									</div>
+									</>
 								);
-							})}
+							})()}
 						</div>
 					)}
 
@@ -938,6 +972,11 @@ export default function DashboardPage() {
 												style={{ backgroundColor: colors.bg, color: colors.text }}
 											>
 												{dutyLabel}
+											</div>
+										)}
+										{displayItem && displayItem.reportingTime && displayItem.reportingTime !== 'N/A' && displayItem.reportingTime !== '無' && !displayItem.isDutyOff && (
+											<div className={styles.calendarDutyTime}>
+												{displayItem.reportingTime}
 											</div>
 										)}
 									</div>

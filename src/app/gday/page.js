@@ -8,15 +8,17 @@ import { toast, Toaster } from 'react-hot-toast'
 import { useAuth } from '../../contexts/AuthContext'
 import { useRouter } from 'next/navigation'
 import { hasAppAccess } from '../../lib/permissionHelpers'
-import { createClient } from '@supabase/supabase-js'
+import { employeeList } from '../../lib/DataRoster'
 import styles from '../../styles/GDayPlanner.module.css'
 
-const supabase = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-)
+const AVATAR_BASE = 'https://rhdpkxkmugimtlbdizfp.supabase.co/storage/v1/object/public/avatars'
+const DEFAULT_AVATAR = `${AVATAR_BASE}/avatar-default.png`
 
 const isSpecialAdmin = (user) => user?.id === 'admin' || user?.id === '51892'
+
+// Pre-sorted by numeric id, admin excluded — computed once at module level
+const ALL_CREW = [...employeeList]
+    .sort((a, b) => Number(a.id) - Number(b.id))
 
 const GDayPlanner = () => {
     const today = new Date()
@@ -33,9 +35,9 @@ const GDayPlanner = () => {
     const [designatedDutyText, setDesignatedDutyText] = useState('')
     const [isDragOver, setIsDragOver] = useState(null)
     // Admin user-switcher state
-    const [allUsers, setAllUsers] = useState([])
     const [displayName, setDisplayName] = useState(null) // null = use own name
     const [showUserPicker, setShowUserPicker] = useState(false)
+    const [userSearch, setUserSearch] = useState('')
 
     const { user, loading } = useAuth()
     const router = useRouter()
@@ -45,20 +47,6 @@ const GDayPlanner = () => {
             router.replace('/dashboard')
         }
     }, [user, loading, router])
-
-    // Fetch all users for admin switcher
-    useEffect(() => {
-        if (!user || !isSpecialAdmin(user)) return
-        const fetchUsers = async () => {
-            const { data, error } = await supabase
-                .from('mdaeip_users')
-                .select('id, name')
-                .neq('id', 'admin')
-                .order('id', { ascending: true })
-            if (!error && data) setAllUsers(data)
-        }
-        fetchUsers()
-    }, [user])
 
     const ownName = user?.name || user?.user_metadata?.name || user?.email?.split('@')[0] || '使用者'
     const activeName = displayName ?? ownName
@@ -319,29 +307,36 @@ const GDayPlanner = () => {
         if (errors.length) { errors.forEach(e => toast.error(e, { duration: 5000, position: 'top-center' })); return }
         const wasVisible = showLeaveTypes
         setShowLeaveTypes(false)
-        await new Promise(r => setTimeout(r, 100))
+        await new Promise(r => setTimeout(r, 150))
+        const el = plannerRef.current
+        // Save and lift constraints so full content renders without scroll clipping
+        const prevMaxHeight = el.style.maxHeight
+        const prevOverflow  = el.style.overflowY
+        const prevWidth     = el.style.width
+        const prevMinWidth  = el.style.minWidth
         try {
             const html2canvas = (await import('html2canvas')).default
-            const el = plannerRef.current
-            // Temporarily remove scroll/height constraints so full content renders
-            const prevMaxHeight = el.style.maxHeight
-            const prevOverflow  = el.style.overflowY
             el.style.maxHeight = 'none'
             el.style.overflowY = 'visible'
-            await new Promise(r => setTimeout(r, 50))
+            // On touch devices, force the element to desktop width so the 1025px
+            // media query fires inside html2canvas (windowWidth drives @media evaluation)
+            if (isTouchDevice) {
+                el.style.width    = '1200px'
+                el.style.minWidth = '1200px'
+            }
+            await new Promise(r => setTimeout(r, 80))
             const canvas = await html2canvas(el, {
-                scale: 2,
+                scale:           2,
                 backgroundColor: '#1a202c',
-                useCORS: true,
-                allowTaint: true,
-                width: el.scrollWidth,
-                height: el.scrollHeight,
-                windowWidth: el.scrollWidth,
-                windowHeight: el.scrollHeight,
+                useCORS:         true,
+                allowTaint:      true,
+                width:           el.scrollWidth,
+                height:          el.scrollHeight,
+                windowWidth:     1280,   // forces desktop @media rules for ALL elements
+                windowHeight:    el.scrollHeight,
+                scrollX:         0,
+                scrollY:         0,
             })
-            // Restore
-            el.style.maxHeight = prevMaxHeight
-            el.style.overflowY = prevOverflow
             const link = document.createElement('a')
             link.download = `${currentYear}年${monthNames[currentMonth].replace('月','')}月指定休假一覽-${activeName}.png`
             link.href = canvas.toDataURL('image/png')
@@ -349,11 +344,14 @@ const GDayPlanner = () => {
             link.click()
             document.body.removeChild(link)
             toast.success('截圖已成功儲存！', { duration: 3000, position: 'top-center' })
-        } catch {
+        } catch (err) {
+            console.error('Screenshot error:', err)
             toast.error('截圖產生失敗，請重試', { duration: 3000, position: 'top-center' })
-            const el = plannerRef.current
-            if (el) { el.style.maxHeight = ''; el.style.overflowY = '' }
         } finally {
+            el.style.maxHeight = prevMaxHeight
+            el.style.overflowY = prevOverflow
+            el.style.width     = prevWidth
+            el.style.minWidth  = prevMinWidth
             setShowLeaveTypes(wasVisible)
         }
     }
@@ -361,7 +359,7 @@ const GDayPlanner = () => {
     if (loading || !user || !hasAppAccess(user, 'gday')) return null
 
     const cssKey = (id) => `leave${id.charAt(0).toUpperCase() + id.slice(1)}`
-    const canSwitchUser = isSpecialAdmin(user) && allUsers.length > 0
+    const canSwitchUser = isSpecialAdmin(user)
 
     return (
         <>
@@ -390,46 +388,71 @@ const GDayPlanner = () => {
                                     <div className={styles.userPickerContainer} onClick={e => e.stopPropagation()}>
                                         <button
                                             className={styles.userPickerBtn}
-                                            onClick={() => { setShowUserPicker(v => !v); setShowYearPicker(false); setShowMonthPicker(false) }}
+                                            onClick={() => { setShowUserPicker(v => { if (v) setUserSearch(''); return !v }); setShowYearPicker(false); setShowMonthPicker(false) }}
                                             title="切換使用者"
                                         >
                                             <Users size={14} />
                                         </button>
                                         {showUserPicker && (
                                             <div className={styles.userPickerDropdown}>
-                                                <div
-                                                    className={`${styles.userPickerOption} ${displayName === null ? styles.selected : ''}`}
-                                                    onClick={() => { setDisplayName(null); setShowUserPicker(false) }}
-                                                >
-                                                    <img
-                                                        src={`https://rhdpkxkmugimtlbdizfp.supabase.co/storage/v1/object/public/avatars/${user.id}.png`}
-                                                        className={styles.userPickerAvatar}
-                                                        alt=""
-                                                        onError={e => { e.target.style.display = 'none' }}
+                                                <div className={styles.userPickerSearch}>
+                                                    <input
+                                                        className={styles.userPickerSearchInput}
+                                                        value={userSearch}
+                                                        onChange={e => setUserSearch(e.target.value)}
+                                                        placeholder="輸入員工編號或姓名..."
+                                                        autoFocus
+                                                        onClick={e => e.stopPropagation()}
                                                     />
-                                                    <span className={styles.userPickerInfo}>
-                                                        <span className={styles.userPickerName}>{ownName}（自己）</span>
-                                                        <span className={styles.userPickerId}>{user.id}</span>
-                                                    </span>
                                                 </div>
-                                                {allUsers.map(u => (
+                                                {/* Self entry — always shown when search is empty */}
+                                                {!userSearch && (
                                                     <div
-                                                        key={u.id}
-                                                        className={`${styles.userPickerOption} ${displayName === u.name ? styles.selected : ''}`}
-                                                        onClick={() => { setDisplayName(u.name); setShowUserPicker(false) }}
+                                                        className={`${styles.userPickerOption} ${displayName === null ? styles.selected : ''}`}
+                                                        onClick={() => { setDisplayName(null); setShowUserPicker(false); setUserSearch('') }}
                                                     >
                                                         <img
-                                                            src={`https://rhdpkxkmugimtlbdizfp.supabase.co/storage/v1/object/public/avatars/${u.id}.png`}
+                                                            src={`${AVATAR_BASE}/${user.id}.png`}
                                                             className={styles.userPickerAvatar}
                                                             alt=""
-                                                            onError={e => { e.target.style.display = 'none' }}
+                                                            onError={e => { e.target.src = DEFAULT_AVATAR }}
                                                         />
                                                         <span className={styles.userPickerInfo}>
-                                                            <span className={styles.userPickerName}>{u.name}</span>
-                                                            <span className={styles.userPickerId}>{u.id}</span>
+                                                            <span className={styles.userPickerName}>{ownName}（自己）</span>
+                                                            <span className={styles.userPickerId}>{user.id}</span>
                                                         </span>
                                                     </div>
-                                                ))}
+                                                )}
+                                                {/* Filtered results */}
+                                                {(() => {
+                                                    const q = userSearch.trim().toLowerCase()
+                                                    const results = q
+                                                        ? ALL_CREW.filter(u =>
+                                                            u.id.includes(q) || u.name.includes(q)
+                                                          ).slice(0, 8)
+                                                        : []
+                                                    if (q && results.length === 0) {
+                                                        return <div className={styles.userPickerEmpty}>找不到符合的員工</div>
+                                                    }
+                                                    return results.map(u => (
+                                                        <div
+                                                            key={u.id}
+                                                            className={`${styles.userPickerOption} ${displayName === u.name ? styles.selected : ''}`}
+                                                            onClick={() => { setDisplayName(u.name); setShowUserPicker(false); setUserSearch('') }}
+                                                        >
+                                                            <img
+                                                                src={`${AVATAR_BASE}/${u.id}.png`}
+                                                                className={styles.userPickerAvatar}
+                                                                alt=""
+                                                                onError={e => { e.target.src = DEFAULT_AVATAR }}
+                                                            />
+                                                            <span className={styles.userPickerInfo}>
+                                                                <span className={styles.userPickerName}>{u.name}</span>
+                                                                <span className={styles.userPickerId}>{u.id} · {u.rank} · {u.base}</span>
+                                                            </span>
+                                                        </div>
+                                                    ))
+                                                })()}
                                             </div>
                                         )}
                                     </div>

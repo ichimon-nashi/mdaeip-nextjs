@@ -4,35 +4,14 @@ import { useRouter } from "next/navigation";
 import { usePathname } from "next/navigation";
 import { useEffect } from "react";
 import Image from "next/image";
-import {
-  Calendar,
-  Clock,
-  MapPin,
-  FileText,
-  NotebookPen,
-  User,
-  Database,
-  TreePalm,
-} from "lucide-react";
 import styles from "../styles/NavigationDrawer.module.css";
 import { hasAppAccess } from "../lib/permissionHelpers";
 
-// Turtle PNG icon wrapper
-const TurtleIcon = ({ size = 24 }) => (
+// PNG icon wrapper
+const PngIcon = ({ src, alt, size = 44 }) => (
   <Image
-    src="/assets/turtle.png"
-    alt="Turtle"
-    width={size}
-    height={size}
-    style={{ objectFit: "contain" }}
-  />
-);
-
-// Approved PNG icon wrapper
-const ApprovedIcon = ({ size = 24 }) => (
-  <Image
-    src="/assets/approved.png"
-    alt="Approved"
+    src={src}
+    alt={alt}
     width={size}
     height={size}
     style={{ objectFit: "contain" }}
@@ -81,7 +60,7 @@ const NavigationDrawer = ({ isOpen, onClose, userDetails }) => {
       id:          "dashboard",
       title:       "我的班表",
       description: "個人班表總覽",
-      icon:        <User size={24} />,
+      icon:        <PngIcon src="/assets/profile.png" alt="Dashboard" />,
       path:        "/dashboard",
       color:       "#6d3b47",
       hasAccess:   !!user,
@@ -90,7 +69,7 @@ const NavigationDrawer = ({ isOpen, onClose, userDetails }) => {
       id:          "duty-roster",
       title:       "換班系統",
       description: "班表查詢&換班申請",
-      icon:        <Calendar size={24} />,
+      icon:        <PngIcon src="/assets/schedule.png" alt="Schedule" />,
       path:        "/schedule",
       color:       "#2563eb",
       hasAccess:   hasAppAccess(user, "roster"),
@@ -99,7 +78,7 @@ const NavigationDrawer = ({ isOpen, onClose, userDetails }) => {
       id:          "mrt-checker",
       title:       "疲勞管理系統",
       description: "疲勞管理檢視＆調班系統",
-      icon:        <Clock size={24} />,
+      icon:        <PngIcon src="/assets/fatigue.png" alt="MRT Checker" />,
       path:        "/MRTChecker",
       color:       "#059669",
       hasAccess:   hasAppAccess(user, "mrt_checker"),
@@ -108,7 +87,7 @@ const NavigationDrawer = ({ isOpen, onClose, userDetails }) => {
       id:          "vacation-planner",
       title:       "GDay劃假系統",
       description: "指定休假申請",
-      icon:        <TreePalm size={24} />,
+      icon:        <PngIcon src="/assets/vacation.png" alt="Vacation Planner" />,
       path:        "/gday",
       color:       "#7c3aed",
       hasAccess:   hasAppAccess(user, "gday"),
@@ -117,7 +96,7 @@ const NavigationDrawer = ({ isOpen, onClose, userDetails }) => {
       id:          "etr-generator",
       title:       "eTR產生器",
       description: 'e-"TAHI" Report',
-      icon:        <NotebookPen size={24} />,
+      icon:        <PngIcon src="/assets/etr.png" alt="ETR Generator" />,
       path:        "/etr-generator",
       color:       "#dc2626",
       hasAccess:   hasAppAccess(user, "etr_generator"),
@@ -126,7 +105,7 @@ const NavigationDrawer = ({ isOpen, onClose, userDetails }) => {
       id:          "dispatch",
       title:       "派遣表系統",
       description: "派遣表管理",
-      icon:        <MapPin size={24} />,
+      icon:        <PngIcon src="/assets/dispatch.png" alt="Dispatch" />,
       path:        "/dispatch",
       color:       "#0369a1",
       hasAccess:   hasAppAccess(user, "dispatch"),
@@ -135,7 +114,7 @@ const NavigationDrawer = ({ isOpen, onClose, userDetails }) => {
       id:          "duty-change-review",
       title:       "換班審核",
       description: "換班申請審核管理",
-      icon:        <ApprovedIcon size={24} />,
+      icon:        <PngIcon src="/assets/approved.png" alt="Dispatch" />,
       path:        "/duty-change-review",
       color:       "#be185d",
       hasAccess:   hasAppAccess(user, "duty_change_review"),
@@ -144,7 +123,7 @@ const NavigationDrawer = ({ isOpen, onClose, userDetails }) => {
       id:          "turtle-ranking",
       title:       "Turtle Ranking",
       description: "烏龜速度排行榜 🐢",
-      icon:        <TurtleIcon size={24} />,
+      icon:        <PngIcon src="/assets/turtle.png" alt="Dispatch" />,
       path:        "/turtle-ranking",
       color:       "#065f46",
       hasAccess:   hasAppAccess(user, "turtle_ranking"),
@@ -153,7 +132,7 @@ const NavigationDrawer = ({ isOpen, onClose, userDetails }) => {
       id:          "database-management",
       title:       "資料庫管理",
       description: "班表、派遣表、使用者管理",
-      icon:        <Database size={24} />,
+      icon:        <PngIcon src="/assets/database.png" alt="Database Management" />,
       path:        "/database-management",
       color:       "#f77f00",
       hasAccess:   hasAppAccess(user, "database_management"),
@@ -162,7 +141,7 @@ const NavigationDrawer = ({ isOpen, onClose, userDetails }) => {
       id:          "patch-notes",
       title:       "Patch內容",
       description: "APP更新項目",
-      icon:        <FileText size={24} />,
+      icon:        <PngIcon src="/assets/patchnotes.png" alt="Patch Notes" />,
       path:        "/patch-notes",
       color:       "#99582a",
       hasAccess:   !!user,
@@ -290,7 +269,7 @@ const NavigationDrawer = ({ isOpen, onClose, userDetails }) => {
 
         {/* Footer */}
         <div className={styles.drawerFooter}>
-          <div className={styles.appVersion}>豪神APP v3.8.1</div>
+          <div className={styles.appVersion}>豪神APP v3.9.2</div>
         </div>
 
       </div>
