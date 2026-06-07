@@ -40,6 +40,7 @@ export const PILOTS = [
 	{ name: "姚🐢審", base: "TSA" }, //沈耿堯
 	{ name: "還🐢王", base: "TSA" }, //王士桓
 	{ name: "叢🐢菜", base: "TSA" }, //蔡惠琮
+	{ name: "科斤", base: "TSA" }, //金軻
 
 	// ── RMQ ─────────────────────────────────────────────────────────────────
 	{ name: "紅🐢亡", base: "RMQ" }, //王文鴻
@@ -65,6 +66,8 @@ export const PILOTS = [
 	{ name: "剩🐢鄒", base: "KHH" }, //鄒宏盛
 	{ name: "終🐢料", base: "KHH" }, //廖瑞忠
     { name: "西🐢酥", base: "KHH" }, //蘇文熙
+    { name: "翔🐢蟑", base: "KHH" }, //張偉祥
+
 ];
 
 // Grouped by base — used for <optgroup> in the dropdown
