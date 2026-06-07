@@ -976,11 +976,17 @@ export default function TurtleRanking() {
                 const dur = calcFlightMinutes(l.takeoff, l.landing);
                 return std !== null && dur !== null ? [dur - std] : [];
               });
-              const segAvgExcess = segExcesses.length > 0
+              const segAvgExcess   = segExcesses.length > 0
                 ? Math.round(segExcesses.reduce((a, b) => a + b, 0) / segExcesses.length)
+                : null;
+              const segTotalExcess = segExcesses.length > 0
+                ? segExcesses.reduce((a, b) => a + b, 0)
                 : null;
               const segAvgMins = segValidLegs.length > 0
                 ? Math.round(segValidLegs.reduce((s, l) => s + calcFlightMinutes(l.takeoff, l.landing), 0) / segValidLegs.length)
+                : null;
+              const segTotalMins = segValidLegs.length > 0
+                ? segValidLegs.reduce((s, l) => s + calcFlightMinutes(l.takeoff, l.landing), 0)
                 : null;
 
               return (
@@ -1021,16 +1027,24 @@ export default function TurtleRanking() {
                     ＋ 新增航段
                   </button>
 
-                  {/* Per-segment preview */}
-                  {segAvgMins !== null && !hasAnyError(seg.legs) && (
+                  {/* Per-segment preview — only when pilot selected and legs valid */}
+                  {seg.pilotName && segAvgMins !== null && !hasAnyError(seg.legs) && (
                     <div className={styles.segmentPreview}>
-                      <span className={styles.segPreviewName}>{seg.pilotName || "?"}</span>
-                      <span className={styles.segPreviewTime}>{formatMinutes(segAvgMins)}</span>
-                      {segAvgExcess !== null && (
-                        <span className={segAvgExcess > 0 ? styles.excessBad : styles.excessOk}>
-                          {segAvgExcess > 0 ? `+${segAvgExcess}min` : "準時"}
-                        </span>
-                      )}
+                      <span className={styles.segPreviewName}>{seg.pilotName}</span>
+                      <div className={styles.segPreviewStats}>
+                        <div className={styles.segPreviewStat}>
+                          <span className={styles.segPreviewStatLabel}>平均</span>
+                          <span className={styles.segPreviewTime}>{formatMinutes(segAvgMins)}</span>
+                        </div>
+                        {segTotalExcess !== null && (
+                          <div className={styles.segPreviewStat}>
+                            <span className={styles.segPreviewStatLabel}>🐢 偷</span>
+                            <span className={segTotalExcess > 0 ? styles.segPreviewExcessBad : styles.segPreviewExcessOk}>
+                              {segTotalExcess > 0 ? `+${formatMinutes(segTotalExcess)}` : "準時"}
+                            </span>
+                          </div>
+                        )}
+                      </div>
                       <span className={styles.segPreviewTitle}>{getTurtleTitle(segAvgExcess ?? 0)}</span>
                     </div>
                   )}
@@ -1136,51 +1150,93 @@ export default function TurtleRanking() {
                                 >
                                   <span className={styles.recordGroupName}>{pilotName}</span>
                                   <span className={styles.recordGroupCount}>{entries.length} 筆記錄</span>
+                                  {(() => {
+                                    const totalStolen = entries.reduce((sum, r) => {
+                                      const std = getSectorStandard(r.origin, r.destination);
+                                      return std !== null ? sum + (r.flight_minutes - std) : sum;
+                                    }, 0);
+                                    const hasStd = entries.some((r) => getSectorStandard(r.origin, r.destination) !== null);
+                                    return hasStd ? (
+                                      <span className={totalStolen > 0 ? styles.pilotTotalBad : styles.pilotTotalOk}>
+                                        {totalStolen > 0 ? `🐢 偷 +${formatMinutes(totalStolen)}` : "👌 未超標"}
+                                      </span>
+                                    ) : null;
+                                  })()}
                                   <span className={styles.pilotAccordionChevron}>
                                     {pilotOpen ? "▲" : "▼"}
                                   </span>
                                 </button>
 
-                                {/* Entry cards — shown when pilot expanded */}
-                                {pilotOpen && (
-                                <div className={styles.pilotEntriesBody}>
-                                {entries.map((rec) => {
-                                  const std         = getSectorStandard(rec.origin, rec.destination);
-                                  const excess      = std !== null ? rec.flight_minutes - std : null;
-                                  const canEditThis = isPrivileged || rec.submitted_by === user.id;
+                                {/* Entry cards grouped by date — shown when pilot expanded */}
+                                {pilotOpen && (() => {
+                                  // Group entries by flight_date (null → "未記錄")
+                                  const byDate = {};
+                                  for (const r of entries) {
+                                    const dk = r.flight_date || "未記錄";
+                                    if (!byDate[dk]) byDate[dk] = [];
+                                    byDate[dk].push(r);
+                                  }
+                                  const dateKeys = Object.keys(byDate).sort();
                                   return (
-                                    <div key={rec.id} className={styles.recordRow}>
-                                      <span className={styles.recordRowRoute}>
-                                        {rec.origin}→{rec.destination}
-                                      </span>
-                                      <span className={styles.recordRowTimes}>
-                                        {rec.takeoff_time}–{rec.landing_time}
-                                      </span>
-                                      <span className={styles.recordRowDur}>
-                                        {formatMinutes(rec.flight_minutes)}
-                                        {excess !== null && (
-                                          <span className={excess > 0 ? styles.excessBad : styles.excessOk}>
-                                            {excess > 0 ? ` +${excess}` : " ✓"}
-                                          </span>
-                                        )}
-                                      </span>
-                                      {rec.flight_date && (
-                                        <span className={styles.recordRowDate}>{rec.flight_date}</span>
-                                      )}
-                                      {std !== null && (
-                                        <span className={styles.recordRowStd}>標準{formatMinutes(std)}</span>
-                                      )}
-                                      {canEditThis && (
-                                        <span className={styles.recordRowActions}>
-                                          <button className={styles.btnEdit} onClick={() => handleEditRecord(rec)}>編輯</button>
-                                          <button className={styles.btnDelete} onClick={() => handleDeleteRecord(rec)}>刪除</button>
-                                        </span>
-                                      )}
+                                    <div className={styles.pilotEntriesBody}>
+                                      {dateKeys.map((dk) => {
+                                        const dayEntries   = byDate[dk];
+                                        const dayStolen    = dayEntries.reduce((sum, r) => {
+                                          const s = getSectorStandard(r.origin, r.destination);
+                                          return s !== null ? sum + (r.flight_minutes - s) : sum;
+                                        }, 0);
+                                        const dayHasStd = dayEntries.some((r) => getSectorStandard(r.origin, r.destination) !== null);
+                                        return (
+                                          <div key={dk} className={styles.dateGroup}>
+                                            {/* Date header with subtotal */}
+                                            <div className={styles.dateGroupHeader}>
+                                              <span className={styles.dateGroupLabel}>{dk}</span>
+                                              <span className={styles.dateGroupCount}>{dayEntries.length} 段</span>
+                                              {dayHasStd && (
+                                                <span className={dayStolen > 0 ? styles.pilotTotalBad : styles.pilotTotalOk}>
+                                                  {dayStolen > 0 ? `🐢 偷 +${formatMinutes(dayStolen)}` : "👌 未超標"}
+                                                </span>
+                                              )}
+                                            </div>
+                                            {/* Entry rows for this date */}
+                                            {dayEntries.map((rec) => {
+                                              const std         = getSectorStandard(rec.origin, rec.destination);
+                                              const excess      = std !== null ? rec.flight_minutes - std : null;
+                                              const canEditThis = isPrivileged || rec.submitted_by === user.id;
+                                              return (
+                                                <div key={rec.id} className={styles.recordRow}>
+                                                  <span className={styles.recordRowRoute}>
+                                                    {rec.origin}→{rec.destination}
+                                                  </span>
+                                                  <span className={styles.recordRowTimes}>
+                                                    {rec.takeoff_time}–{rec.landing_time}
+                                                  </span>
+                                                  <span className={styles.recordRowDur}>
+                                                    {formatMinutes(rec.flight_minutes)}
+                                                    {excess !== null && (
+                                                      <span className={excess > 0 ? styles.excessBad : styles.excessOk}>
+                                                        {excess > 0 ? ` +${excess}` : " ✓"}
+                                                      </span>
+                                                    )}
+                                                  </span>
+                                                  {std !== null && (
+                                                    <span className={styles.recordRowStd}>標準{formatMinutes(std)}</span>
+                                                  )}
+                                                  {canEditThis && (
+                                                    <span className={styles.recordRowActions}>
+                                                      <button className={styles.btnEdit} onClick={() => handleEditRecord(rec)}>編輯</button>
+                                                      <button className={styles.btnDelete} onClick={() => handleDeleteRecord(rec)}>刪除</button>
+                                                    </span>
+                                                  )}
+                                                </div>
+                                              );
+                                            })}
+                                          </div>
+                                        );
+                                      })}
                                     </div>
                                   );
-                                })}
-                                </div>
-                                )}
+                                })()}
                               </div>
                             );
                           })}
