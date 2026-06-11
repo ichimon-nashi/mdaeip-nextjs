@@ -27,8 +27,8 @@ function localDateStr(y, m, d) {
 	return `${y}-${String(m).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
 }
 
-// Mini calendar for picking specific individual dates
-function SpecificDatePicker({ year, month, selected, onChange }) {
+// Unified month calendar — col headers toggle weekday, row headers toggle week, cells toggle individual date
+function MonthCalendarPicker({ year, month, selected, onChange }) {
 	const total = daysInMonthFn(year, month);
 	const firstIso = (() => {
 		const d = new Date(year, month - 1, 1);
@@ -36,7 +36,46 @@ function SpecificDatePicker({ year, month, selected, onChange }) {
 	})();
 	const blanks = firstIso - 1;
 
-	function toggle(dateStr) {
+	// Build array of all date strings in month
+	const allDates = Array.from({ length: total }, (_, i) =>
+		localDateStr(year, month, i + 1),
+	);
+
+	// ISO weekday (1=Mon … 7=Sun) for each date
+	function isoWeekday(dateStr) {
+		const d = new Date(dateStr);
+		return d.getDay() === 0 ? 7 : d.getDay();
+	}
+
+	// Week index (0-based) for a given day number
+	function weekIdx(dayNum) {
+		return Math.floor((blanks + dayNum - 1) / 7);
+	}
+
+	// All dates in a given ISO weekday column (1–7)
+	function datesForWeekday(isoDay) {
+		return allDates.filter((d) => isoWeekday(d) === isoDay);
+	}
+
+	// All dates in a given week row (0-based)
+	function datesForWeek(wIdx) {
+		return allDates.filter((d) => {
+			const day = parseInt(d.slice(8));
+			return weekIdx(day) === wIdx;
+		});
+	}
+
+	function toggleDates(dates) {
+		onChange((prev) => {
+			const set = new Set(prev);
+			const allIn = dates.every((d) => set.has(d));
+			if (allIn) dates.forEach((d) => set.delete(d));
+			else dates.forEach((d) => set.add(d));
+			return [...set].sort();
+		});
+	}
+
+	function toggleDate(dateStr) {
 		onChange((prev) =>
 			prev.includes(dateStr)
 				? prev.filter((d) => d !== dateStr)
@@ -44,124 +83,138 @@ function SpecificDatePicker({ year, month, selected, onChange }) {
 		);
 	}
 
+	const selectedSet = new Set(selected);
+	const numWeeks = Math.ceil((blanks + total) / 7);
+
+	const cellBase = {
+		padding: '7px 4px',
+		borderRadius: 7,
+		fontSize: 13,
+		cursor: 'pointer',
+		fontFamily: 'inherit',
+		transition: 'all 0.1s',
+		border: 'none',
+		textAlign: 'center',
+		width: '100%',
+	};
+
 	return (
 		<div>
-			<div
-				style={{
-					display: "grid",
-					gridTemplateColumns: "repeat(7, 1fr)",
-					gap: 4,
-					marginBottom: 8,
-				}}
-			>
-				{DAY_NAMES_SHORT.map((d) => (
-					<div
-						key={d}
-						style={{
-							textAlign: "center",
-							fontSize: 11,
-							color: "#aaa",
-							fontWeight: 600,
-							padding: "4px 0",
-						}}
-					>
-						{d}
-					</div>
-				))}
-				{Array(blanks)
-					.fill(null)
-					.map((_, i) => (
-						<div key={`b${i}`} />
-					))}
-				{Array.from({ length: total }, (_, i) => {
-					const dateStr = localDateStr(year, month, i + 1);
-					const isSelected = selected.includes(dateStr);
-					const dow = new Date(year, month - 1, i + 1).getDay();
-					const isWeekend = dow === 0 || dow === 6;
+			{/* Grid: 1 row-header col + 7 day cols */}
+			<div style={{ display: 'grid', gridTemplateColumns: '28px repeat(7, 1fr)', gap: 3 }}>
+				{/* Top-left empty corner */}
+				<div />
+				{/* Day-of-week column headers */}
+				{DAY_NAMES_SHORT.map((name, colIdx) => {
+					const isoDay = colIdx + 1;
+					const colDates = datesForWeekday(isoDay);
+					const allSelected = colDates.length > 0 && colDates.every((d) => selectedSet.has(d));
 					return (
 						<button
-							key={dateStr}
+							key={name}
 							type="button"
-							onClick={() => toggle(dateStr)}
+							onClick={() => toggleDates(colDates)}
 							style={{
-								padding: "7px 4px",
-								borderRadius: 8,
-								border: isSelected
-									? "2px solid #0f62fe"
-									: "1px solid #e5e7eb",
-								background: isSelected
-									? "#0f62fe"
-									: isWeekend
-										? "#fafafa"
-										: "#fff",
-								color: isSelected
-									? "#fff"
-									: isWeekend
-										? "#94a3b8"
-										: "#1a1a1a",
-								fontSize: 13,
-								fontWeight: isSelected ? 600 : 400,
-								cursor: "pointer",
-								fontFamily: "inherit",
-								transition: "all 0.1s",
+								...cellBase,
+								fontSize: 11,
+								fontWeight: 600,
+								background: allSelected ? '#fb8500' : '#fef3c7',
+								color: allSelected ? '#fff' : '#92400e',
+								padding: '5px 2px',
 							}}
 						>
-							{i + 1}
+							{name}
 						</button>
 					);
 				})}
+
+				{/* Rows */}
+				{Array.from({ length: numWeeks }, (_, wIdx) => {
+					const weekDates = datesForWeek(wIdx);
+					const allWSelected = weekDates.length > 0 && weekDates.every((d) => selectedSet.has(d));
+					return (
+						<React.Fragment key={wIdx}>
+							{/* Row header W1/W2... */}
+							<button
+								type="button"
+								onClick={() => toggleDates(weekDates)}
+								style={{
+									...cellBase,
+									fontSize: 10,
+									fontWeight: 600,
+									background: allWSelected ? '#028090' : '#ccf2f4',
+									color: allWSelected ? '#fff' : '#015f6b',
+									padding: '5px 2px',
+									gridColumn: 1,
+								}}
+							>
+								W{wIdx + 1}
+							</button>
+							{/* 7 day cells for this week */}
+							{Array.from({ length: 7 }, (_, colIdx) => {
+								const cellPos = wIdx * 7 + colIdx;
+								const dayNum = cellPos - blanks + 1;
+								if (dayNum < 1 || dayNum > total) {
+									return <div key={colIdx} />;
+								}
+								const dateStr = localDateStr(year, month, dayNum);
+								const isSelected = selectedSet.has(dateStr);
+								const dow = new Date(year, month - 1, dayNum).getDay();
+								const isWeekend = dow === 0 || dow === 6;
+								return (
+									<button
+										key={dateStr}
+										type="button"
+										onClick={() => toggleDate(dateStr)}
+										style={{
+											...cellBase,
+											background: isSelected
+												? '#0f62fe'
+												: isWeekend
+													? '#f8fafc'
+													: '#fff',
+											color: isSelected
+												? '#fff'
+												: isWeekend
+													? '#94a3b8'
+													: '#1a1a1a',
+											border: isSelected
+												? '2px solid #0f62fe'
+												: '1px solid #e5e7eb',
+											fontWeight: isSelected ? 600 : 400,
+										}}
+									>
+										{dayNum}
+									</button>
+								);
+							})}
+						</React.Fragment>
+					);
+				})}
 			</div>
-			<div style={{ fontSize: 12, color: "#888", marginTop: 4 }}>
-				已選擇 {selected.length} 個日期
-				{selected.length > 0 && (
-					<button
-						type="button"
-						onClick={() => onChange([])}
-						style={{
-							marginLeft: 10,
-							fontSize: 11,
-							color: "#dc2626",
-							background: "none",
-							border: "none",
-							cursor: "pointer",
-							fontFamily: "inherit",
-						}}
-					>
-						清除全部
-					</button>
-				)}
-			</div>
-			{selected.length > 0 && (
-				<div
-					style={{
-						marginTop: 8,
-						display: "flex",
-						gap: 4,
-						flexWrap: "wrap",
-					}}
+			{/* Summary */}
+			<div style={{ marginTop: 8, fontSize: 12, color: '#6b7280', display: 'flex', alignItems: 'center', gap: 8 }}>
+				<span>已選 {selected.length} / {total} 天</span>
+				<button
+					type="button"
+					onClick={() => onChange(allDates)}
+					style={{ fontSize: 11, color: '#0f62fe', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit' }}
 				>
-					{selected.map((d) => (
-						<span
-							key={d}
-							style={{
-								fontSize: 11,
-								padding: "2px 8px",
-								background: "#eff6ff",
-								color: "#1d4ed8",
-								borderRadius: 20,
-								fontWeight: 500,
-							}}
-						>
-							{d.slice(5).replace("-", "/")}
-						</span>
-					))}
-				</div>
-			)}
+					全選
+				</button>
+				<button
+					type="button"
+					onClick={() => onChange([])}
+					style={{ fontSize: 11, color: '#dc2626', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit' }}
+				>
+					清除
+				</button>
+			</div>
 		</div>
 	);
 }
 
-// IATA code → Chinese name mapping
+// IATA code → Chinese name mapping// IATA code → Chinese name mapping
 const AIRPORT_OPTIONS = [
 	{ code: "KHH", name: "高雄" },
 	{ code: "TSA", name: "台北" },
@@ -196,19 +249,35 @@ export default function DispatchDutyBuilder({ month, duty, onBack, onSaved }) {
 	const [base, setBase] = useState(duty?.base || "KHH");
 	const [aircraft, setAircraft] = useState(duty?.aircraft_type || "ATR");
 	const [isIntl, setIsIntl] = useState(duty?.is_international || false);
-	const [dateFrom, setDateFrom] = useState(duty?.date_from || "");
-	const [dateTo, setDateTo] = useState(duty?.date_to || "");
-	const [activeWeekdays, setActiveWeekdays] = useState(
-		duty?.active_weekdays || [1, 2, 3, 4, 5, 6, 7],
-	);
-	const [specificDates, setSpecificDates] = useState(
-		duty?.specific_dates?.map((d) =>
-			typeof d === "string" ? d : d.toISOString().split("T")[0],
-		) || [],
-	);
-	const [dateMode, setDateMode] = useState(
-		duty?.specific_dates?.length ? "specific" : "range",
-	);
+	// Unified date selection — always specific_dates array
+	const [specificDates, setSpecificDates] = useState(() => {
+		// Editing: existing specific_dates
+		if (duty?.specific_dates?.length) {
+			return duty.specific_dates.map((d) =>
+				typeof d === "string" ? d : d.toISOString().split("T")[0],
+			);
+		}
+		// Editing: range mode duty — expand to specific dates
+		if (duty?.date_from && duty?.date_to) {
+			const days = [];
+			const weekdays = duty.active_weekdays || [1, 2, 3, 4, 5, 6, 7];
+			const cur = new Date(duty.date_from);
+			const end = new Date(duty.date_to);
+			while (cur <= end) {
+				const iso = cur.getDay() === 0 ? 7 : cur.getDay();
+				if (weekdays.includes(iso)) {
+					days.push(cur.toISOString().split("T")[0]);
+				}
+				cur.setDate(cur.getDate() + 1);
+			}
+			return days;
+		}
+		// New duty — default to all days in the month
+		const total = daysInMonthFn(month.year, month.month);
+		return Array.from({ length: total }, (_, i) =>
+			localDateStr(month.year, month.month, i + 1),
+		);
+	});
 	const [reportingTime, setReportingTime] = useState(
 		duty?.reporting_time?.slice(0, 5) || "",
 	);
@@ -217,36 +286,42 @@ export default function DispatchDutyBuilder({ month, duty, onBack, onSaved }) {
 	);
 	const [notes, setNotes] = useState(duty?.notes || "");
 	const [sortOrder, setSortOrder] = useState(duty?.sort_order ?? 0);
-	// Track if user manually edited the label — if so, don't auto-overwrite
-	const labelManualRef = useRef(!!duty?.label);
+	// Track if user manually edited the label this session — start false always
+	const labelManualRef = useRef(false);
 
-	// Auto-generate label from date selection when not manually edited
+	// Auto-generate label from specific dates when not manually edited
 	useEffect(() => {
 		if (labelManualRef.current) return;
-		const monthYear = month ? `${month.month}` : "";
-		if (dateMode === "specific" && specificDates.length > 0) {
-			const sorted = [...specificDates].sort();
-			const fmt = (d) =>
-				`${parseInt(d.slice(5, 7))}/${parseInt(d.slice(8, 10))}`;
-			setLabel(sorted.map(fmt).join("、"));
-		} else if (dateMode === "range" && dateFrom && dateTo) {
-			// Only auto-label if it's NOT the full month
-			const monthStart = `${dateFrom.slice(0, 8)}01`;
-			const lastDay = new Date(
-				parseInt(dateFrom.slice(0, 4)),
-				parseInt(dateFrom.slice(5, 7)),
-				0,
-			).getDate();
-			const monthEnd = `${dateFrom.slice(0, 8)}${String(lastDay).padStart(2, "0")}`;
-			if (dateFrom === monthStart && dateTo === monthEnd) {
-				setLabel(""); // full month — no label needed
+		const total = daysInMonthFn(month.year, month.month);
+		if (specificDates.length === 0 || specificDates.length === total) {
+			setLabel(""); // full month or empty — no label
+			return;
+		}
+		const sorted = [...specificDates].sort();
+		const fmt = (d) =>
+			`${parseInt(d.slice(5, 7))}/${parseInt(d.slice(8, 10))}`;
+		// Group into contiguous runs
+		const runs = [];
+		let runStart = sorted[0];
+		let runEnd = sorted[0];
+		for (let i = 1; i < sorted.length; i++) {
+			const prev = new Date(sorted[i - 1]);
+			const curr = new Date(sorted[i]);
+			const diff = (curr - prev) / 86400000;
+			if (diff === 1) {
+				runEnd = sorted[i];
 			} else {
-				const fmtD = (d) =>
-					`${parseInt(d.slice(5, 7))}/${parseInt(d.slice(8, 10))}`;
-				setLabel(`${fmtD(dateFrom)}-${fmtD(dateTo)}`);
+				runs.push([runStart, runEnd]);
+				runStart = sorted[i];
+				runEnd = sorted[i];
 			}
 		}
-	}, [dateMode, dateFrom, dateTo, specificDates]);
+		runs.push([runStart, runEnd]);
+		const parts = runs.map(([s, e]) =>
+			s === e ? fmt(s) : `${fmt(s)} - ${fmt(e)}`,
+		);
+		setLabel(parts.join("、"));
+	}, [specificDates]);
 
 	// Sectors
 	const [sectors, setSectors] = useState([]);
@@ -267,6 +342,14 @@ export default function DispatchDutyBuilder({ month, duty, onBack, onSaved }) {
 	// Saving state
 	const [saving, setSaving] = useState(false);
 	const [saveAttempted, setSaveAttempted] = useState(false);
+
+	// Mobile layout detection
+	const [isMobile, setIsMobile] = useState(() => window.innerWidth < 768);
+	useEffect(() => {
+		const handler = () => setIsMobile(window.innerWidth < 768);
+		window.addEventListener("resize", handler);
+		return () => window.removeEventListener("resize", handler);
+	}, []);
 
 	// Load existing sectors if editing
 	useEffect(() => {
@@ -405,7 +488,6 @@ export default function DispatchDutyBuilder({ month, duty, onBack, onSaved }) {
 			}
 		}
 	});
-	// Per-sector empty field errors — only shown after save attempted
 	const sectorEmptyErrors = {};
 	if (saveAttempted) {
 		sectors.forEach((s, i) => {
@@ -466,35 +548,14 @@ export default function DispatchDutyBuilder({ month, duty, onBack, onSaved }) {
 			return;
 		}
 
-		if (dateMode === "specific") {
-			if (specificDates.length === 0) {
-				toast.error("請至少選擇一個指定日期");
-				return;
-			}
-		} else {
-			if (!dateFrom || !dateTo) {
-				toast.error("請選擇適用日期範圍");
-				return;
-			}
-			if (dateFrom > dateTo) {
-				toast.error("結束日期不能早於開始日期");
-				return;
-			}
-			if (activeWeekdays.length === 0) {
-				toast.error("請至少選擇一個適用星期");
-				return;
-			}
+		if (specificDates.length === 0) {
+			toast.error("請至少選擇一個適用日期");
+			return;
 		}
 
 		setSaveAttempted(true);
-		// Check for empty required fields across all sectors
 		const hasEmptyFields = sectors.some(
-			(s) =>
-				!s.dep_airport ||
-				!s.dep_time ||
-				!s.arr_airport ||
-				!s.arr_time ||
-				!s.flight_number,
+			(s) => !s.dep_airport || !s.dep_time || !s.arr_airport || !s.arr_time || !s.flight_number,
 		);
 		if (hasEmptyFields) {
 			toast.error("請填寫所有航段必填欄位");
@@ -521,26 +582,16 @@ export default function DispatchDutyBuilder({ month, duty, onBack, onSaved }) {
 
 		setSaving(true);
 
-		// For specific dates: set date_from/to to min/max of selected dates
-		const computedDateFrom =
-			dateMode === "specific" ? [...specificDates].sort()[0] : dateFrom;
-		const computedDateTo =
-			dateMode === "specific"
-				? [...specificDates].sort().slice(-1)[0]
-				: dateTo;
-
+		const sortedDates = [...specificDates].sort();
 		const dutyPayload = {
 			month_id: month.id,
 			duty_code: dutyCode.trim().toUpperCase(),
 			label: label.trim() || null,
 			sort_order: sortOrder,
-			date_from: computedDateFrom,
-			date_to: computedDateTo,
-			active_weekdays:
-				dateMode === "specific"
-					? [1, 2, 3, 4, 5, 6, 7]
-					: activeWeekdays,
-			specific_dates: dateMode === "specific" ? specificDates : null,
+			date_from: sortedDates[0],
+			date_to: sortedDates[sortedDates.length - 1],
+			active_weekdays: [1, 2, 3, 4, 5, 6, 7],
+			specific_dates: specificDates,
 			base,
 			aircraft_type: aircraft,
 			is_international: isIntl,
@@ -634,6 +685,7 @@ export default function DispatchDutyBuilder({ month, duty, onBack, onSaved }) {
 					<div className={styles.sectionCard}>
 						<div className={styles.sectionTitle}>基本資料</div>
 						<div className={styles.fieldRow}>
+							<div className={styles.fieldRowMobile}>
 							<div className={`${styles.field} ${styles.w80}`}>
 								<label className={styles.fieldLabel}>
 									班型代碼
@@ -662,6 +714,8 @@ export default function DispatchDutyBuilder({ month, duty, onBack, onSaved }) {
 									placeholder="3/16起 (選填)"
 								/>
 							</div>
+							</div>{/* /fieldRowMobile row1 */}
+							<div className={styles.fieldRowMobile}>
 							<div className={`${styles.field} ${styles.w100}`}>
 								<label className={styles.fieldLabel}>
 									基地
@@ -696,21 +750,8 @@ export default function DispatchDutyBuilder({ month, duty, onBack, onSaved }) {
 									))}
 								</select>
 							</div>
-							<div className={`${styles.field} ${styles.w80}`}>
-								<label className={styles.fieldLabel}>
-									排序
-								</label>
-								<input
-									className={styles.fieldInput}
-									type="number"
-									value={sortOrder}
-									onChange={(e) =>
-										setSortOrder(Number(e.target.value))
-									}
-									min={0}
-								/>
-							</div>
-						</div>
+							</div>{/* /fieldRowMobile row2 */}
+													</div>
 						<div className={styles.fieldRow}>
 							<label
 								style={{
@@ -734,136 +775,15 @@ export default function DispatchDutyBuilder({ month, duty, onBack, onSaved }) {
 						</div>
 					</div>
 
-					{/* Date range + weekdays */}
+					{/* Date selection */}
 					<div className={styles.sectionCard}>
-						<div
-							style={{
-								display: "flex",
-								alignItems: "center",
-								justifyContent: "space-between",
-								marginBottom: 14,
-							}}
-						>
-							<div
-								className={styles.sectionTitle}
-								style={{ marginBottom: 0 }}
-							>
-								適用日期 & 星期
-							</div>
-							<div className={styles.modeTabs}>
-								<button
-									type="button"
-									className={`${styles.modeTab} ${dateMode === "range" ? styles.modeTabActive : ""}`}
-									onClick={() => setDateMode("range")}
-								>
-									範圍模式
-								</button>
-								<button
-									type="button"
-									className={`${styles.modeTab} ${dateMode === "specific" ? styles.modeTabActive : ""}`}
-									onClick={() => setDateMode("specific")}
-								>
-									指定日期
-								</button>
-							</div>
-						</div>
-
-						{dateMode === "range" ? (
-							<>
-								<div className={styles.fieldRow}>
-									<div
-										className={`${styles.field} ${styles.w160}`}
-									>
-										<label className={styles.fieldLabel}>
-											開始日期
-										</label>
-										<input
-											className={styles.fieldInput}
-											type="date"
-											value={dateFrom}
-											onChange={(e) => {
-												setDateFrom(e.target.value);
-												if (
-													!dateTo ||
-													e.target.value > dateTo
-												)
-													setDateTo(e.target.value);
-											}}
-										/>
-									</div>
-									<div
-										style={{
-											fontSize: 14,
-											color: "#bbb",
-											paddingBottom: 8,
-										}}
-									>
-										–
-									</div>
-									<div
-										className={`${styles.field} ${styles.w160}`}
-									>
-										<label className={styles.fieldLabel}>
-											結束日期
-										</label>
-										<input
-											className={styles.fieldInput}
-											type="date"
-											value={dateTo}
-											min={dateFrom}
-											onChange={(e) =>
-												setDateTo(e.target.value)
-											}
-										/>
-									</div>
-								</div>
-								<div className={styles.weekdayRow}>
-									{WEEKDAYS.map((d) => (
-										<button
-											key={d}
-											className={`${styles.dayToggle} ${activeWeekdays.includes(d) ? styles.on : ""}`}
-											onClick={() => toggleWeekday(d)}
-											type="button"
-										>
-											{WEEKDAY_LABELS[d - 1]}
-										</button>
-									))}
-									<button
-										className={styles.btnSecondary}
-										style={{
-											padding: "4px 10px",
-											fontSize: 11,
-										}}
-										onClick={() =>
-											setActiveWeekdays([
-												1, 2, 3, 4, 5, 6, 7,
-											])
-										}
-										type="button"
-									>
-										全選
-									</button>
-									<button
-										className={styles.btnSecondary}
-										style={{
-											padding: "4px 10px",
-											fontSize: 11,
-										}}
-										onClick={() => setActiveWeekdays([])}
-										type="button"
-									>
-										清除
-									</button>
-								</div>
-							</>
-						) : (
-							<SpecificDatePicker
-								year={month.year}
-								month={month.month}
-								selected={specificDates}
-								onChange={setSpecificDates}
-							/>
-						)}
+						<div className={styles.sectionTitle}>適用日期</div>
+						<MonthCalendarPicker
+							year={month.year}
+							month={month.month}
+							selected={specificDates}
+							onChange={setSpecificDates}
+						/>
 					</div>
 
 					{/* Sectors */}
@@ -886,7 +806,58 @@ export default function DispatchDutyBuilder({ month, duty, onBack, onSaved }) {
 						) : (
 							<>
 								<div className={styles.sectorsScrollArea}>
-								{/* Column headers */}
+								{isMobile ? (
+									<>
+										{sectors.map((s, i) => {
+											const emptySet = sectorEmptyErrors[i];
+											return (
+												<div key={i} className={`${styles.sectorMobileCard} ${s.is_highlight ? styles.highlighted : ""}`}>
+													<div className={styles.sectorMobileHeader}>
+														<span className={styles.sectorSeq}>{i + 1}</span>
+														<span style={{ flex: 1 }} />
+														<button className={styles.sectorMoveBtn} onClick={() => moveSector(i, i - 1)} disabled={i === 0} type="button" title="上移">↑</button>
+														<button className={styles.sectorMoveBtn} onClick={() => moveSector(i, i + 1)} disabled={i === sectors.length - 1} type="button" title="下移">↓</button>
+														<button className={`${styles.sectorHighlightBtn} ${s.is_highlight ? styles.active : ""}`} onClick={() => updateSector(i, "is_highlight", !s.is_highlight)} title="標記為特殊航段 (★)" type="button">★</button>
+														<select value={s.aircraft_type || ""} onChange={(e) => updateSector(i, "aircraft_type", e.target.value || null)} title="機型" className={styles.sectorMobileAcSelect} style={{ background: s.aircraft_type ? "#eff6ff" : "#f9fafb", color: s.aircraft_type ? "#1d4ed8" : "#9ca3af" }}>
+															<option value="">繼承</option>
+															<option value="ATR">ATR</option>
+															<option value="B738">B738</option>
+														</select>
+														<button className={styles.btnDanger} onClick={() => removeSector(i)} disabled={sectors.length <= 1} type="button" title="移除航段">×</button>
+													</div>
+													<div className={styles.sectorMobileAirports}>
+														<div className={styles.sectorMobileAirportCol}>
+															<select className={styles.sectorAirportSelect} value={s.dep_airport} onChange={(e) => updateSector(i, "dep_airport", e.target.value)} style={emptySet?.has("dep_airport") ? { border: "2px solid #dc2626", background: "#fef2f2" } : {}}>
+																<option value="">— 選擇 —</option>
+																{AIRPORT_OPTIONS.map((a) => <option key={a.code} value={a.code}>{a.code}</option>)}
+															</select>
+															<span className={styles.airportChineseName}>{AIRPORT_OPTIONS.find((a) => a.code === s.dep_airport)?.name || ""}</span>
+														</div>
+														<span className={styles.sectorMobileArrow}>→</span>
+														<div className={styles.sectorMobileAirportCol}>
+															<select className={styles.sectorAirportSelect} value={s.arr_airport} onChange={(e) => updateSector(i, "arr_airport", e.target.value)} style={emptySet?.has("arr_airport") ? { border: "2px solid #dc2626", background: "#fef2f2" } : {}}>
+																<option value="">— 選擇 —</option>
+																{AIRPORT_OPTIONS.map((a) => <option key={a.code} value={a.code}>{a.code}</option>)}
+															</select>
+															<span className={styles.airportChineseName}>{AIRPORT_OPTIONS.find((a) => a.code === s.arr_airport)?.name || ""}</span>
+														</div>
+													</div>
+													<div className={styles.sectorMobileTimes}>
+														<input type="text" inputMode="numeric" placeholder="HH:MM" maxLength={5} className={styles.sectorTimeInput} value={s.dep_time} onChange={(e) => updateSector(i, "dep_time", formatTimeInput(e.target.value))} style={(sectorErrors[i] === "dep" || sectorErrors[i] === "both" || emptySet?.has("dep_time")) ? { border: "2px solid #dc2626", background: "#fef2f2" } : {}} />
+														<div className={styles.sectorMobileFlightGroup}>
+															<select className={styles.sectorAirlineSelect} value={s.airline || "AE"} onChange={(e) => updateSector(i, "airline", e.target.value)}>{AIRLINES.map((a) => <option key={a} value={a}>{a}</option>)}</select>
+															<input className={styles.sectorItemInput} value={s.flight_number} onChange={(e) => updateSector(i, "flight_number", e.target.value)} placeholder="301" maxLength={6} style={{ textAlign: "center", ...(emptySet?.has("flight_number") ? { border: "2px solid #dc2626", background: "#fef2f2" } : {}) }} />
+														</div>
+														<input type="text" inputMode="numeric" placeholder="HH:MM" maxLength={5} className={styles.sectorTimeInput} value={s.arr_time} onChange={(e) => updateSector(i, "arr_time", formatTimeInput(e.target.value))} style={(sectorErrors[i] === "arr" || sectorErrors[i] === "both" || emptySet?.has("arr_time")) ? { border: "2px solid #dc2626", background: "#fef2f2" } : {}} />
+													</div>
+													{sectorErrors[i] && (<div style={{ fontSize: 12, color: "#dc2626", paddingTop: 4, display: "flex", alignItems: "center", gap: 4 }}>⚠ {sectorErrors[i] === "arr" ? "降落時間早於起飛時間" : sectorErrors[i] === "dep" ? "起飛時間早於上一航段降落時間" : "時間順序錯誤"}</div>)}
+												</div>
+											);
+										})}
+									</>
+								) : (
+									<>
+																	{/* Column headers */}
 								<div
 									style={{
 										display: "grid",
@@ -1239,6 +1210,9 @@ export default function DispatchDutyBuilder({ month, duty, onBack, onSaved }) {
 										)}
 									</React.Fragment>
 								))}
+									</>
+								)}
+
 								</div>{/* /sectorsScrollArea */}
 								<div
 									style={{
@@ -1309,7 +1283,7 @@ export default function DispatchDutyBuilder({ month, duty, onBack, onSaved }) {
 									{aircraft === "B738"
 										? "B738: 起飛前 60 分鐘"
 										: "ATR: 起飛前 45 分鐘"}
-									（自動填入）
+									<br />（自動填入）
 								</span>
 							</div>
 							<div className={`${styles.field} ${styles.wTime}`}>
@@ -1331,7 +1305,7 @@ export default function DispatchDutyBuilder({ month, duty, onBack, onSaved }) {
 									}
 								/>
 								<span className={styles.fieldHint}>
-									自動填入最後降落時間
+									自動填入<br />最後降落時間
 								</span>
 							</div>
 						</div>

@@ -565,11 +565,28 @@
 	}
 }
 
+/* Mobile field row grouping — invisible to flex on desktop */
+.fieldRowMobile {
+	display: contents;
+}
+
+@media (max-width: 767px) {
+	.fieldRowMobile {
+		display: flex;
+		gap: 10px;
+		width: 100%;
+	}
+	.fieldRowMobile .field {
+		flex: 1;
+		min-width: 0;
+		width: auto !important;
+	}
+}
+
 @media (max-width: 900px) {
 	.builderLayout {
 		grid-template-columns: 1fr;
 		padding: 16px;
-		max-width: 100vw;
 		overflow-x: hidden;
 	}
 	.statsPanel {
@@ -577,37 +594,106 @@
 	}
 }
 
-@media (max-width: 768px) {
+@media (max-width: 767px) {
 	.topBar {
 		padding: 12px 16px;
 	}
-
-	.builderLayout {
-		max-width: 100vw;
-		overflow-x: hidden;
-	}
-
 	.sectionCard {
-		overflow: visible;
-		padding-left: 0;
-		padding-right: 0;
+		overflow: hidden;
 	}
-
-	.sectionTitle {
-		padding-left: 18px;
-		padding-right: 18px;
-	}
-
 	.sectorsScrollArea {
 		overflow-x: auto;
 		-webkit-overflow-scrolling: touch;
-		padding: 0 18px 4px;
-		max-width: 100%;
+		padding-bottom: 4px;
 	}
-
 	.sectorItem {
 		min-width: 580px;
 	}
+}
+
+/* ─── Mobile Sector Cards ───────────────────── */
+.sectorMobileCard {
+	background: #f8f9fa;
+	border: 1px solid #f0f0f0;
+	border-radius: 12px;
+	padding: 12px 14px;
+	margin-bottom: 10px;
+	display: flex;
+	flex-direction: column;
+	gap: 10px;
+}
+.sectorMobileCard.highlighted {
+	background: #fffbeb;
+	border-color: #fde68a;
+}
+.sectorMobileHeader {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+}
+.sectorMoveBtn {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 28px;
+	height: 28px;
+	background: #fff;
+	border: 1px solid #e5e7eb;
+	border-radius: 6px;
+	font-size: 13px;
+	color: #374151;
+	cursor: pointer;
+	flex-shrink: 0;
+	font-family: inherit;
+	transition: background 0.12s;
+}
+.sectorMoveBtn:hover:not(:disabled) { background: #f3f4f6; }
+.sectorMoveBtn:disabled { opacity: 0.3; cursor: not-allowed; }
+.sectorMobileAcSelect {
+	font-size: 11px;
+	padding: 4px 4px;
+	border: 1px solid #e5e7eb;
+	border-radius: 5px;
+	font-family: inherit;
+	width: 52px;
+	cursor: pointer;
+}
+.sectorMobileAirports {
+	display: flex;
+	align-items: flex-start;
+	gap: 8px;
+}
+.sectorMobileAirportCol {
+	flex: 1;
+	display: flex;
+	flex-direction: column;
+	gap: 3px;
+	min-width: 0;
+}
+.sectorMobileArrow {
+	font-size: 16px;
+	color: #9ca3af;
+	padding-top: 8px;
+	flex-shrink: 0;
+}
+.sectorMobileTimes {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+}
+.sectorMobileTimes .sectorTimeInput { flex: 1; min-width: 0; }
+.sectorMobileFlightGroup {
+	flex: 1.4;
+	display: flex;
+	gap: 5px;
+	min-width: 0;
+}
+.sectorMobileFlightGroup .sectorAirlineSelect { width: 44px; flex-shrink: 0; }
+.sectorMobileFlightGroup .sectorItemInput { flex: 1; min-width: 0; }
+
+/* Desktop: hide mobile cards; Mobile: hide desktop grid headers */
+@media (min-width: 768px) {
+	.sectorMobileCard { display: none; }
 }
 
 /* ─── Date Mode Tabs ──────────────────────── */

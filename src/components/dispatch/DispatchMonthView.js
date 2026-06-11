@@ -152,6 +152,10 @@ export default function DispatchMonthView({
 	}
 	const lastEditedIdRef = useRef(null);
 
+	// Collapsible detail panel on portrait mobile/tablet
+	const [detailMinimised, setDetailMinimised] = useState(false);
+
+
 	// Done/flagging state — persisted to localStorage per month
 	const doneStorageKey = `pdx_done_${month.id}`;
 	const [doneDutyIds, setDoneDutyIds] = useState(
@@ -1236,9 +1240,10 @@ export default function DispatchMonthView({
 																<div
 																	key={duty.id}
 																	className={`${styles.dutyCard} ${selectedId === duty.id ? styles.dutyCardActive : ""} ${styles["base" + duty.base] || ""}`}
-																	onClick={() =>
-																		setSelectedId(duty.id)
-																	}
+																	onClick={() => {
+																		setSelectedId(duty.id);
+																		setDetailMinimised(false);
+																	}}
 																>
 																	{/* Top row: code + badges */}
 																	<div className={styles.dutyCardTop}>
@@ -1317,7 +1322,7 @@ export default function DispatchMonthView({
 						</div>
 					</div>
 
-					<div className={styles.detailArea}>
+					<div className={`${styles.detailArea} ${detailMinimised ? styles.detailAreaMinimised : ""}`}>
 						{!selectedDuty ? (
 							<div className={styles.emptySelection}>
 								<Layers size={32} style={{ opacity: 0.25 }} />
@@ -1356,6 +1361,21 @@ export default function DispatchMonthView({
 									</button>
 								)}
 								<div className={styles.detailCard}>
+									{/* Minimise handle — mobile/tablet only */}
+									<div
+										className={styles.detailMinimiseBar}
+										onClick={() => setDetailMinimised((v) => !v)}
+									>
+										<span className={styles.detailMinimiseTitle}>
+											{selectedDuty.duty_code}
+											{selectedDuty.label ? ` · ${selectedDuty.label}` : ""}
+										</span>
+										<span className={styles.detailMinimiseChevron}>
+											{detailMinimised ? "▲" : "▼"}
+										</span>
+									</div>
+									{/* Collapsible content */}
+									<div className={styles.detailCardBody}>
 									<div className={styles.detailCardHead}>
 										<div>
 											<div>
@@ -1702,6 +1722,7 @@ export default function DispatchMonthView({
 										備註：{selectedDuty.notes}
 									</div>
 								)}
+							</div>{/* /detailCardBody */}
 							</>
 						)}
 					</div>

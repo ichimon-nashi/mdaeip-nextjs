@@ -707,6 +707,23 @@
 	color: #fff;
 }
 
+/* ─── Minimise bar (mobile/tablet only) ─────── */
+.detailMinimiseBar {
+	display: none; /* hidden on desktop */
+}
+.detailMinimiseTitle {
+	font-size: 13px;
+	font-weight: 600;
+	color: var(--detail-text, #1a1a1a);
+}
+.detailMinimiseChevron {
+	font-size: 11px;
+	color: #6b7280;
+}
+.detailCardBody {
+	/* no styles needed on desktop — always visible */
+}
+
 /* ─── Detail Area ─────────────────────────── */
 .detailArea {
 	padding: 20px;
@@ -1537,6 +1554,26 @@
 		overflow-y: auto;
 		align-self: start;
 	}
+
+	/* Minimise bar visible on tablet */
+	.detailMinimiseBar {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		padding: 8px 12px 6px;
+		cursor: pointer;
+		border-bottom: 1px solid #e8e8e8;
+		margin-bottom: 8px;
+		user-select: none;
+	}
+
+	/* Minimised state — collapse content, keep handle visible */
+	.detailAreaMinimised .detailCardBody {
+		display: none;
+	}
+	.detailAreaMinimised {
+		overflow: hidden;
+	}
 }
 
 @media (max-width: 768px) {
@@ -1579,7 +1616,26 @@
 		height: 4px;
 		background: #d1d5db;
 		border-radius: 2px;
-		margin: 10px auto 12px;
+		margin: 10px auto 6px;
+	}
+
+	.detailMinimiseBar {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		padding: 4px 12px 10px;
+		cursor: pointer;
+		border-bottom: 1px solid #e8e8e8;
+		margin-bottom: 8px;
+		user-select: none;
+	}
+
+	.detailAreaMinimised .detailCardBody {
+		display: none;
+	}
+	.detailAreaMinimised {
+		max-height: 60px;
+		overflow: hidden;
 	}
 
 	/* Stats: single horizontal row, 5 compact cells */

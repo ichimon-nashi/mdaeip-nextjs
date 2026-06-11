@@ -9,7 +9,6 @@
 	width: 100%;
 	box-sizing: border-box;
 	flex: 1; /* grow to fill parent on desktop */
-	overflow-x: hidden; /* prevent horizontal scroll from tooltips / absolute children */
 }
 
 /* ── Month bar ────────────────────────────────────────────────── */
@@ -18,7 +17,6 @@
 	align-items: center;
 	gap: 0.75rem;
 	margin-bottom: 1rem;
-	padding-top: 0.5rem;
 }
 .monthNav {
 	background: rgba(255,255,255,0.15);
@@ -125,20 +123,6 @@
 	position: relative;
 }
 
-/* On mobile: dropdown is positioned relative to monthBar (see mobile block below) */
-@media (max-width: 768px) {
-	.importDropdown {
-		position: absolute;
-		top: 100%;
-		left: 0;
-		right: 0;
-		width: auto;
-		min-width: 0;
-		max-height: 50vh;
-		margin-top: 6px;
-	}
-}
-
 /* ── Two-column layout ────────────────────────────────────────── */
 .columns {
 	display: grid;
@@ -169,9 +153,6 @@
 	overflow: visible;
 	display: flex;
 	flex-direction: column;
-	box-sizing: border-box; /* border inset — never adds to 1fr grid column width */
-	max-width: 100%; /* never wider than its grid cell */
-	min-width: 0;    /* allow shrinking below content size in grid */
 }
 
 .columnHeader {
@@ -268,8 +249,6 @@
 	display: grid;
 	grid-template-columns: repeat(7, 1fr);
 	margin-bottom: 0.25rem;
-	padding: 0 0.5rem; /* match .calendar padding so grid columns align */
-	box-sizing: border-box;
 }
 .calDayNameWeekend { color: #dc2626; }
 .calDayName {
@@ -329,7 +308,7 @@
 .saveSwapBtn:hover:not(:disabled) { background: #15803d; }
 .saveSwapBtn:disabled { opacity: 0.5; cursor: not-allowed; }
 
-.calEmpty { min-height: 3.2rem; box-sizing: border-box; }
+.calEmpty { min-height: 3.2rem; }
 .calCell {
 	min-height: 3.2rem;
 	border-radius: 0.375rem;
@@ -341,9 +320,6 @@
 	flex-direction: column;
 	gap: 0.15rem;
 	background: #f8fafc;
-	box-sizing: border-box; /* border is inset — never adds to cell width */
-	overflow: hidden;       /* clip badge/chip content to cell bounds */
-	min-width: 0;           /* allow grid to shrink cell below content size */
 }
 .calCell:hover { background: #f1f5f9; border-color: #cbd5e1; }
 .calSelected { border-color: #2563eb !important; background: #eff6ff !important; }
@@ -429,7 +405,6 @@
 	gap: 0.75rem;
 	padding: 1rem 0.5rem;
 	min-width: 120px;
-	max-width: 100%;
 }
 .swapIcon { color: rgba(255,255,255,0.7); }
 
@@ -532,11 +507,10 @@
 	position: relative;
 	overflow: visible;
 	width: 100%;
-	min-width: 0; /* allow shrinking as flex child so badge doesn't push cell wider */
 }
 .calTooltip {
 	position: absolute;
-	bottom: calc(100% + 6px);
+	top: calc(100% + 6px);
 	left: 50%;
 	transform: translateX(-50%);
 	background: #1e293b;
@@ -553,11 +527,6 @@
 	box-shadow: 0 4px 12px rgba(0,0,0,0.25);
 	text-align: left;
 	min-width: 120px;
-}
-
-/* Suppress tooltips on touch devices — they cause overflow and don't work well */
-@media (max-width: 768px) {
-	.calTooltip { display: none; }
 }
 .calChipWrap:hover .calTooltip { opacity: 1; }
 .calTooltipLine {
@@ -586,11 +555,11 @@
 .calTooltip::after {
 	content: "";
 	position: absolute;
-	top: 100%;
+	bottom: 100%;
 	left: 50%;
 	transform: translateX(-50%);
 	border: 5px solid transparent;
-	border-top-color: #1e293b;
+	border-bottom-color: #1e293b;
 }
 
 /* ── Responsive ───────────────────────────────────────────────── */
@@ -609,159 +578,4 @@
 	}
 	.swapIcon { display: none; }
 	.summaryBox { max-width: unset; }
-}
-/* ── Review buttons (approve / deny) shown after simulate ── */
-.reviewBtns {
-	display: flex;
-	flex-direction: column;
-	gap: 0.5rem;
-	width: 100%;
-}
-
-.approveBtn {
-	width: 100%;
-	padding: 0.5rem 0.875rem;
-	background: #16a34a;
-	color: white;
-	border: none;
-	border-radius: 0.5rem;
-	font-size: 0.92rem;
-	font-weight: 700;
-	cursor: pointer;
-	font-family: inherit;
-	transition: background 0.15s;
-	white-space: nowrap;
-}
-.approveBtn:hover:not(.swapBtnDisabled) { background: #15803d; }
-
-.denyBtn {
-	width: 100%;
-	padding: 0.5rem 0.875rem;
-	background: #dc2626;
-	color: white;
-	border: none;
-	border-radius: 0.5rem;
-	font-size: 0.92rem;
-	font-weight: 700;
-	cursor: pointer;
-	font-family: inherit;
-	transition: background 0.15s;
-	white-space: nowrap;
-}
-.denyBtn:hover:not(.swapBtnDisabled) { background: #b91c1c; }
-
-/* ── Mobile improvements ────────────────────────────────── */
-@media (max-width: 768px) {
-	.container {
-		padding: 0.5rem 0.5rem 4rem;
-	}
-
-	.monthBar {
-		flex-wrap: wrap;
-		gap: 0.5rem;
-		position: relative; /* positioning parent for the import dropdown */
-	}
-
-	.monthHint {
-		order: 10; /* push to its own row below nav + import */
-		width: 100%;
-		margin-left: 0;
-		font-size: 0.78rem;
-		text-align: center;
-	}
-
-	.importWrapper {
-		margin-left: auto; /* keep pushed right in the same row as month nav */
-		position: static;  /* hand dropdown positioning to monthBar */
-	}
-
-	/* Stack columns vertically — A on top, centre, B below */
-	.columns {
-		grid-template-columns: 1fr;
-		gap: 0.75rem;
-		width: 100%;
-		overflow: hidden;
-	}
-
-	.column {
-		width: 100%;
-		min-width: 0;
-	}
-
-	.calendar {
-		width: 100%;
-	}
-
-	.calGrid {
-		width: 100%;
-	}
-
-	/* Compact centre panel on mobile — horizontal action strip */
-	.centre {
-		flex-direction: row;
-		flex-wrap: wrap;
-		align-items: center;
-		justify-content: center;
-		gap: 0.5rem;
-		padding: 0.625rem 0.75rem;
-		background: rgba(255,255,255,0.06);
-		border-radius: 0.75rem;
-		border: 1px solid rgba(255,255,255,0.15);
-		min-width: unset;
-		width: 100%;
-		max-width: 100%;
-	}
-
-	.swapIcon { display: none; }
-
-	/* Summary box full width on mobile */
-	.summaryBox {
-		max-width: 100%;
-		width: 100%;
-	}
-
-	/* Buttons side-by-side on mobile */
-	.swapBtn,
-	.saveSwapBtn,
-	.resetBtn {
-		flex: 1;
-		min-width: 0;
-	}
-
-	.reviewBtns {
-		flex-direction: row;
-		width: auto;
-		flex: 1;
-	}
-
-	.approveBtn,
-	.denyBtn {
-		flex: 1;
-		font-size: 0.85rem;
-		padding: 0.45rem 0.5rem;
-	}
-
-	/* Smaller calendar cells on mobile to fit screen */
-	.calCell, .calEmpty {
-		min-height: 2.6rem;
-	}
-
-	.calChip {
-		font-size: 0.72rem;
-		padding: 0.08rem 0.2rem;
-	}
-
-	.calDay {
-		font-size: 0.78rem;
-	}
-
-	.calDayName {
-		font-size: 0.72rem;
-	}
-
-	/* Result badge full width */
-	.resultBadge {
-		width: 100%;
-		justify-content: center;
-	}
 }
