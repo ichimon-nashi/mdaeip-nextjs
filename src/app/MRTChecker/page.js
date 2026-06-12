@@ -861,43 +861,9 @@ const MRTChecker = () => {
 			// Also clear extra/task state for this day
 			setExtraSectors(prev => { const n = { ...prev }; delete n[dateKey]; return n; });
 			setAdditionalTasks(prev => { const n = { ...prev }; delete n[dateKey]; return n; });
-			// Persist removal: write "" to mdaeip_schedules and delete override row
-			try {
-				const targetUserId = viewUserId || user?.id;
-				if (!targetUserId) return;
-				const [, , dayStr] = dateKey.split("-");
-				const day = parseInt(dayStr);
-				const monthStr = `${currentYear}年${String(currentMonth + 1).padStart(2, "0")}月`;
-				const { supabase } = await import("../../lib/supabase");
-				const { data: monthRow } = await supabase
-					.from("mdaeip_schedule_months").select("id").eq("month", monthStr).single();
-				if (!monthRow) return;
-				// Delete override row
-				await supabase.from("schedule_day_overrides")
-					.delete()
-					.eq("employee_id", targetUserId)
-					.eq("month_id", monthRow.id)
-					.eq("day", day);
-				// Write "" to mdaeip_schedules for this day
-				const totalDays = new Date(currentYear, currentMonth + 1, 0).getDate();
-				const { data: schedRow } = await supabase
-					.from("mdaeip_schedules").select("duties")
-					.eq("employee_id", targetUserId).eq("month_id", monthRow.id).single();
-				if (schedRow) {
-					const duties = [...(schedRow.duties || Array(totalDays).fill(""))];
-					duties[day - 1] = "";
-					await supabase.from("mdaeip_schedules")
-						.upsert({ employee_id: targetUserId, month_id: monthRow.id, duties },
-							{ onConflict: "month_id,employee_id" });
-				}
-				// Clear cache so schedule/dashboard pages see the deletion
-				const { clearScheduleCache } = await import("../../lib/DataRoster");
-				clearScheduleCache(monthStr);
-			} catch (err) {
-				console.error("handleRemoveDuty DB error:", err);
-			}
+			// Change staged — user must press 儲存班表 to persist (consistent with add/edit)
 		},
-		[snapshotIfNeeded, viewUserId, user, currentYear, currentMonth]
+		[snapshotIfNeeded]
 	);
 
 	// Open detail popover for a calendar duty chip
@@ -1912,25 +1878,23 @@ const MRTChecker = () => {
 								</div>
 							)}
 						</div>
-						{/* Screenshot */}
-						<button
-							onClick={handleScreenshot}
-							className={`${styles.screenshotButton} ${validationErrors.length > 0 ? styles.disabled : ""}`}
-							disabled={validationErrors.length > 0}
-							title={validationErrors.length > 0 ? "請先解決休息違規" : "截圖"}
-						>
-							<Camera size={14} />
-							<span className={styles.desktopOnly}>截圖</span>
-							{validationErrors.length > 0 && <span className={styles.blockedText}>(Blocked)</span>}
-						</button>
-
-						{/* Save/cancel — dispatch only, individual tab, when unsaved changes exist */}
-						{hasAppAccess(user, "dispatch") && activeMainTab === "individual" && originalDroppedItems !== null && (
+						{/* Save/cancel — always visible for dispatch on individual tab */}
+						{hasAppAccess(user, "dispatch") && activeMainTab === "individual" && (
 							<>
-								<button className={styles.editSaveBtn} onClick={saveSchedule}>
+								<button
+									className={`${styles.editSaveBtn} ${originalDroppedItems === null ? styles.editSaveBtnInactive : ""}`}
+									onClick={originalDroppedItems !== null ? saveSchedule : undefined}
+									disabled={originalDroppedItems === null}
+									title={originalDroppedItems === null ? "尚無變更" : "儲存班表"}
+								>
 									儲存班表
 								</button>
-								<button className={styles.editCancelBtn} onClick={cancelEditMode}>
+								<button
+									className={`${styles.editCancelBtn} ${originalDroppedItems === null ? styles.editCancelBtnInactive : ""}`}
+									onClick={originalDroppedItems !== null ? cancelEditMode : undefined}
+									disabled={originalDroppedItems === null}
+									title={originalDroppedItems === null ? "尚無變更" : "取消變更"}
+								>
 									取消
 								</button>
 							</>

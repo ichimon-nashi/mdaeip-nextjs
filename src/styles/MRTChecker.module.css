@@ -2267,7 +2267,8 @@ input[type="time"]::-webkit-inner-spin-button { display: none; }
 	transition: background 0.15s;
 	white-space: nowrap;
 }
-.editSaveBtn:hover { background: #15803d; }
+.editSaveBtn:hover:not(:disabled) { background: #15803d; }
+.editSaveBtnInactive { background: #e2e8f0 !important; color: #94a3b8 !important; cursor: default; }
 
 .editCancelBtn {
 	padding: 0.35rem 0.75rem;
@@ -2282,7 +2283,8 @@ input[type="time"]::-webkit-inner-spin-button { display: none; }
 	transition: background 0.15s;
 	white-space: nowrap;
 }
-.editCancelBtn:hover { background: #f8fafc; }
+.editCancelBtn:hover:not(:disabled) { background: #f8fafc; }
+.editCancelBtnInactive { color: #cbd5e1 !important; border-color: #e2e8f0 !important; cursor: default; }
 
 .editModeBanner {
 	background: #fffbeb;
