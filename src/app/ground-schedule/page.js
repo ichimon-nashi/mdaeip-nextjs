@@ -69,83 +69,222 @@ const getDutyCellClass = (code) => {
 };
 
 const GROUND_SUPERVISOR_ROLES = ["地勤督導", "地勤組長", "地勤經理"];
+const isSpecialAdmin = (user) => user?.id === "admin" || user?.id === "51892";
 const isGroundSupervisor = (user) =>
-	GROUND_SUPERVISOR_ROLES.includes(user?.rank) ||
-	user?.id === "admin" ||
-	user?.id === "51892";
+	GROUND_SUPERVISOR_ROLES.includes(user?.rank) || isSpecialAdmin(user);
 
 // ── PDF export ────────────────────────────────────────────────────────────────
+// Uses the same canvas-rasterization approach as cabin crew duty change PDFs:
+// draw the form template (PNG) + Chinese text onto an HTML5 canvas using
+// native browser font rendering (handles CJK natively, no font-encoding
+// issues), then wrap the final canvas as a single-image PDF via jsPDF.
+// This avoids pdf-lib's WinAnsi-only standard font limitation entirely.
+const FORM_TEMPLATE_IMAGE = "/assets/forms/FMTK-02-24-template.png";
+
 const generateDutyChangePDF = async (records) => {
-	const { PDFDocument, rgb, StandardFonts } = await import("pdf-lib");
-	const formBytes = await fetch("/assets/forms/FMTK-02-24.pdf").then((r) =>
-		r.arrayBuffer(),
-	);
+	const { jsPDF } = await import("jspdf");
 	const batches = [];
 	for (let i = 0; i < records.length; i += 9)
 		batches.push(records.slice(i, i + 9));
+
+	const pdf = new jsPDF({
+		orientation: "portrait",
+		unit: "mm",
+		format: "a4",
+		compress: true,
+	});
+
+	// ════════════════════════════════════════════════════════════════════════
+	// TEMPLATE IMAGE DIMENSIONS — must match FMTK-02-24-template.png exactly,
+	// or every coordinate below will be scaled wrong. Measured directly from
+	// the actual uploaded template file (2026-06-17): 5656 × 8000 px.
+	// ════════════════════════════════════════════════════════════════════════
+	const TEMPLATE_WIDTH = 5656; // ⬅ TWEAK if you replace the template image
+	const TEMPLATE_HEIGHT = 8000; // ⬅ TWEAK if you replace the template image
+
 	for (let batchIdx = 0; batchIdx < batches.length; batchIdx++) {
 		const batch = batches[batchIdx];
-		const pdfDoc = await PDFDocument.load(formBytes);
-		const page = pdfDoc.getPages()[0];
-		const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
-		const draw = (text, x, y) =>
-			page.drawText(String(text ?? ""), {
-				x,
-				y,
-				size: 10,
-				font,
-				color: rgb(0, 0, 0),
-			});
-		const ROW_Y_START = 640;
-		const ROW_HEIGHT = 32;
-		batch.forEach((rec, i) => {
-			const y = ROW_Y_START - i * ROW_HEIGHT;
-			draw(rec.swap_date, 52, y);
-			draw(rec.original_duty_a, 140, y);
-			draw(rec.original_duty_b, 228, y);
-			draw(rec.employee_a_name, 316, y);
-			draw(new Date(rec.created_at).toLocaleDateString("zh-TW"), 404, y);
-			const y2 = y - 14;
-			draw(rec.swap_date, 52, y2);
-			draw(rec.original_duty_b, 140, y2);
-			draw(rec.original_duty_a, 228, y2);
-			draw(rec.employee_b_name, 316, y2);
+		const canvas = document.createElement("canvas");
+		const ctx = canvas.getContext("2d");
+		canvas.width = TEMPLATE_WIDTH;
+		canvas.height = TEMPLATE_HEIGHT;
+
+		const templateImg = new Image();
+		templateImg.crossOrigin = "anonymous";
+		await new Promise((resolve, reject) => {
+			templateImg.onload = resolve;
+			templateImg.onerror = reject;
+			templateImg.src = FORM_TEMPLATE_IMAGE;
 		});
-		const pdfBytes = await pdfDoc.save();
-		const blob = new Blob([pdfBytes], { type: "application/pdf" });
-		const url = URL.createObjectURL(blob);
-		const link = document.createElement("a");
-		link.href = url;
-		link.download = `地勤換班單_${batchIdx + 1}of${batches.length}.pdf`;
-		link.click();
-		URL.revokeObjectURL(url);
+		ctx.drawImage(templateImg, 0, 0, TEMPLATE_WIDTH, TEMPLATE_HEIGHT);
+
+		const drawText = (text, x, y, fontSize = 40, align = "left") => {
+			const clean = String(text ?? "").trim();
+			if (!clean) return;
+			ctx.font = `${fontSize}px "Noto Sans TC", "Microsoft JhengHei", "PingFang TC", sans-serif`;
+			ctx.fillStyle = "#000000";
+			ctx.textAlign = align;
+			ctx.textBaseline = "middle";
+			ctx.fillText(clean, x, y);
+		};
+
+		// ════════════════════════════════════════════════════════════════════
+		// COORDINATE TUNING ZONE — these values were measured directly by
+		// pixel-scanning the actual FMTK-02-24-template.png grid lines
+		// (2026-06-17), NOT estimated. If you replace the template image with a
+		// different layout, re-measure and update these.
+		//
+		// Grid measurements found:
+		//   Header band bottom (where row 1 starts):     y = 1142
+		//   Each record-pair block height:                ≈ 656px (consistent across all 9 rows)
+		//   Sub-row split within a pair (A row / B row):  ≈ midpoint, offset ~327px from pair top
+		//   Column boundaries (x): 757 | 1429 | 2035 | 2708 | 3450 | 4265 | 4900
+		//     → 日期: 757–1429 / 原班表: 1429–2035 / 新班表: 2035–2708
+		//       換班人員: 2708–3450 / 填表人/日期: 3450–4265 / 主管簽名: 4265–4900
+		// ════════════════════════════════════════════════════════════════════
+
+		const PAIR_TOP_START = 1142; // ⬅ TWEAK: y of the very first pair's top edge
+		const PAIR_HEIGHT = 656; // ⬅ TWEAK: vertical height of one record-pair block
+		const SUB_ROW_OFFSET = 327; // ⬅ TWEAK: offset from pair-top to the B-row (half of PAIR_HEIGHT)
+
+		// Vertical centering within each sub-row (text sits in the middle of its half)
+		const ROW_A_Y_OFFSET = 165; // ⬅ TWEAK: A-row text vertical position within its sub-row
+		const ROW_B_Y_OFFSET = SUB_ROW_OFFSET + 165; // ⬅ TWEAK: B-row text vertical position
+
+		// X positions — left edge of text, placed with padding inside each column
+		const COL_X = {
+			date: 850, // ⬅ TWEAK: 日期 column (boundary 757–1429)
+			origDuty: 1520, // ⬅ TWEAK: 原班表 column (boundary 1429–2035)
+			newDuty: 2120, // ⬅ TWEAK: 新班表 column (boundary 2035–2708)
+			empName: 2800, // ⬅ TWEAK: 換班人員 column (boundary 2708–3450)
+			fillDate: 3550, // ⬅ TWEAK: 填表人/日期 column (boundary 3450–4265)
+		};
+
+		const FONT_SIZE = 60; // ⬅ TWEAK: text size for duty codes / names
+		const FONT_SIZE_FILLDATE = 48; // ⬅ TWEAK: smaller text for the fill-date stamp
+
+		batch.forEach((rec, i) => {
+			const pairTopY = PAIR_TOP_START + i * PAIR_HEIGHT;
+			const rowA_Y = pairTopY + ROW_A_Y_OFFSET;
+			const rowB_Y = pairTopY + ROW_B_Y_OFFSET;
+
+			// Row A: Person A's record (original duty → new duty after swap)
+			drawText(rec.swap_date, COL_X.date, rowA_Y, FONT_SIZE);
+			drawText(rec.original_duty_a, COL_X.origDuty, rowA_Y, FONT_SIZE);
+			drawText(rec.original_duty_b, COL_X.newDuty, rowA_Y, FONT_SIZE);
+			drawText(rec.employee_a_name, COL_X.empName, rowA_Y, FONT_SIZE);
+			drawText(
+				new Date(rec.created_at).toLocaleDateString("zh-TW"),
+				COL_X.fillDate,
+				rowA_Y,
+				FONT_SIZE_FILLDATE,
+			);
+
+			// Row B: Person B's record (mirrored swap)
+			drawText(rec.swap_date, COL_X.date, rowB_Y, FONT_SIZE);
+			drawText(rec.original_duty_b, COL_X.origDuty, rowB_Y, FONT_SIZE);
+			drawText(rec.original_duty_a, COL_X.newDuty, rowB_Y, FONT_SIZE);
+			drawText(rec.employee_b_name, COL_X.empName, rowB_Y, FONT_SIZE);
+		});
+
+		const imgData = canvas.toDataURL("image/jpeg", 0.85);
+		if (batchIdx > 0) pdf.addPage();
+		pdf.addImage(imgData, "JPEG", 0, 0, 210, 297, undefined, "FAST");
 	}
+
+	pdf.save(`地勤換班單_${batches.length}頁.pdf`);
 };
 
 // ── Screenshot ────────────────────────────────────────────────────────────────
-const takeScreenshot = async (tableRef, activeBase, currentMonth) => {
-	if (!tableRef.current) return;
+// Captures a single element's container at full (unclipped) scroll dimensions
+const captureFullElement = async (html2canvas, el) => {
+	const originalStyles = {
+		width: el.style.width,
+		maxHeight: el.style.maxHeight,
+		overflow: el.style.overflow,
+		overflowX: el.style.overflowX,
+		overflowY: el.style.overflowY,
+	};
+	const fullScrollWidth = el.scrollWidth;
+	const fullScrollHeight = el.scrollHeight;
+	el.style.width = `${fullScrollWidth}px`;
+	el.style.maxHeight = "none";
+	el.style.overflow = "visible";
+	el.style.overflowX = "visible";
+	el.style.overflowY = "visible";
+	void el.offsetHeight; // force reflow
+
+	const canvas = await html2canvas(el, {
+		scale: 1.5,
+		useCORS: true,
+		width: fullScrollWidth,
+		height: fullScrollHeight,
+		windowWidth: Math.max(fullScrollWidth, 1280),
+		scrollX: 0,
+		scrollY: 0,
+	});
+
+	el.style.width = originalStyles.width;
+	el.style.maxHeight = originalStyles.maxHeight;
+	el.style.overflow = originalStyles.overflow;
+	el.style.overflowX = originalStyles.overflowX;
+	el.style.overflowY = originalStyles.overflowY;
+
+	return canvas;
+};
+
+// Captures the logged-in user's table AND the crew table, stitched into one
+// combined image — so the screenshot never "cuts off" the user's own row,
+// which lives in a visually separate table from the crew list.
+const takeScreenshot = async (
+	userTableRef,
+	crewTableRef,
+	activeBase,
+	currentMonth,
+) => {
+	if (!crewTableRef.current) return;
 	try {
 		const html2canvas = (await import("html2canvas")).default;
-		const el = tableRef.current;
-		const isMobile = window.innerWidth < 769;
-		const originalWidth = el.style.width;
-		if (isMobile) el.style.width = "1280px";
-		const canvas = await html2canvas(el, {
-			scale: 1.5,
-			useCORS: true,
-			windowWidth: 1280,
-			scrollX: 0,
-			scrollY: 0,
-		});
-		if (isMobile) el.style.width = originalWidth;
+
+		const userCanvas = userTableRef?.current
+			? await captureFullElement(html2canvas, userTableRef.current)
+			: null;
+		const crewCanvas = await captureFullElement(
+			html2canvas,
+			crewTableRef.current,
+		);
+
+		// Stitch vertically: user table on top, small gap, crew table below
+		const GAP = 24;
+		const combinedWidth = Math.max(
+			userCanvas?.width || 0,
+			crewCanvas.width,
+		);
+		const combinedHeight =
+			(userCanvas ? userCanvas.height + GAP : 0) + crewCanvas.height;
+
+		const combined = document.createElement("canvas");
+		combined.width = combinedWidth;
+		combined.height = combinedHeight;
+		const ctx = combined.getContext("2d");
+		ctx.fillStyle = "#ffffff";
+		ctx.fillRect(0, 0, combinedWidth, combinedHeight);
+
+		let yOffset = 0;
+		if (userCanvas) {
+			ctx.drawImage(userCanvas, 0, 0);
+			yOffset = userCanvas.height + GAP;
+		}
+		ctx.drawImage(crewCanvas, 0, yOffset);
+
 		const baseName = activeBase === "ALL" ? "全站" : activeBase;
 		const link = document.createElement("a");
 		link.download = `地勤${baseName}班表-${currentMonth}.png`;
-		link.href = canvas.toDataURL("image/png");
+		link.href = combined.toDataURL("image/png");
 		link.click();
 		toast.success("截圖已下載");
 	} catch (err) {
+		console.error("Screenshot error:", err);
 		toast.error("截圖失敗");
 	}
 };
@@ -427,7 +566,26 @@ const DutyChangeRecords = ({ user, currentMonth }) => {
 						<table className={gStyles.recordsTable}>
 							<thead>
 								<tr>
-									<th></th>
+									<th>
+										<input
+											type="checkbox"
+											checked={
+												records.length > 0 &&
+												selectedIds.length ===
+													records.length
+											}
+											onChange={(e) =>
+												setSelectedIds(
+													e.target.checked
+														? records.map(
+																(r) => r.id,
+															)
+														: [],
+												)
+											}
+											title="全選"
+										/>
+									</th>
 									<th>日期</th>
 									<th>申請人</th>
 									<th>原班</th>
@@ -548,64 +706,79 @@ const DutyChangeRecords = ({ user, currentMonth }) => {
 	);
 };
 
-// ── SwapModal ─────────────────────────────────────────────────────────────────
+// ── SwapModal (multi-date tray) ─────────────────────────────────────────────
 const SwapModal = ({
 	user,
-	targetEmp,
-	targetDate,
-	targetDuty,
-	userDuty,
+	swapTray,
 	changeCount,
 	onConfirm,
 	onClose,
+	onRemove,
 }) => {
 	const isAutoApprove = AUTO_APPROVE_BASES.includes(user?.base);
-	const overLimit = changeCount >= MAX_DUTY_CHANGES;
+	const overLimit = changeCount + swapTray.length > MAX_DUTY_CHANGES;
+	const targetName = swapTray[0]?.targetEmp?.name || "";
+
 	return (
 		<div className={gStyles.modalBackdrop} onClick={onClose}>
 			<div className={gStyles.modal} onClick={(e) => e.stopPropagation()}>
 				<div className={gStyles.modalHeader}>
-					<span className={gStyles.modalTitle}>換班確認</span>
+					<span className={gStyles.modalTitle}>
+						換班確認（與 {targetName}）
+					</span>
 					<button className={gStyles.modalClose} onClick={onClose}>
 						<X size={16} />
 					</button>
 				</div>
 				<div className={gStyles.modalBody}>
-					<div className={gStyles.modalDate}>{targetDate}</div>
-					<div className={gStyles.swapRow}>
-						<div className={gStyles.swapParty}>
-							<div className={gStyles.swapPartyLabel}>
-								你的勤務
+					<div className={gStyles.traySummary}>
+						已選取 {swapTray.length} 個日期
+					</div>
+					{swapTray.map((s) => (
+						<div key={s.targetDate} className={gStyles.trayItem}>
+							<div className={gStyles.trayItemDate}>
+								{s.targetDate}
 							</div>
-							<div className={gStyles.swapDuty}>
-								{userDuty || (
-									<span className={gStyles.noDuty}>
-										無勤務
-									</span>
-								)}
+							<div className={gStyles.swapRow}>
+								<div className={gStyles.swapParty}>
+									<div className={gStyles.swapPartyLabel}>
+										你的勤務
+									</div>
+									<div className={gStyles.swapDuty}>
+										{s.userDuty || (
+											<span className={gStyles.noDuty}>
+												無勤務
+											</span>
+										)}
+									</div>
+								</div>
+								<div className={gStyles.swapArrow}>⇄</div>
+								<div className={gStyles.swapParty}>
+									<div className={gStyles.swapPartyLabel}>
+										{s.targetEmp.name}
+									</div>
+									<div className={gStyles.swapDuty}>
+										{s.targetDuty || (
+											<span className={gStyles.noDuty}>
+												無勤務
+											</span>
+										)}
+									</div>
+								</div>
+								<button
+									className={gStyles.trayItemRemove}
+									onClick={() => onRemove(s.targetDate)}
+									title="移除"
+								>
+									<X size={14} />
+								</button>
 							</div>
 						</div>
-						<div className={gStyles.swapArrow}>⇄</div>
-						<div className={gStyles.swapParty}>
-							<div className={gStyles.swapPartyLabel}>
-								{targetEmp.name}
-							</div>
-							<div className={gStyles.swapDuty}>
-								{targetDuty || (
-									<span className={gStyles.noDuty}>
-										無勤務
-									</span>
-								)}
-							</div>
-						</div>
-					</div>
-					<div className={gStyles.swapAfter}>
-						換班後：你 → <strong>{targetDuty || "無"}</strong>，
-						{targetEmp.name} → <strong>{userDuty || "無"}</strong>
-					</div>
+					))}
 					{overLimit && (
 						<div className={gStyles.swapWarning}>
-							⚠ 您本月已達換班上限（{MAX_DUTY_CHANGES}次）
+							⚠ 超過本月換班上限（{MAX_DUTY_CHANGES}
+							次），請移除部分日期
 						</div>
 					)}
 					{!overLimit && !isAutoApprove && (
@@ -629,9 +802,11 @@ const SwapModal = ({
 					<button
 						className={gStyles.modalConfirmBtn}
 						onClick={onConfirm}
-						disabled={overLimit}
+						disabled={overLimit || swapTray.length === 0}
 					>
-						{isAutoApprove ? "確認換班" : "送出換班申請"}
+						{isAutoApprove
+							? `確認換班 (${swapTray.length}筆)`
+							: `送出換班申請 (${swapTray.length}筆)`}
 					</button>
 				</div>
 			</div>
@@ -655,7 +830,15 @@ export default function GroundSchedulePage() {
 	const [scheduleMap, setScheduleMap] = useState({});
 	const [dayOffMap, setDayOffMap] = useState({});
 	const [swapRequestMap, setSwapRequestMap] = useState({});
-	const [swapModal, setSwapModal] = useState(null);
+	// swapTray: array of { targetEmp, targetDate, targetDuty, userDuty }
+	const [swapTray, setSwapTray] = useState([]);
+	const [swapModalOpen, setSwapModalOpen] = useState(false);
+
+	// Admin-only: "assumed" employee — admin clicks a name to act AS that
+	// person, then taps another person's cells to swap on their behalf.
+	// Bypasses the monthly change limit and always applies immediately
+	// (no pending/approval flow), since this is a direct manual schedule edit.
+	const [assumedEmployee, setAssumedEmployee] = useState(null);
 	const [monthChangeCount, setMonthChangeCount] = useState(0);
 	const [hasSetDefaultBase, setHasSetDefaultBase] = useState(false);
 
@@ -855,87 +1038,194 @@ export default function GroundSchedulePage() {
 
 	const handleCrewCellTap = useCallback(
 		(emp, dateStr, dutyCode) => {
-			const userDuty = scheduleMap[user?.id]?.[dateStr] || "";
-			setSwapModal({
-				targetEmp: emp,
-				targetDate: dateStr,
-				targetDuty: dutyCode,
-				userDuty,
+			const actingAsId = assumedEmployee?.id || user?.id;
+			// Admin acting as someone can't swap with themselves
+			if (emp.id === actingAsId) return;
+			const userDuty = scheduleMap[actingAsId]?.[dateStr] || "";
+			setSwapTray((prev) => {
+				// Different person tapped — clear tray and start fresh with this selection
+				if (prev.length > 0 && prev[0].targetEmp.id !== emp.id) {
+					toast("已切換對象，重新選取日期", { icon: "🔄" });
+					return [
+						{
+							targetEmp: emp,
+							targetDate: dateStr,
+							targetDuty: dutyCode,
+							userDuty,
+						},
+					];
+				}
+				// Same date tapped again — toggle off (remove from tray)
+				const existingIdx = prev.findIndex(
+					(s) => s.targetDate === dateStr,
+				);
+				if (existingIdx !== -1) {
+					return prev.filter((_, i) => i !== existingIdx);
+				}
+				// Admin acting on someone's behalf has unlimited manual adjustments
+				if (!assumedEmployee) {
+					const remaining = MAX_DUTY_CHANGES - monthChangeCount;
+					if (prev.length >= remaining) {
+						toast.error(
+							`本月最多可換 ${MAX_DUTY_CHANGES} 次，已達上限`,
+						);
+						return prev;
+					}
+				}
+				return [
+					...prev,
+					{
+						targetEmp: emp,
+						targetDate: dateStr,
+						targetDuty: dutyCode,
+						userDuty,
+					},
+				];
 			});
 		},
-		[scheduleMap, user],
+		[scheduleMap, user, monthChangeCount, assumedEmployee],
+	);
+
+	const handleRemoveFromTray = useCallback((dateStr) => {
+		setSwapTray((prev) => prev.filter((s) => s.targetDate !== dateStr));
+	}, []);
+
+	const handleClearTray = useCallback(() => {
+		setSwapTray([]);
+		setSwapModalOpen(false);
+	}, []);
+
+	// Admin clicks a name in the crew table to "assume" that person's identity
+	const handleAssumeEmployee = useCallback(
+		(emp) => {
+			if (!isSpecialAdmin(user)) return;
+			setAssumedEmployee((prev) => {
+				if (prev?.id === emp.id) {
+					toast("已取消代理身份", { icon: "ℹ️" });
+					return null;
+				}
+				setSwapTray([]); // clear tray when switching identity
+				toast.success(`現在以 ${emp.name} 身份操作換班`);
+				return emp;
+			});
+		},
+		[user],
 	);
 
 	const handleSwapConfirm = async () => {
-		if (!swapModal || !user) return;
-		const { targetEmp, targetDate, targetDuty, userDuty } = swapModal;
-		const isAutoApprove = AUTO_APPROVE_BASES.includes(user.base);
-		const toastId = toast.loading("處理換班中...");
+		if (!swapTray.length || !user) return;
+		const actingEmployee = assumedEmployee ||
+			getGroundEmployeeById(user.id) || { id: user.id, base: user.base };
+		const isAdminOverride = !!assumedEmployee && isSpecialAdmin(user);
+		const isAutoApprove =
+			isAdminOverride || AUTO_APPROVE_BASES.includes(actingEmployee.base);
+		const toastId = toast.loading(`處理 ${swapTray.length} 筆換班中...`);
 		try {
+			// Insert one record per date pair
+			const inserts = swapTray.map((s) => ({
+				base: actingEmployee.base,
+				month_label: currentMonth,
+				employee_a_id: actingEmployee.id,
+				employee_b_id: s.targetEmp.id,
+				swap_date: s.targetDate,
+				original_duty_a: s.userDuty || "",
+				original_duty_b: s.targetDuty || "",
+				status: isAutoApprove ? "approved" : "pending",
+				reviewed_by: isAutoApprove
+					? isAdminOverride
+						? user.id
+						: "system"
+					: null,
+				reviewed_at: isAutoApprove ? new Date().toISOString() : null,
+			}));
 			const { error: insertErr } = await supabase
 				.from("ground_duty_change_requests")
-				.insert({
-					base: user.base,
-					month_label: currentMonth,
-					employee_a_id: user.id,
-					employee_b_id: targetEmp.id,
-					swap_date: targetDate,
-					original_duty_a: userDuty || "",
-					original_duty_b: targetDuty || "",
-					status: isAutoApprove ? "approved" : "pending",
-					reviewed_by: isAutoApprove ? "system" : null,
-					reviewed_at: isAutoApprove
-						? new Date().toISOString()
-						: null,
-				});
+				.insert(inserts);
 			if (insertErr) throw new Error(insertErr.message);
+
 			if (isAutoApprove) {
-				const buildUpdated = (empId, newCode) => {
-					const existing = { ...(scheduleMap[empId] || {}) };
-					existing[targetDate] = newCode;
-					return Object.entries(existing).map(
-						([date, duty_code]) => ({ date, duty_code }),
-					);
+				// Build updated schedules for the acting party and each target employee
+				const actorScheduleUpdates = {
+					...(scheduleMap[actingEmployee.id] || {}),
 				};
-				const empA = getGroundEmployeeById(user.id);
-				await Promise.all([
+				const targetUpdates = {}; // { empId: { ...schedule } }
+
+				swapTray.forEach((s) => {
+					actorScheduleUpdates[s.targetDate] = s.targetDuty;
+					if (!targetUpdates[s.targetEmp.id]) {
+						targetUpdates[s.targetEmp.id] = {
+							...(scheduleMap[s.targetEmp.id] || {}),
+							_base: s.targetEmp.base,
+						};
+					}
+					targetUpdates[s.targetEmp.id][s.targetDate] = s.userDuty;
+				});
+
+				const writes = [
 					groundScheduleHelpers.upsertEmployeeSchedule(
-						user.id,
+						actingEmployee.id,
 						currentMonth,
-						empA?.base,
-						buildUpdated(user.id, targetDuty),
+						actingEmployee.base,
+						Object.entries(actorScheduleUpdates).map(
+							([date, duty_code]) => ({ date, duty_code }),
+						),
 					),
-					groundScheduleHelpers.upsertEmployeeSchedule(
-						targetEmp.id,
-						currentMonth,
-						targetEmp.base,
-						buildUpdated(targetEmp.id, userDuty),
-					),
-				]);
-				setScheduleMap((prev) => ({
-					...prev,
-					[user.id]: { ...prev[user.id], [targetDate]: targetDuty },
-					[targetEmp.id]: {
-						...prev[targetEmp.id],
-						[targetDate]: userDuty,
-					},
-				}));
+					...Object.entries(targetUpdates).map(([empId, sched]) => {
+						const { _base, ...rest } = sched;
+						return groundScheduleHelpers.upsertEmployeeSchedule(
+							empId,
+							currentMonth,
+							_base,
+							Object.entries(rest).map(([date, duty_code]) => ({
+								date,
+								duty_code,
+							})),
+						);
+					}),
+				];
+				await Promise.all(writes);
+
+				setScheduleMap((prev) => {
+					const next = {
+						...prev,
+						[actingEmployee.id]: {
+							...prev[actingEmployee.id],
+							...actorScheduleUpdates,
+						},
+					};
+					Object.entries(targetUpdates).forEach(([empId, sched]) => {
+						const { _base, ...rest } = sched;
+						next[empId] = { ...prev[empId], ...rest };
+					});
+					return next;
+				});
 			}
-			setSwapRequestMap((prev) => ({
-				...prev,
-				[`${user.id}|${targetDate}`]: isAutoApprove
-					? "approved"
-					: "pending",
-				[`${targetEmp.id}|${targetDate}`]: isAutoApprove
-					? "approved"
-					: "pending",
-			}));
-			setMonthChangeCount((c) => c + 1);
+
+			// Update overlay map for all swapped dates
+			setSwapRequestMap((prev) => {
+				const next = { ...prev };
+				swapTray.forEach((s) => {
+					next[`${actingEmployee.id}|${s.targetDate}`] = isAutoApprove
+						? "approved"
+						: "pending";
+					next[`${s.targetEmp.id}|${s.targetDate}`] = isAutoApprove
+						? "approved"
+						: "pending";
+				});
+				return next;
+			});
+
+			// Admin override doesn't count against the monthly limit
+			if (!isAdminOverride)
+				setMonthChangeCount((c) => c + swapTray.length);
 			toast.dismiss(toastId);
 			toast.success(
-				isAutoApprove ? "換班成功" : "換班申請已送出，待督導審核",
+				isAutoApprove
+					? `${swapTray.length} 筆換班成功`
+					: `${swapTray.length} 筆換班申請已送出，待督導審核`,
 			);
-			setSwapModal(null);
+			setSwapTray([]);
+			setSwapModalOpen(false);
 		} catch (err) {
 			toast.dismiss(toastId);
 			toast.error("換班失敗：" + err.message);
@@ -974,88 +1264,140 @@ export default function GroundSchedulePage() {
 
 	// Table row
 	const renderRow = useCallback(
-		(emp, isOwnRow = false) => (
-			<tr
-				key={emp.id}
-				style={isOwnRow ? { backgroundColor: "#fffbeb" } : undefined}
-			>
-				<td
-					className={`${styles.employeeIdCell} ${styles.stickyCol} ${styles.employeeId}`}
+		(emp, isOwnRow = false) => {
+			const isAssumed = !isOwnRow && assumedEmployee?.id === emp.id;
+			const isAdmin = isSpecialAdmin(user);
+			return (
+				<tr
+					key={emp.id}
+					style={
+						isOwnRow
+							? { backgroundColor: "#fffbeb" }
+							: isAssumed
+								? { backgroundColor: "#ede9fe" }
+								: undefined
+					}
 				>
-					<span style={{ fontSize: "0.75rem", color: "#6b7280" }}>
-						{emp.id}
-					</span>
-				</td>
-				<td
-					className={`${styles.employeeNameCell} ${styles.stickyCol} ${styles.employeeName}`}
-				>
-					<div className={styles.nameContainer}>
-						<div className={styles.employeeName}>
-							{emp.name}
-							{isOwnRow && (
-								<span className={gStyles.meBadge}>我</span>
-							)}
-						</div>
-						<div className={styles.badgeContainer}>
-							<span className={styles.rankBadge}>{emp.rank}</span>
-							<span
-								className={`${styles.baseBadge} ${styles["base" + emp.base] || styles.baseKHH}`}
-							>
-								{emp.base}
-							</span>
-						</div>
-					</div>
-				</td>
-				{days.map(({ dateStr, dow }) => {
-					const dutyCode = scheduleMap[emp.id]?.[dateStr] || "";
-					const dayOffStatus = dayOffMap[emp.id]?.[dateStr];
-					const cellSwapStatus =
-						swapRequestMap[`${emp.id}|${dateStr}`];
-					const isPast = dateStr <= todayStr;
-					let cellClass = `${styles.dutyCell} ${getDutyCellClass(dutyCode)}`;
-					if (cellSwapStatus === "approved")
-						cellClass += ` ${styles.dutyCellApproved}`;
-					else if (cellSwapStatus === "pending")
-						cellClass += ` ${styles.dutyCellPending}`;
-					if (!isOwnRow) cellClass += ` ${styles.selectable}`;
-					if (isOwnRow && !isPast && !dayOffStatus)
-						cellClass += ` ${styles.selectable}`;
-					const dotClass =
-						dayOffStatus === "pending"
-							? gStyles.dotPending
-							: dayOffStatus === "approved"
-								? gStyles.dotApproved
-								: null;
-					return (
-						<td
-							key={dateStr}
-							className={cellClass}
+					<td
+						className={`${styles.employeeIdCell} ${styles.stickyCol} ${styles.employeeId}`}
+					>
+						<span className={gStyles.idText}>{emp.id}</span>
+					</td>
+					<td
+						className={`${styles.employeeNameCell} ${styles.stickyCol} ${styles.employeeName}`}
+					>
+						<div
+							className={styles.nameContainer}
 							style={
-								isWeekend(dow) && !dutyCode
-									? { backgroundColor: "#fefce8" }
+								!isOwnRow && isAdmin
+									? { cursor: "pointer" }
 									: undefined
 							}
-							onClick={() =>
-								isOwnRow
-									? handleOwnCellTap(dateStr)
-									: handleCrewCellTap(emp, dateStr, dutyCode)
+							onClick={
+								!isOwnRow && isAdmin
+									? () => handleAssumeEmployee(emp)
+									: undefined
+							}
+							title={
+								!isOwnRow && isAdmin
+									? "點擊以此身份操作換班"
+									: undefined
 							}
 						>
-							<div className={styles.dutyContent}>{dutyCode}</div>
-							{dotClass && <span className={dotClass} />}
-						</td>
-					);
-				})}
-			</tr>
-		),
+							<div className={styles.employeeName}>
+								{emp.name}
+								{isAssumed && (
+									<span className={gStyles.assumedBadge}>
+										代理中
+									</span>
+								)}
+							</div>
+							<div className={styles.badgeContainer}>
+								<span className={styles.rankBadge}>
+									{emp.rank}
+								</span>
+								<span
+									className={`${styles.baseBadge} ${styles["base" + emp.base] || styles.baseKHH}`}
+								>
+									{emp.base}
+								</span>
+							</div>
+						</div>
+					</td>
+					{days.map(({ dateStr, dow }) => {
+						const dutyCode = scheduleMap[emp.id]?.[dateStr] || "";
+						const dayOffStatus = dayOffMap[emp.id]?.[dateStr];
+						const cellSwapStatus =
+							swapRequestMap[`${emp.id}|${dateStr}`];
+						const isPast = dateStr <= todayStr;
+						const isInTray =
+							!isOwnRow &&
+							swapTray.some(
+								(s) =>
+									s.targetEmp.id === emp.id &&
+									s.targetDate === dateStr,
+							);
+						let cellClass = `${styles.dutyCell} ${getDutyCellClass(dutyCode)}`;
+						if (cellSwapStatus === "approved")
+							cellClass += ` ${styles.dutyCellApproved}`;
+						else if (cellSwapStatus === "pending")
+							cellClass += ` ${styles.dutyCellPending}`;
+						if (!isOwnRow) cellClass += ` ${styles.selectable}`;
+						if (isOwnRow && !isPast && !dayOffStatus)
+							cellClass += ` ${styles.selectable}`;
+						if (isInTray) cellClass += ` ${gStyles.traySelected}`;
+						const dotClass =
+							dayOffStatus === "pending"
+								? gStyles.dotPending
+								: dayOffStatus === "approved"
+									? gStyles.dotApproved
+									: null;
+						return (
+							<td
+								key={dateStr}
+								className={cellClass}
+								style={
+									isWeekend(dow) && !dutyCode
+										? { backgroundColor: "#fefce8" }
+										: undefined
+								}
+								onClick={() =>
+									isOwnRow
+										? handleOwnCellTap(dateStr)
+										: handleCrewCellTap(
+												emp,
+												dateStr,
+												dutyCode,
+											)
+								}
+							>
+								<div className={styles.dutyContent}>
+									{dutyCode}
+								</div>
+								{dotClass && <span className={dotClass} />}
+								{isInTray && (
+									<span className={gStyles.trayCheckmark}>
+										✓
+									</span>
+								)}
+							</td>
+						);
+					})}
+				</tr>
+			);
+		},
 		[
 			days,
 			scheduleMap,
 			dayOffMap,
 			swapRequestMap,
+			swapTray,
 			todayStr,
 			handleOwnCellTap,
 			handleCrewCellTap,
+			assumedEmployee,
+			user,
+			handleAssumeEmployee,
 		],
 	);
 
@@ -1071,14 +1413,38 @@ export default function GroundSchedulePage() {
 
 	return (
 		<div className={styles.mainContainer}>
-			{swapModal && (
+			{swapModalOpen && swapTray.length > 0 && (
 				<SwapModal
 					user={user}
-					{...swapModal}
-					changeCount={monthChangeCount}
+					swapTray={swapTray}
+					changeCount={monthChangeCount - swapTray.length}
 					onConfirm={handleSwapConfirm}
-					onClose={() => setSwapModal(null)}
+					onClose={() => setSwapModalOpen(false)}
+					onRemove={handleRemoveFromTray}
 				/>
+			)}
+			{/* Floating tray trigger — shows when cells are selected but modal isn't open */}
+			{swapTray.length > 0 && !swapModalOpen && (
+				<div className={gStyles.trayFloatingBar}>
+					<span className={gStyles.trayFloatingText}>
+						已選 {swapTray.length} 個日期（與{" "}
+						{swapTray[0].targetEmp.name}）
+					</span>
+					<div className={gStyles.trayFloatingActions}>
+						<button
+							className={gStyles.trayFloatingClear}
+							onClick={handleClearTray}
+						>
+							清除
+						</button>
+						<button
+							className={gStyles.trayFloatingConfirm}
+							onClick={() => setSwapModalOpen(true)}
+						>
+							查看並確認
+						</button>
+					</div>
+				</div>
 			)}
 			<div className={styles.scheduleContainer} ref={scheduleWrapRef}>
 				{/* Month selector */}
@@ -1124,7 +1490,8 @@ export default function GroundSchedulePage() {
 							className={gStyles.screenshotBtn}
 							onClick={() =>
 								takeScreenshot(
-									scheduleWrapRef,
+									userTableRef,
+									crewTableRef,
 									activeBase,
 									currentMonth,
 								)
@@ -1147,6 +1514,26 @@ export default function GroundSchedulePage() {
 						)}
 					</div>
 				</div>
+
+				{/* Admin assumed-identity banner */}
+				{assumedEmployee && (
+					<div className={gStyles.assumedBanner}>
+						<span>
+							🔑 管理員代理模式：以{" "}
+							<strong>{assumedEmployee.name}</strong>{" "}
+							身份操作換班（不受次數限制）
+						</span>
+						<button
+							className={gStyles.assumedBannerExit}
+							onClick={() => {
+								setAssumedEmployee(null);
+								setSwapTray([]);
+							}}
+						>
+							結束代理
+						</button>
+					</div>
+				)}
 
 				{activePageTab === "換班記錄" ? (
 					<DutyChangeRecords
