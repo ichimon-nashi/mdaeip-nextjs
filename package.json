@@ -17,6 +17,7 @@
     "lucide-react": "^0.544.0",
     "moment": "^2.30.1",
     "next": "^16.0.7",
+    "pdf-lib": "^1.17.1",
     "react": "^19.2.1",
     "react-datepicker": "^8.7.0",
     "react-dom": "^19.2.1",

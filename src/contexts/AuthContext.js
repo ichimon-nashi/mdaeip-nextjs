@@ -2,6 +2,7 @@
 
 import { createContext, useContext, useEffect, useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
+import { isGroundStaff } from "../lib/permissionHelpers";
 
 const AuthContext = createContext({});
 
@@ -82,8 +83,10 @@ export const AuthProvider = ({ children }) => {
 		const isDashboardPage = pathname === '/dashboard';
 
 		if (isLoginPage && user) {
-			console.log("👤 User logged in, redirecting to dashboard");
-			router.replace('/dashboard');
+			// Ground staff skip the cabin crew dashboard entirely
+			const destination = isGroundStaff(user) ? '/ground-schedule' : '/dashboard';
+			console.log(`👤 User logged in, redirecting to ${destination}`);
+			router.replace(destination);
 		} else if (isDashboardPage && !user) {
 			console.log("🔒 No user, redirecting to login");
 			router.replace('/');

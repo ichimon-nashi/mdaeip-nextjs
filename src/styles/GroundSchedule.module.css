@@ -1,0 +1,516 @@
+/* GroundSchedule.module.css
+   Ground-staff-specific styles only.
+   Base table/tab/badge/loading styles come from Schedule.module.css.
+*/
+
+/* ── "我" badge ──────────────────────────────────────────────────────────── */
+.meBadge {
+	display: inline-block;
+	margin-left: 4px;
+	font-size: 0.65rem;
+	font-weight: 700;
+	padding: 1px 5px;
+	border-radius: 0.25rem;
+	background: #fef3c7;
+	color: #92400e;
+	vertical-align: middle;
+}
+
+/* ── Day-off dot indicators (bottom-right corner of duty cell) ───────────── */
+.dotPending,
+.dotApproved {
+	position: absolute;
+	bottom: 3px;
+	right: 3px;
+	width: 7px;
+	height: 7px;
+	border-radius: 50%;
+	pointer-events: none;
+	display: inline-block;
+}
+.dotPending {
+	background: #7c3aed;
+	box-shadow: 0 0 0 1.5px white;
+}
+.dotApproved {
+	background: #22c55e;
+	box-shadow: 0 0 0 1.5px white;
+}
+
+/* ── Page tab bar (班表 | 換班記錄) ─────────────────────────────────────── */
+.pageTabBar {
+	display: flex;
+	align-items: center;
+	gap: 0.25rem;
+	margin-bottom: 1rem;
+	border-bottom: 2px solid #e5e7eb;
+	padding-bottom: 0;
+}
+
+.pageTab {
+	position: relative;
+	padding: 0.5rem 1.25rem;
+	font-size: 0.9rem;
+	font-weight: 500;
+	background: none;
+	border: none;
+	border-bottom: 2px solid transparent;
+	margin-bottom: -2px;
+	cursor: pointer;
+	color: #6b7280;
+	transition:
+		color 0.15s,
+		border-color 0.15s;
+	display: flex;
+	align-items: center;
+	gap: 6px;
+}
+.pageTab:hover {
+	color: #2563eb;
+}
+.pageTabActive {
+	color: #2563eb;
+	border-bottom-color: #2563eb;
+}
+
+.pageTabBadge {
+	background: #ef4444;
+	color: white;
+	font-size: 0.65rem;
+	font-weight: 700;
+	padding: 1px 5px;
+	border-radius: 99px;
+	min-width: 16px;
+	text-align: center;
+}
+
+.pageTabActions {
+	margin-left: auto;
+	display: flex;
+	align-items: center;
+	gap: 0.5rem;
+	padding-bottom: 6px;
+}
+
+/* ── Action buttons ──────────────────────────────────────────────────────── */
+.screenshotBtn,
+.importBtn {
+	padding: 0.4rem 0.875rem;
+	border-radius: 0.5rem;
+	font-size: 0.8rem;
+	font-weight: 600;
+	cursor: pointer;
+	border: none;
+	transition: opacity 0.15s;
+}
+.screenshotBtn {
+	background: rgba(255, 255, 255, 0.15);
+	color: white;
+	border: 1px solid rgba(255, 255, 255, 0.3);
+}
+.screenshotBtn:hover {
+	background: rgba(255, 255, 255, 0.25);
+}
+.importBtn {
+	background: #2563eb;
+	color: white;
+}
+.importBtn:hover {
+	opacity: 0.88;
+}
+
+/* ── OTHER bases dropdown — styled to match tab pills ───────────────────── */
+.otherBaseSelect {
+	appearance: none;
+	-webkit-appearance: none;
+	cursor: pointer;
+	text-align: center;
+}
+
+/* ── Swap modal ──────────────────────────────────────────────────────────── */
+.modalBackdrop {
+	position: fixed;
+	inset: 0;
+	background: rgba(0, 0, 0, 0.45);
+	z-index: 10000;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	padding: 1rem;
+}
+.modal {
+	background: white;
+	border-radius: 1rem;
+	width: 100%;
+	max-width: 400px;
+	box-shadow: 0 20px 60px rgba(0, 0, 0, 0.25);
+	overflow: hidden;
+}
+.modalHeader {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	padding: 1rem 1.25rem;
+	border-bottom: 1px solid #e5e7eb;
+}
+.modalTitle {
+	font-size: 1rem;
+	font-weight: 600;
+	color: #111827;
+}
+.modalClose {
+	background: none;
+	border: none;
+	cursor: pointer;
+	color: #6b7280;
+	padding: 0.25rem;
+	border-radius: 0.375rem;
+	display: flex;
+	align-items: center;
+}
+.modalClose:hover {
+	background: #f3f4f6;
+}
+.modalBody {
+	padding: 1.25rem;
+}
+.modalDate {
+	text-align: center;
+	font-size: 0.85rem;
+	color: #6b7280;
+	margin-bottom: 1rem;
+}
+.swapRow {
+	display: flex;
+	align-items: center;
+	gap: 1rem;
+	margin-bottom: 1rem;
+}
+.swapParty {
+	flex: 1;
+	background: #f9fafb;
+	border-radius: 0.625rem;
+	padding: 0.75rem;
+	text-align: center;
+	border: 1px solid #e5e7eb;
+}
+.swapPartyLabel {
+	font-size: 0.75rem;
+	color: #6b7280;
+	margin-bottom: 0.375rem;
+}
+.swapDuty {
+	font-size: 1.1rem;
+	font-weight: 700;
+	color: #111827;
+}
+.noDuty {
+	font-size: 0.85rem;
+	font-weight: 400;
+	color: #9ca3af;
+}
+.swapArrow {
+	font-size: 1.5rem;
+	color: #9ca3af;
+	flex-shrink: 0;
+}
+.swapAfter {
+	font-size: 0.8rem;
+	color: #6b7280;
+	text-align: center;
+	margin-bottom: 0.75rem;
+}
+.swapAfter strong {
+	color: #111827;
+}
+.swapWarning {
+	font-size: 0.8rem;
+	color: #dc2626;
+	background: #fee2e2;
+	padding: 0.5rem 0.75rem;
+	border-radius: 0.5rem;
+	text-align: center;
+}
+.swapNote {
+	font-size: 0.78rem;
+	color: #92400e;
+	background: #fef3c7;
+	padding: 0.375rem 0.75rem;
+	border-radius: 0.5rem;
+	text-align: center;
+}
+.swapNoteAuto {
+	font-size: 0.78rem;
+	color: #065f46;
+	background: #d1fae5;
+	padding: 0.375rem 0.75rem;
+	border-radius: 0.5rem;
+	text-align: center;
+}
+.modalFooter {
+	display: flex;
+	gap: 0.625rem;
+	padding: 1rem 1.25rem;
+	border-top: 1px solid #e5e7eb;
+}
+.modalCancelBtn {
+	flex: 1;
+	padding: 0.625rem;
+	border-radius: 0.5rem;
+	border: 1px solid #d1d5db;
+	background: white;
+	color: #374151;
+	font-size: 0.9rem;
+	cursor: pointer;
+}
+.modalCancelBtn:hover {
+	background: #f9fafb;
+}
+.modalConfirmBtn {
+	flex: 2;
+	padding: 0.625rem;
+	border-radius: 0.5rem;
+	border: none;
+	background: #2563eb;
+	color: white;
+	font-size: 0.9rem;
+	font-weight: 600;
+	cursor: pointer;
+}
+.modalConfirmBtn:hover {
+	opacity: 0.88;
+}
+.modalConfirmBtn:disabled {
+	opacity: 0.4;
+	cursor: not-allowed;
+}
+
+/* ── DutyChangeRecords ───────────────────────────────────────────────────── */
+.recordsContainer {
+	padding: 0.5rem 0;
+}
+.recordsFilterBar {
+	display: flex;
+	align-items: center;
+	gap: 0.625rem;
+	margin-bottom: 1rem;
+	flex-wrap: wrap;
+}
+.recordsFilterInput {
+	padding: 0.4rem 0.625rem;
+	border-radius: 0.5rem;
+	border: 1px solid #d1d5db;
+	font-size: 0.85rem;
+	background: white;
+	color: #111827;
+}
+.exportBtn {
+	padding: 0.4rem 0.875rem;
+	border-radius: 0.5rem;
+	border: none;
+	background: #2563eb;
+	color: white;
+	font-size: 0.85rem;
+	font-weight: 600;
+	cursor: pointer;
+	margin-left: auto;
+}
+.exportBtn:hover {
+	opacity: 0.88;
+}
+.recordsEmpty {
+	text-align: center;
+	padding: 3rem;
+	color: #9ca3af;
+	font-size: 0.9rem;
+}
+.recordsTableWrap {
+	overflow-x: auto;
+	border-radius: 0.625rem;
+	border: 1px solid #e5e7eb;
+}
+.recordsTable {
+	width: 100%;
+	border-collapse: collapse;
+	font-size: 0.82rem;
+}
+.recordsTable th {
+	background: #f9fafb;
+	padding: 0.625rem 0.75rem;
+	text-align: left;
+	font-weight: 500;
+	color: #6b7280;
+	border-bottom: 1px solid #e5e7eb;
+	white-space: nowrap;
+}
+.recordsTable td {
+	padding: 0.6rem 0.75rem;
+	border-bottom: 1px solid #f3f4f6;
+	color: #111827;
+	white-space: nowrap;
+}
+.recordsTable tr:last-child td {
+	border-bottom: none;
+}
+.selectedRow {
+	background: #eff6ff !important;
+}
+
+.statusPending {
+	display: inline-block;
+	padding: 2px 8px;
+	border-radius: 99px;
+	font-size: 0.75rem;
+	font-weight: 500;
+	background: #fef3c7;
+	color: #92400e;
+}
+.statusApproved {
+	display: inline-block;
+	padding: 2px 8px;
+	border-radius: 99px;
+	font-size: 0.75rem;
+	font-weight: 500;
+	background: #d1fae5;
+	color: #065f46;
+}
+.statusDenied {
+	display: inline-block;
+	padding: 2px 8px;
+	border-radius: 99px;
+	font-size: 0.75rem;
+	font-weight: 500;
+	background: #fee2e2;
+	color: #991b1b;
+}
+
+.recordActions {
+	display: flex;
+	gap: 0.375rem;
+}
+.approveBtn {
+	padding: 3px 10px;
+	border-radius: 0.375rem;
+	border: none;
+	background: #d1fae5;
+	color: #065f46;
+	font-size: 0.78rem;
+	cursor: pointer;
+	font-weight: 500;
+}
+.approveBtn:hover {
+	background: #a7f3d0;
+}
+.denyBtn {
+	padding: 3px 10px;
+	border-radius: 0.375rem;
+	border: none;
+	background: #fee2e2;
+	color: #991b1b;
+	font-size: 0.78rem;
+	cursor: pointer;
+	font-weight: 500;
+}
+.denyBtn:hover {
+	background: #fecaca;
+}
+.reviewedText {
+	font-size: 0.78rem;
+	color: #9ca3af;
+}
+
+/* ── Mobile ──────────────────────────────────────────────────────────────── */
+@media (max-width: 768px) {
+	.pageTabBar {
+		gap: 0;
+		flex-wrap: wrap;
+	}
+	.pageTabActions {
+		padding-bottom: 8px;
+	}
+	.screenshotBtn,
+	.importBtn {
+		font-size: 0.75rem;
+		padding: 0.35rem 0.6rem;
+	}
+	.modal {
+		max-width: 100%;
+		border-radius: 0.75rem;
+	}
+	.swapRow {
+		gap: 0.5rem;
+	}
+	.recordsFilterBar {
+		gap: 0.5rem;
+	}
+	.exportBtn {
+		margin-left: 0;
+		width: 100%;
+	}
+}
+
+/* ── Records wrapper — white card on dark background ─── */
+.recordsWrapper {
+	background: white;
+	border-radius: 0.75rem;
+	padding: 1.25rem;
+	margin-top: 0.5rem;
+	box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+
+/* ── Date range filter extras ────────────────────────── */
+.filterRangeLabel {
+	font-size: 0.82rem;
+	color: #6b7280;
+	white-space: nowrap;
+	align-self: center;
+}
+.filterRangeSep {
+	color: #9ca3af;
+	align-self: center;
+}
+.filterActions {
+	display: flex;
+	gap: 0.5rem;
+	margin-left: auto;
+	align-items: center;
+}
+
+/* ── Delete buttons ──────────────────────────────────── */
+.deleteSelectedBtn {
+	padding: 0.4rem 0.875rem;
+	border-radius: 0.5rem;
+	border: none;
+	background: #fee2e2;
+	color: #991b1b;
+	font-size: 0.85rem;
+	font-weight: 600;
+	cursor: pointer;
+}
+.deleteSelectedBtn:hover {
+	background: #fecaca;
+}
+
+.deleteBtn {
+	padding: 2px 6px;
+	border-radius: 0.375rem;
+	border: none;
+	background: transparent;
+	color: #9ca3af;
+	font-size: 0.85rem;
+	cursor: pointer;
+}
+.deleteBtn:hover {
+	color: #dc2626;
+	background: #fee2e2;
+}
+
+@media (max-width: 768px) {
+	.filterActions {
+		margin-left: 0;
+		width: 100%;
+	}
+	.filterRangeLabel {
+		display: none;
+	}
+}

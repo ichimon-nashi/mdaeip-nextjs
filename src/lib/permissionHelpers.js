@@ -23,3 +23,16 @@ export const hasAppAccess = (user, appName) => {
 	if (isSpecialAdmin(user)) return true;
 	return user.app_permissions?.[appName]?.access === true;
 };
+
+/**
+ * Check if user is a ground staff role.
+ * Used only for post-login redirect logic — NOT for drawer visibility.
+ * Drawer visibility is always permission-key driven via hasAppAccess.
+ *
+ * @param {object} user - user object from AuthContext
+ * @returns {boolean}
+ */
+export const isGroundStaff = (user) => {
+	if (!user) return false;
+	return ['運務員', '地勤督導', '地勤組長', '地勤經理'].includes(user.role);
+};

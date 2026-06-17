@@ -398,3 +398,9 @@
 		height: 36px;
 	}
 }
+/* ── Section divider between nav groups ── */
+.drawerSectionDivider {
+	border: none;
+	border-top: 1px solid #e5e7eb;
+	margin: 0.25rem 0 0.5rem;
+}

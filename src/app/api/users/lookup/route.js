@@ -1,4 +1,5 @@
 import { employeeList } from "../../../../lib/DataRoster";
+import { groundEmployeeList } from "../../../../lib/groundHelpers";
 import { NextResponse } from "next/server";
 
 export async function GET(request) {
@@ -28,8 +29,9 @@ export async function GET(request) {
 			);
 		}
 
-		// Find employee in the roster
-		const employee = employeeList.find((emp) => emp.id === employeeId);
+		// Find employee in cabin crew roster first, then ground staff list
+		const employee = employeeList.find((emp) => emp.id === employeeId)
+			|| groundEmployeeList.find((emp) => emp.id === employeeId);
 
 		if (!employee) {
 			return NextResponse.json(

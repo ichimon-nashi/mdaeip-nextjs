@@ -43,10 +43,8 @@ const NavigationDrawer = ({ isOpen, onClose, userDetails }) => {
   }, [isOpen]);
 
   const user = userDetails;
-  console.log("dispatch access check:", { user, result: hasAppAccess(user, "dispatch") });
 
-  const handleNavigation = (path, hasAccess) => {
-    if (!hasAccess) return;
+  const handleNavigation = (path) => {
     router.push(path);
     onClose();
   };
@@ -55,98 +53,149 @@ const NavigationDrawer = ({ isOpen, onClose, userDetails }) => {
     if (e.target === e.currentTarget) onClose();
   };
 
-  const menuItems = [
+  // ── Four sections ────────────────────────────────────────────────────────────
+  const sections = [
     {
-      id:          "dashboard",
-      title:       "我的班表",
-      description: "個人班表總覽",
-      icon:        <PngIcon src="/assets/profile.png" alt="Dashboard" />,
-      path:        "/dashboard",
-      color:       "#6d3b47",
-      hasAccess:   !!user,
+      id:    "cabin-crew",
+      title: "空服",
+      items: [
+        {
+          id:          "dashboard",
+          title:       "我的班表",
+          description: "個人班表總覽",
+          icon:        <PngIcon src="/assets/profile.png" alt="Dashboard" />,
+          path:        "/dashboard",
+          color:       "#6d3b47",
+          hasAccess:   !!user,
+        },
+        {
+          id:          "duty-roster",
+          title:       "換班系統",
+          description: "班表查詢＆換班申請",
+          icon:        <PngIcon src="/assets/schedule.png" alt="Schedule" />,
+          path:        "/schedule",
+          color:       "#2563eb",
+          hasAccess:   hasAppAccess(user, "roster"),
+        },
+        {
+          id:          "vacation-planner",
+          title:       "GDay劃假系統",
+          description: "指定休假申請",
+          icon:        <PngIcon src="/assets/vacation.png" alt="Vacation Planner" />,
+          path:        "/gday",
+          color:       "#7c3aed",
+          hasAccess:   hasAppAccess(user, "gday"),
+        },
+        {
+          id:          "etr-generator",
+          title:       "eTR產生器",
+          description: 'e-"TAHI" Report',
+          icon:        <PngIcon src="/assets/etr.png" alt="ETR Generator" />,
+          path:        "/etr-generator",
+          color:       "#dc2626",
+          hasAccess:   hasAppAccess(user, "etr_generator"),
+        },
+        {
+          id:          "turtle-ranking",
+          title:       "Turtle Ranking",
+          description: "烏龜速度排行榜 🐢",
+          icon:        <PngIcon src="/assets/turtle.png" alt="Turtle Ranking" />,
+          path:        "/turtle-ranking",
+          color:       "#065f46",
+          hasAccess:   hasAppAccess(user, "turtle_ranking"),
+        },
+      ],
     },
     {
-      id:          "duty-roster",
-      title:       "換班系統",
-      description: "班表查詢&換班申請",
-      icon:        <PngIcon src="/assets/schedule.png" alt="Schedule" />,
-      path:        "/schedule",
-      color:       "#2563eb",
-      hasAccess:   hasAppAccess(user, "roster"),
+      id:    "cabin-crew-ofc",
+      title: "空服 OFC",
+      items: [
+        {
+          id:          "mrt-checker",
+          title:       "疲勞管理系統",
+          description: "疲勞管理檢視＆調班系統",
+          icon:        <PngIcon src="/assets/fatigue.png" alt="MRT Checker" />,
+          path:        "/MRTChecker",
+          color:       "#059669",
+          hasAccess:   hasAppAccess(user, "mrt_checker"),
+        },
+        {
+          id:          "dispatch",
+          title:       "派遣表系統",
+          description: "派遣表管理",
+          icon:        <PngIcon src="/assets/dispatch.png" alt="Dispatch" />,
+          path:        "/dispatch",
+          color:       "#0369a1",
+          hasAccess:   hasAppAccess(user, "dispatch"),
+        },
+        {
+          id:          "duty-change-review",
+          title:       "換班審核",
+          description: "換班申請審核管理",
+          icon:        <PngIcon src="/assets/approved.png" alt="Duty Change Review" />,
+          path:        "/duty-change-review",
+          color:       "#be185d",
+          hasAccess:   hasAppAccess(user, "duty_change_review"),
+        },
+      ],
     },
     {
-      id:          "mrt-checker",
-      title:       "疲勞管理系統",
-      description: "疲勞管理檢視＆調班系統",
-      icon:        <PngIcon src="/assets/fatigue.png" alt="MRT Checker" />,
-      path:        "/MRTChecker",
-      color:       "#059669",
-      hasAccess:   hasAppAccess(user, "mrt_checker"),
+      id:    "ground",
+      title: "地勤",
+      items: [
+        {
+          id:          "ground-schedule",
+          title:       "地勤班表",
+          description: "運務員班表查詢＆換班",
+          icon:        <PngIcon src="/assets/schedule.png" alt="Ground Schedule" />,
+          path:        "/ground-schedule",
+          color:       "#d97706",
+          hasAccess:   hasAppAccess(user, "ground_schedule"),
+        },
+        {
+          id:          "ground-roster",
+          title:       "地勤排班",
+          description: "排班管理（督導）",
+          icon:        <PngIcon src="/assets/dispatch.png" alt="Ground Roster" />,
+          path:        "/ground-roster",
+          color:       "#ea580c",
+          hasAccess:   hasAppAccess(user, "ground_roster"),
+        },
+      ],
     },
     {
-      id:          "vacation-planner",
-      title:       "GDay劃假系統",
-      description: "指定休假申請",
-      icon:        <PngIcon src="/assets/vacation.png" alt="Vacation Planner" />,
-      path:        "/gday",
-      color:       "#7c3aed",
-      hasAccess:   hasAppAccess(user, "gday"),
-    },
-    {
-      id:          "etr-generator",
-      title:       "eTR產生器",
-      description: 'e-"TAHI" Report',
-      icon:        <PngIcon src="/assets/etr.png" alt="ETR Generator" />,
-      path:        "/etr-generator",
-      color:       "#dc2626",
-      hasAccess:   hasAppAccess(user, "etr_generator"),
-    },
-    {
-      id:          "dispatch",
-      title:       "派遣表系統",
-      description: "派遣表管理",
-      icon:        <PngIcon src="/assets/dispatch.png" alt="Dispatch" />,
-      path:        "/dispatch",
-      color:       "#0369a1",
-      hasAccess:   hasAppAccess(user, "dispatch"),
-    },
-    {
-      id:          "duty-change-review",
-      title:       "換班審核",
-      description: "換班申請審核管理",
-      icon:        <PngIcon src="/assets/approved.png" alt="Dispatch" />,
-      path:        "/duty-change-review",
-      color:       "#be185d",
-      hasAccess:   hasAppAccess(user, "duty_change_review"),
-    },
-    {
-      id:          "turtle-ranking",
-      title:       "Turtle Ranking",
-      description: "烏龜速度排行榜 🐢",
-      icon:        <PngIcon src="/assets/turtle.png" alt="Dispatch" />,
-      path:        "/turtle-ranking",
-      color:       "#065f46",
-      hasAccess:   hasAppAccess(user, "turtle_ranking"),
-    },
-    {
-      id:          "database-management",
-      title:       "資料庫管理",
-      description: "班表、派遣表、使用者管理",
-      icon:        <PngIcon src="/assets/database.png" alt="Database Management" />,
-      path:        "/database-management",
-      color:       "#f77f00",
-      hasAccess:   hasAppAccess(user, "database_management"),
-    },
-    {
-      id:          "patch-notes",
-      title:       "Patch內容",
-      description: "APP更新項目",
-      icon:        <PngIcon src="/assets/patchnotes.png" alt="Patch Notes" />,
-      path:        "/patch-notes",
-      color:       "#99582a",
-      hasAccess:   !!user,
+      id:    "system",
+      title: "系統",
+      items: [
+        {
+          id:          "database-management",
+          title:       "資料庫管理",
+          description: "班表、派遣表、使用者管理",
+          icon:        <PngIcon src="/assets/database.png" alt="Database Management" />,
+          path:        "/database-management",
+          color:       "#f77f00",
+          hasAccess:   hasAppAccess(user, "database_management"),
+        },
+        {
+          id:          "patch-notes",
+          title:       "Patch內容",
+          description: "APP更新項目",
+          icon:        <PngIcon src="/assets/patchnotes.png" alt="Patch Notes" />,
+          path:        "/patch-notes",
+          color:       "#99582a",
+          hasAccess:   !!user, // always visible to any logged-in user
+        },
+      ],
     },
   ];
+
+  // Only render sections that have at least one accessible item
+  const visibleSections = sections
+    .map((section) => ({
+      ...section,
+      items: section.items.filter((item) => item.hasAccess),
+    }))
+    .filter((section) => section.items.length > 0);
 
   const avatarStyle = {
     backgroundColor: "#f3f4f6",
@@ -163,8 +212,6 @@ const NavigationDrawer = ({ isOpen, onClose, userDetails }) => {
   const avatarSrc    = userDetails?.id
     ? `${SUPABASE_URL}/storage/v1/object/public/avatars/${userDetails.id}.png`
     : null;
-
-  const visibleItems = menuItems.filter((item) => item.hasAccess);
 
   return (
     <>
@@ -239,37 +286,45 @@ const NavigationDrawer = ({ isOpen, onClose, userDetails }) => {
 
         {/* Nav items */}
         <div className={styles.drawerContent}>
-          <div className={styles.drawerSection}>
-            <h3 className={styles.drawerSectionTitle}>應用程式</h3>
-            <div className={styles.drawerMenu}>
-              {visibleItems.map((item) => {
-                const isActive = pathname.startsWith(item.path);
-                return (
-                  <button
-                    key={item.id}
-                    onClick={() => handleNavigation(item.path, true)}
-                    className={`${styles.drawerMenuItem} ${isActive ? styles.active : ""}`}
-                  >
-                    <div className={styles.menuItemIcon} style={{ color: item.color }}>
-                      {item.icon}
-                    </div>
-                    <div className={styles.menuItemContent}>
-                      <div className={styles.menuItemTitleContainer}>
-                        <div className={styles.menuItemTitle}>{item.title}</div>
-                      </div>
-                      <div className={styles.menuItemDescription}>{item.description}</div>
-                    </div>
-                    {isActive && <div className={styles.menuItemIndicator} />}
-                  </button>
-                );
-              })}
+          {visibleSections.map((section, sectionIndex) => (
+            <div key={section.id}>
+              {/* Divider between sections, not before the first */}
+              {sectionIndex > 0 && (
+                <hr className={styles.drawerSectionDivider} />
+              )}
+              <div className={styles.drawerSection}>
+                <h3 className={styles.drawerSectionTitle}>{section.title}</h3>
+                <div className={styles.drawerMenu}>
+                  {section.items.map((item) => {
+                    const isActive = pathname.startsWith(item.path);
+                    return (
+                      <button
+                        key={item.id}
+                        onClick={() => handleNavigation(item.path)}
+                        className={`${styles.drawerMenuItem} ${isActive ? styles.active : ""}`}
+                      >
+                        <div className={styles.menuItemIcon} style={{ color: item.color }}>
+                          {item.icon}
+                        </div>
+                        <div className={styles.menuItemContent}>
+                          <div className={styles.menuItemTitleContainer}>
+                            <div className={styles.menuItemTitle}>{item.title}</div>
+                          </div>
+                          <div className={styles.menuItemDescription}>{item.description}</div>
+                        </div>
+                        {isActive && <div className={styles.menuItemIndicator} />}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
             </div>
-          </div>
+          ))}
         </div>
 
         {/* Footer */}
         <div className={styles.drawerFooter}>
-          <div className={styles.appVersion}>豪神APP v3.9.2</div>
+          <div className={styles.appVersion}>豪神APP v4.0.0</div>
         </div>
 
       </div>

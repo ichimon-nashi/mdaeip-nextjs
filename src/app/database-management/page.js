@@ -593,6 +593,8 @@ const DatabaseManagement = () => {
 				duty_change_review: { access: false },
 				database_management: { access: false },
 				turtle_ranking: { access: false },
+				ground_schedule: { access: false },
+				ground_roster: { access: false },
 			},
 		});
 		setShowUserModal(true);
@@ -619,6 +621,8 @@ const DatabaseManagement = () => {
 				duty_change_review: { access: false },
 				database_management: { access: false },
 				turtle_ranking: { access: false },
+				ground_schedule: { access: false },
+				ground_roster: { access: false },
 			},
 		});
 		setShowUserModal(true);
@@ -954,10 +958,19 @@ const DatabaseManagement = () => {
 										{ key: "duty_change_review", label: "審核" },
 										{ key: "turtle_ranking", label: "🐢" },
 										{ key: "database_management", label: "DB" },
+										{ key: "ground_schedule", label: "地勤班表" },
+										{ key: "ground_roster", label: "地勤排班" },
 									].filter(({ key }) => userData.app_permissions?.[key]?.access === true);
 
+									const GROUND_RANKS = ['運務員','地勤督導','地勤組長','地勤經理'];
+									const cardModifier = GROUND_RANKS.includes(userData.rank)
+										? styles.userCardGround
+										: userData.rank === 'OTHER'
+										? styles.userCardOther
+										: '';
+
 									return (
-										<div key={userData.id} className={styles.userCard}>
+										<div key={userData.id} className={`${styles.userCard} ${cardModifier}`}>
 											{userData.avatar_gif && (
 												<img
 													src={`/assets/level_gif/${userData.avatar_gif}`}
@@ -1322,13 +1335,22 @@ const DatabaseManagement = () => {
 												}
 											>
 												<option value="">請選擇職位</option>
-												<option value="經理">經理</option>
-												<option value="組長">組長</option>
-												<option value="FI">FI</option>
-												<option value="PR">PR</option>
-												<option value="LF">LF</option>
-												<option value="FS">FS</option>
-												<option value="FA">FA</option>
+												<optgroup label="空服">
+													<option value="經理">經理</option>
+													<option value="組長">組長</option>
+													<option value="FI">FI</option>
+													<option value="PR">PR</option>
+													<option value="LF">LF</option>
+													<option value="FS">FS</option>
+													<option value="FA">FA</option>
+													<option value="OTHER">OTHER</option>
+												</optgroup>
+												<optgroup label="地勤">
+													<option value="地勤經理">地勤經理</option>
+													<option value="地勤組長">地勤組長</option>
+													<option value="地勤督導">地勤督導</option>
+													<option value="運務員">運務員</option>
+												</optgroup>
 											</select>
 										</div>
 									</div>
@@ -1368,15 +1390,86 @@ const DatabaseManagement = () => {
 								{/* ── Section 2: 應用程式權限 ── */}
 								<div className={styles.formSection}>
 									<span className={styles.formSectionLabel}>應用程式權限</span>
+
+									{/* 空服 */}
+									<div className={styles.permGroupLabel}>空服</div>
 									<div className={styles.permissionsGrid}>
 										{[
 											{ key: "roster", label: "換班系統" },
-											{ key: "mrt_checker", label: "疲勞管理系統" },
 											{ key: "gday", label: "GDay劃假" },
 											{ key: "etr_generator", label: "eTR產生器" },
+											{ key: "turtle_ranking", label: "烏龜排行榜 🐢" },
+										].map(({ key, label }) => (
+											<label key={key} className={styles.permissionToggle}>
+												<input
+													type="checkbox"
+													checked={userFormData.app_permissions?.[key]?.access === true}
+													onChange={(e) =>
+														setUserFormData((prev) => ({
+															...prev,
+															app_permissions: { ...prev.app_permissions, [key]: { access: e.target.checked } },
+														}))
+													}
+													className={styles.formCheckbox}
+												/>
+												<span className={styles.permissionLabel}>{label}</span>
+											</label>
+										))}
+									</div>
+
+									{/* 空服 OFC */}
+									<div className={styles.permGroupLabel}>空服 OFC</div>
+									<div className={styles.permissionsGrid}>
+										{[
+											{ key: "mrt_checker", label: "疲勞管理系統" },
 											{ key: "dispatch", label: "派遣表系統" },
 											{ key: "duty_change_review", label: "換班審核" },
-											{ key: "turtle_ranking", label: "烏龜排行榜 🐢" },
+										].map(({ key, label }) => (
+											<label key={key} className={styles.permissionToggle}>
+												<input
+													type="checkbox"
+													checked={userFormData.app_permissions?.[key]?.access === true}
+													onChange={(e) =>
+														setUserFormData((prev) => ({
+															...prev,
+															app_permissions: { ...prev.app_permissions, [key]: { access: e.target.checked } },
+														}))
+													}
+													className={styles.formCheckbox}
+												/>
+												<span className={styles.permissionLabel}>{label}</span>
+											</label>
+										))}
+									</div>
+
+									{/* 地勤 */}
+									<div className={styles.permGroupLabel}>地勤</div>
+									<div className={styles.permissionsGrid}>
+										{[
+											{ key: "ground_schedule", label: "地勤班表" },
+											{ key: "ground_roster", label: "地勤排班" },
+										].map(({ key, label }) => (
+											<label key={key} className={styles.permissionToggle}>
+												<input
+													type="checkbox"
+													checked={userFormData.app_permissions?.[key]?.access === true}
+													onChange={(e) =>
+														setUserFormData((prev) => ({
+															...prev,
+															app_permissions: { ...prev.app_permissions, [key]: { access: e.target.checked } },
+														}))
+													}
+													className={styles.formCheckbox}
+												/>
+												<span className={styles.permissionLabel}>{label}</span>
+											</label>
+										))}
+									</div>
+
+									{/* 系統 */}
+									<div className={styles.permGroupLabel}>系統</div>
+									<div className={styles.permissionsGrid}>
+										{[
 											{ key: "database_management", label: "資料庫管理" },
 										].map(({ key, label }) => (
 											<label key={key} className={styles.permissionToggle}>
