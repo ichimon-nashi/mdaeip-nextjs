@@ -1,0 +1,56 @@
+/* GroundRoster.module.css
+   Placeholder "under construction" screen for /ground-roster (地勤排班).
+   Uses the same gradient/centered-content visual language as the loading
+   screens in Schedule.module.css, so it feels consistent with the rest of
+   the app rather than a generic error page.
+*/
+
+.constructionScreen {
+	min-height: 100vh;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	/* background: linear-gradient(135deg, #1e3a8a, #7c3aed, #db2777); */
+	padding: 2rem;
+}
+
+.constructionContent {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: 1rem;
+	text-align: center;
+	max-width: 480px;
+}
+
+.constructionImage {
+	max-width: 280px;
+	width: 100%;
+	height: auto;
+	margin-bottom: 0.5rem;
+}
+
+.constructionTitle {
+	color: white;
+	font-size: 1.5rem;
+	font-weight: 700;
+	margin: 0;
+}
+
+.constructionText {
+	color: rgba(255, 255, 255, 0.85);
+	font-size: 1rem;
+	margin: 0;
+}
+
+@media (max-width: 480px) {
+	.constructionImage {
+		max-width: 200px;
+	}
+	.constructionTitle {
+		font-size: 1.25rem;
+	}
+	.constructionText {
+		font-size: 0.9rem;
+	}
+}

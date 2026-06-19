@@ -24,6 +24,16 @@ import {
 import styles from "../../styles/DatabaseManagement.module.css";
 
 // All available gif keys, split by gender prefix
+// User grouping for filter tabs and card tinting
+const GROUND_RANKS = ['運務員', '地勤督導', '地勤組長', '地勤經理'];
+
+const getUserGroup = (userData) => {
+	if (userData.id === 'admin' || userData.id === '51892') return 'admin';
+	if (GROUND_RANKS.includes(userData.rank)) return 'ground';
+	if (userData.rank === 'OTHER') return 'other';
+	return 'cabin';
+};
+
 const GIF_KEYS = {
 	M: [
 		"m_archer","m_bard","m_blackmage","m_calculator","m_chemist",
@@ -761,6 +771,100 @@ const DatabaseManagement = () => {
 		);
 	}
 
+	const renderUserCard = (userData) => {
+		const avatarUrl = `https://rhdpkxkmugimtlbdizfp.supabase.co/storage/v1/object/public/avatars/${userData.id}.png`;
+		const initials = userData.name ? userData.name.slice(0, 2) : userData.id.slice(0, 2);
+		const enabledPerms = [
+			{ key: "roster", label: "換班" },
+			{ key: "mrt_checker", label: "休時" },
+			{ key: "gday", label: "GDay" },
+			{ key: "etr_generator", label: "eTR" },
+			{ key: "dispatch", label: "派遣" },
+			{ key: "duty_change_review", label: "審核" },
+			{ key: "turtle_ranking", label: "🐢" },
+			{ key: "database_management", label: "DB" },
+			{ key: "ground_schedule", label: "地勤班表" },
+			{ key: "ground_roster", label: "地勤排班" },
+		].filter(({ key }) => userData.app_permissions?.[key]?.access === true);
+
+		const userGroup = getUserGroup(userData);
+		const cardModifier = userGroup === 'ground' ? styles.userCardGround
+			: userGroup === 'other' ? styles.userCardOther
+			: userGroup === 'admin' ? styles.userCardAdmin
+			: '';
+
+		return (
+			<div key={userData.id} className={`${styles.userCard} ${cardModifier}`}>
+				{userData.avatar_gif && (
+					<img
+						src={`/assets/level_gif/${userData.avatar_gif}`}
+						alt=""
+						className={styles.userCardGif}
+					/>
+				)}
+				<div className={styles.userCardTop}>
+					<div className={styles.userCardAvatar}>
+						<img
+							src={avatarUrl}
+							alt={userData.name}
+							className={styles.userCardAvatarImg}
+							onError={(e) => {
+								e.currentTarget.style.display = "none";
+								e.currentTarget.nextSibling.style.display = "flex";
+							}}
+						/>
+						<div className={styles.userCardAvatarInitials}>{initials}</div>
+					</div>
+					<div className={styles.userCardIdentity}>
+						<span className={styles.userCardName}>{userData.name}</span>
+						<span className={styles.userCardId}>#{userData.id}</span>
+					</div>
+				</div>
+
+				<div className={styles.userCardBadges}>
+					{userData.rank && (
+						<span className={styles.rankBadge}>{userData.rank}</span>
+					)}
+					{userData.base && (
+						<span className={`${styles.baseBadge} ${styles["base" + userData.base]}`}>
+							{userData.base}
+						</span>
+					)}
+					<span className={`${styles.accessLevelBadge} ${styles[getAccessLevelClass(userData.access_level)]}`}>
+						Lv {userData.access_level}
+					</span>
+				</div>
+
+				{enabledPerms.length > 0 && (
+					<div className={styles.userCardPermissions}>
+						{enabledPerms.map(({ key, label }) => (
+							<span key={key} className={styles.userCardPermChip}>{label}</span>
+						))}
+					</div>
+				)}
+
+				<div className={styles.userCardActions}>
+					<button
+						className={styles.editButton}
+						onClick={() => handleEditUser(userData)}
+						title="編輯使用者"
+					>
+						<Edit size={15} />
+						編輯
+					</button>
+					<button
+						className={styles.deleteButton}
+						onClick={() => handleDeleteUser(userData.id, userData.name)}
+						title="刪除使用者"
+					>
+						<Trash2 size={15} />
+						刪除
+					</button>
+				</div>
+			</div>
+		);
+	};
+
 	return (
 		<div className={styles.container}>
 			<div className={styles.header}>
@@ -945,103 +1049,29 @@ const DatabaseManagement = () => {
 								<p>點選新增使用者按鈕開始新增</p>
 							</div>
 						) : (
-							<div className={styles.userCards}>
-								{users.map((userData) => {
-									const avatarUrl = `https://rhdpkxkmugimtlbdizfp.supabase.co/storage/v1/object/public/avatars/${userData.id}.png`;
-									const initials = userData.name ? userData.name.slice(0, 2) : userData.id.slice(0, 2);
-									const enabledPerms = [
-										{ key: "roster", label: "換班" },
-										{ key: "mrt_checker", label: "休時" },
-										{ key: "gday", label: "GDay" },
-										{ key: "etr_generator", label: "eTR" },
-										{ key: "dispatch", label: "派遣" },
-										{ key: "duty_change_review", label: "審核" },
-										{ key: "turtle_ranking", label: "🐢" },
-										{ key: "database_management", label: "DB" },
-										{ key: "ground_schedule", label: "地勤班表" },
-										{ key: "ground_roster", label: "地勤排班" },
-									].filter(({ key }) => userData.app_permissions?.[key]?.access === true);
-
-									const GROUND_RANKS = ['運務員','地勤督導','地勤組長','地勤經理'];
-									const cardModifier = GROUND_RANKS.includes(userData.rank)
-										? styles.userCardGround
-										: userData.rank === 'OTHER'
-										? styles.userCardOther
-										: '';
-
-									return (
-										<div key={userData.id} className={`${styles.userCard} ${cardModifier}`}>
-											{userData.avatar_gif && (
-												<img
-													src={`/assets/level_gif/${userData.avatar_gif}`}
-													alt=""
-													className={styles.userCardGif}
-												/>
-											)}
-											<div className={styles.userCardTop}>
-												<div className={styles.userCardAvatar}>
-													<img
-														src={avatarUrl}
-														alt={userData.name}
-														className={styles.userCardAvatarImg}
-														onError={(e) => {
-															e.currentTarget.style.display = "none";
-															e.currentTarget.nextSibling.style.display = "flex";
-														}}
-													/>
-													<div className={styles.userCardAvatarInitials}>{initials}</div>
-												</div>
-												<div className={styles.userCardIdentity}>
-													<span className={styles.userCardName}>{userData.name}</span>
-													<span className={styles.userCardId}>#{userData.id}</span>
-												</div>
-											</div>
-
-											<div className={styles.userCardBadges}>
-												{userData.rank && (
-													<span className={styles.rankBadge}>{userData.rank}</span>
-												)}
-												{userData.base && (
-													<span className={`${styles.baseBadge} ${styles["base" + userData.base]}`}>
-														{userData.base}
-													</span>
-												)}
-												<span className={`${styles.accessLevelBadge} ${styles[getAccessLevelClass(userData.access_level)]}`}>
-													Lv {userData.access_level}
-												</span>
-											</div>
-
-											{enabledPerms.length > 0 && (
-												<div className={styles.userCardPermissions}>
-													{enabledPerms.map(({ key, label }) => (
-														<span key={key} className={styles.userCardPermChip}>{label}</span>
-													))}
-												</div>
-											)}
-
-											<div className={styles.userCardActions}>
-												<button
-													className={styles.editButton}
-													onClick={() => handleEditUser(userData)}
-													title="編輯使用者"
-												>
-													<Edit size={15} />
-													編輯
-												</button>
-												<button
-													className={styles.deleteButton}
-													onClick={() => handleDeleteUser(userData.id, userData.name)}
-													title="刪除使用者"
-												>
-													<Trash2 size={15} />
-													刪除
-												</button>
-											</div>
+						<div className={styles.userGroupsContainer}>
+							{[
+								{ key: "cabin", label: "空服" },
+								{ key: "other", label: "OTHER" },
+								{ key: "ground", label: "地勤" },
+								{ key: "admin", label: "GOD" },
+							].map(({ key, label }) => {
+								const groupUsers = users.filter((u) => getUserGroup(u) === key);
+								if (groupUsers.length === 0) return null;
+								return (
+									<div key={key} className={styles.userGroupSection}>
+										<div className={styles.userGroupSectionHeader}>
+											<span className={styles.userGroupSectionTitle}>{label}</span>
+											<span className={styles.userGroupCount}>{groupUsers.length}</span>
 										</div>
-									);
-								})}
-							</div>
-						)}
+										<div className={styles.userCards}>
+											{groupUsers.map((userData) => renderUserCard(userData))}
+										</div>
+									</div>
+								);
+							})}
+						</div>
+					)}
 					</div>
 				)}
 			</div>
@@ -1388,10 +1418,11 @@ const DatabaseManagement = () => {
 								</div>
 
 								{/* ── Section 2: 應用程式權限 ── */}
-								<div className={styles.formSection}>
+								<div className={`${styles.formSection} ${styles.permissionsSection}`}>
 									<span className={styles.formSectionLabel}>應用程式權限</span>
 
 									{/* 空服 */}
+									<div className={styles.permGroup}>
 									<div className={styles.permGroupLabel}>空服</div>
 									<div className={styles.permissionsGrid}>
 										{[
@@ -1416,8 +1447,10 @@ const DatabaseManagement = () => {
 											</label>
 										))}
 									</div>
+									</div>
 
 									{/* 空服 OFC */}
+									<div className={styles.permGroup}>
 									<div className={styles.permGroupLabel}>空服 OFC</div>
 									<div className={styles.permissionsGrid}>
 										{[
@@ -1441,8 +1474,10 @@ const DatabaseManagement = () => {
 											</label>
 										))}
 									</div>
+									</div>
 
 									{/* 地勤 */}
+									<div className={styles.permGroup}>
 									<div className={styles.permGroupLabel}>地勤</div>
 									<div className={styles.permissionsGrid}>
 										{[
@@ -1465,8 +1500,10 @@ const DatabaseManagement = () => {
 											</label>
 										))}
 									</div>
+									</div>
 
 									{/* 系統 */}
+									<div className={styles.permGroup}>
 									<div className={styles.permGroupLabel}>系統</div>
 									<div className={styles.permissionsGrid}>
 										{[
@@ -1487,6 +1524,7 @@ const DatabaseManagement = () => {
 												<span className={styles.permissionLabel}>{label}</span>
 											</label>
 										))}
+									</div>
 									</div>
 								</div>
 

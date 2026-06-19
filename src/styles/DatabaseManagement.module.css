@@ -15,6 +15,20 @@
 	}
 }
 
+@media (min-width: 1700px) {
+	.container {
+		max-width: 90vw; /* Scale with viewport instead of a hard cap, so wide
+		                     monitors actually get more columns of user cards */
+	}
+}
+
+@media (min-width: 2200px) {
+	.container {
+		max-width: 2000px; /* Stop growing past this point — avoids cards
+		                       stretching uncomfortably wide on ultra-wide displays */
+	}
+}
+
 .loadingScreen {
 	display: flex;
 	justify-content: center;
@@ -692,6 +706,16 @@
 	background: linear-gradient(135deg, #8b5cf6, #7c3aed);
 }
 
+/* Admin account's base value — was missing entirely, leaving white text
+   with no background (unreadable) per 2026-06-18 report. Black avoids the
+   near-duplicate red already used for the real TSA base badge.
+   NOTE: confirmed via direct DB query the actual stored value is
+   lowercase "root", not "ROOT" — class name must match exactly since
+   styles["base" + userData.base] is case-sensitive string concatenation. */
+.baseroot {
+	background: linear-gradient(135deg, #374151, #111827);
+}
+
 /* User Actions */
 .userActions {
 	display: flex;
@@ -992,88 +1016,15 @@
 		max-width: 700px;
 	}
 }
-/* DatabaseManagement.module.css - Complete with User Management Styles */
 
-.container {
-	max-width: 1200px;
-	margin: 0 auto;
-	padding: 20px;
-	min-height: 100vh;
-	background-color: #f8fafc;
-}
-
-.loadingScreen {
-	display: flex;
-	justify-content: center;
-	align-items: center;
-	min-height: 60vh;
-}
-
-.loadingContent {
-	text-align: center;
-	color: #64748b;
-}
-
-.loadingSpinner {
-	width: 40px;
-	height: 40px;
-	border: 3px solid #e2e8f0;
-	border-top: 3px solid #3b82f6;
-	border-radius: 50%;
-	animation: spin 1s linear infinite;
-	margin: 0 auto 16px;
-}
-
-@keyframes spin {
-	0% {
-		transform: rotate(0deg);
-	}
-	100% {
-		transform: rotate(360deg);
-	}
-}
-
-.accessDenied {
-	display: flex;
-	flex-direction: column;
-	align-items: center;
-	justify-content: center;
-	min-height: 60vh;
-	text-align: center;
-	color: #dc2626;
-}
-
-.accessDenied h2 {
-	margin: 16px 0 8px;
-	font-size: 1.5rem;
-	font-weight: 600;
-}
-
-.accessDenied p {
-	color: #64748b;
-	font-size: 1rem;
-}
-
-.header {
-	background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-	border-radius: 12px;
-	padding: 24px;
-	margin-bottom: 24px;
-	color: white;
-	box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
-}
-
-.headerContent {
-	display: flex;
-	align-items: center;
-	gap: 16px;
-}
-
-.headerIcon {
-	background: rgba(255, 255, 255, 0.2);
-	padding: 8px;
-	border-radius: 8px;
-}
+/* ── Merged from a duplicate copy of this file found 2026-06-19 ──────────
+   The file had been silently concatenated with an older version of
+   itself at some point during iterative edits. The two halves had
+   DIVERGED — this half has the container-width fix and base badge
+   colors; the appended section below has the user-card grouping system
+   (.userCard, .userCardAdmin, .userGroupSection, etc.) that only ever
+   existed in the second copy. True duplicates between the two halves
+   were dropped, keeping the first half's version in each case. ── */
 
 .headerText h1 {
 	margin: 0 0 4px;
@@ -1085,453 +1036,6 @@
 	margin: 0;
 	opacity: 0.9;
 	font-size: 1rem;
-}
-
-.tabContainer {
-	display: flex;
-	background: white;
-	border-radius: 8px;
-	padding: 4px;
-	margin-bottom: 24px;
-	box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1);
-	gap: 4px;
-}
-
-.tab {
-	flex: 1;
-	display: flex;
-	align-items: center;
-	justify-content: center;
-	gap: 8px;
-	padding: 12px 16px;
-	background: transparent;
-	border: none;
-	border-radius: 6px;
-	cursor: pointer;
-	transition: all 0.2s ease;
-	color: #64748b;
-	font-weight: 500;
-}
-
-.tab:hover {
-	background: #f1f5f9;
-	color: #334155;
-}
-
-.tab.active {
-	background: #3b82f6;
-	color: white;
-	box-shadow: 0 2px 4px -1px rgba(59, 130, 246, 0.3);
-}
-
-.content {
-	background: white;
-	border-radius: 12px;
-	padding: 24px;
-	box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1);
-	min-height: 500px;
-}
-
-.tabContent {
-	animation: fadeIn 0.3s ease-in;
-}
-
-@keyframes fadeIn {
-	from {
-		opacity: 0;
-		transform: translateY(8px);
-	}
-	to {
-		opacity: 1;
-		transform: translateY(0);
-	}
-}
-
-.sectionHeader {
-	display: flex;
-	justify-content: space-between;
-	align-items: center;
-	margin-bottom: 24px;
-	padding-bottom: 16px;
-	border-bottom: 1px solid #e2e8f0;
-}
-
-.sectionHeader h2 {
-	margin: 0;
-	font-size: 1.5rem;
-	font-weight: 600;
-	color: #1e293b;
-}
-
-.sectionActions {
-	display: flex;
-	gap: 12px;
-}
-
-.uploadButton {
-	display: flex;
-	align-items: center;
-	gap: 8px;
-	padding: 10px 16px;
-	background: #10b981;
-	color: white;
-	border: none;
-	border-radius: 8px;
-	cursor: pointer;
-	font-weight: 500;
-	transition: all 0.2s ease;
-	box-shadow: 0 2px 4px -1px rgba(16, 185, 129, 0.3);
-}
-
-.uploadButton:hover {
-	background: #059669;
-	transform: translateY(-1px);
-	box-shadow: 0 4px 8px -1px rgba(16, 185, 129, 0.4);
-}
-
-.cleanupButton {
-	display: flex;
-	align-items: center;
-	gap: 8px;
-	padding: 10px 16px;
-	background: #f59e0b;
-	color: white;
-	border: none;
-	border-radius: 8px;
-	cursor: pointer;
-	font-weight: 500;
-	transition: all 0.2s ease;
-	box-shadow: 0 2px 4px -1px rgba(245, 158, 11, 0.3);
-}
-
-.cleanupButton:hover {
-	background: #d97706;
-	transform: translateY(-1px);
-	box-shadow: 0 4px 8px -1px rgba(245, 158, 11, 0.4);
-}
-
-.cleanupButton:disabled {
-	background: #94a3b8;
-	cursor: not-allowed;
-	transform: none;
-	box-shadow: none;
-}
-
-.comingSoonButton {
-	display: flex;
-	align-items: center;
-	gap: 8px;
-	padding: 10px 16px;
-	background: #94a3b8;
-	color: white;
-	border: none;
-	border-radius: 8px;
-	cursor: not-allowed;
-	font-weight: 500;
-}
-
-.dataGrid {
-	display: grid;
-	grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-	gap: 16px;
-}
-
-.dataCard {
-	background: #f8fafc;
-	border: 1px solid #e2e8f0;
-	border-radius: 8px;
-	padding: 16px;
-	transition: all 0.2s ease;
-}
-
-.dataCard:hover {
-	border-color: #cbd5e1;
-	box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
-}
-
-.cardHeader {
-	display: flex;
-	align-items: center;
-	gap: 8px;
-	margin-bottom: 12px;
-}
-
-.cardHeader h3 {
-	margin: 0;
-	font-size: 1.125rem;
-	font-weight: 600;
-	color: #1e293b;
-}
-
-.cardContent {
-	margin-bottom: 16px;
-}
-
-.cardContent p {
-	margin: 0;
-	color: #64748b;
-	font-size: 0.875rem;
-}
-
-.cardActions {
-	display: flex;
-	justify-content: flex-end;
-}
-
-.deleteButton {
-	display: flex;
-	align-items: center;
-	gap: 6px;
-	padding: 6px 12px;
-	background: #ef4444;
-	color: white;
-	border: none;
-	border-radius: 6px;
-	cursor: pointer;
-	font-size: 0.875rem;
-	font-weight: 500;
-	transition: all 0.2s ease;
-}
-
-.deleteButton:hover {
-	background: #dc2626;
-}
-
-.deleteButton:disabled {
-	background: #94a3b8;
-	cursor: not-allowed;
-}
-
-.emptyState {
-	display: flex;
-	flex-direction: column;
-	align-items: center;
-	justify-content: center;
-	text-align: center;
-	padding: 48px 24px;
-	color: #64748b;
-}
-
-.emptyState h3 {
-	margin: 16px 0 8px;
-	font-size: 1.25rem;
-	font-weight: 600;
-	color: #374151;
-}
-
-.emptyState p {
-	margin: 0;
-	font-size: 0.875rem;
-}
-
-/* Modal Styles */
-.modalOverlay {
-	position: fixed;
-	top: 0;
-	left: 0;
-	right: 0;
-	bottom: 0;
-	background: rgba(0, 0, 0, 0.5);
-	display: flex;
-	justify-content: center;
-	align-items: center;
-	z-index: 1000;
-	padding: 16px;
-}
-
-.modalContent {
-	background: white;
-	border-radius: 12px;
-	width: 100%;
-	max-width: 600px;
-	max-height: 90vh;
-	overflow: hidden;
-	box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1);
-}
-
-.modalHeader {
-	display: flex;
-	justify-content: space-between;
-	align-items: center;
-	padding: 20px 24px;
-	border-bottom: 1px solid #e2e8f0;
-	background: #f8fafc;
-}
-
-.modalHeader h3 {
-	margin: 0;
-	font-size: 1.25rem;
-	font-weight: 600;
-	color: #1e293b;
-	display: flex;
-	align-items: center;
-	gap: 8px;
-}
-
-.modalClose {
-	background: none;
-	border: none;
-	color: #64748b;
-	cursor: pointer;
-	padding: 4px;
-	border-radius: 4px;
-	transition: all 0.2s ease;
-}
-
-.modalClose:hover {
-	background: #e2e8f0;
-	color: #374151;
-}
-
-.modalBody {
-	padding: 24px;
-	max-height: 60vh;
-	overflow-y: auto;
-}
-
-.uploadInstructions {
-	margin-bottom: 16px;
-	padding: 16px;
-	background: #f0f9ff;
-	border: 1px solid #0ea5e9;
-	border-radius: 8px;
-}
-
-.uploadInstructions h4 {
-	margin: 0 0 8px;
-	color: #0c4a6e;
-	font-size: 0.875rem;
-	font-weight: 600;
-}
-
-.uploadInstructions ul {
-	margin: 0;
-	padding-left: 16px;
-	color: #0c4a6e;
-	font-size: 0.875rem;
-}
-
-.uploadInstructions li {
-	margin-bottom: 4px;
-}
-
-.jsonTextarea {
-	width: 100%;
-	padding: 12px;
-	border: 1px solid #d1d5db;
-	border-radius: 8px;
-	resize: vertical;
-	font-family: "Monaco", "Menlo", "Ubuntu Mono", monospace;
-	font-size: 0.875rem;
-	line-height: 1.5;
-	background: #f9fafb;
-}
-
-.jsonTextarea:focus {
-	outline: none;
-	border-color: #3b82f6;
-	box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
-}
-
-.modalFooter {
-	display: flex;
-	justify-content: flex-end;
-	gap: 12px;
-	padding: 16px 24px;
-	border-top: 1px solid #e2e8f0;
-	background: #f8fafc;
-}
-
-.cancelButton {
-	padding: 10px 16px;
-	background: #f1f5f9;
-	color: #64748b;
-	border: 1px solid #d1d5db;
-	border-radius: 8px;
-	cursor: pointer;
-	font-weight: 500;
-	transition: all 0.2s ease;
-}
-
-.cancelButton:hover {
-	background: #e2e8f0;
-	color: #374151;
-}
-
-.cancelButton:disabled {
-	opacity: 0.5;
-	cursor: not-allowed;
-}
-
-.confirmButton {
-	display: flex;
-	align-items: center;
-	gap: 8px;
-	padding: 10px 16px;
-	background: #3b82f6;
-	color: white;
-	border: none;
-	border-radius: 8px;
-	cursor: pointer;
-	font-weight: 500;
-	transition: all 0.2s ease;
-}
-
-.confirmButton:hover {
-	background: #2563eb;
-}
-
-.confirmButton:disabled {
-	background: #94a3b8;
-	cursor: not-allowed;
-}
-
-.buttonSpinner {
-	width: 16px;
-	height: 16px;
-	border: 2px solid rgba(255, 255, 255, 0.3);
-	border-top: 2px solid white;
-	border-radius: 50%;
-	animation: spin 1s linear infinite;
-}
-
-/* USER MANAGEMENT STYLES */
-
-/* Users Table Styles */
-.usersTable {
-	width: 100%;
-	margin-top: 1rem;
-}
-
-.usersTable table {
-	width: 100%;
-	border-collapse: collapse;
-	background: white;
-	border-radius: 8px;
-	overflow: hidden;
-	box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-}
-
-.usersTable th,
-.usersTable td {
-	padding: 12px 16px;
-	text-align: center;
-	border-bottom: 1px solid #f0f0f0;
-}
-
-.usersTable th {
-	background: #f8f9fa;
-	font-weight: 600;
-	color: #333;
-	border-bottom: 2px solid #e9ecef;
-}
-
-.usersTable tr:hover {
-	background: #f8f9fa;
-}
-
-.usersTable tr:last-child td {
-	border-bottom: none;
 }
 
 /* Access Level Badge */
@@ -1555,272 +1059,6 @@
 	background: #f3e5f5;
 	color: #7b1fa2;
 	border: 1px solid #e1bee7;
-}
-
-/* User Actions */
-.userActions {
-	display: flex;
-	gap: 8px;
-	align-items: center;
-}
-
-.editButton {
-	padding: 6px;
-	border: none;
-	border-radius: 4px;
-	background: #e3f2fd;
-	color: #1565c0;
-	cursor: pointer;
-	transition: all 0.2s ease;
-	display: flex;
-	align-items: center;
-	justify-content: center;
-}
-
-.editButton:hover {
-	background: #bbdefb;
-	transform: translateY(-1px);
-}
-
-.editButton:disabled {
-	opacity: 0.5;
-	cursor: not-allowed;
-	transform: none;
-}
-
-/* User Form Styles */
-.userForm {
-	display: flex;
-	flex-direction: column;
-	gap: 1rem;
-}
-
-.formGroup {
-	display: flex;
-	flex-direction: column;
-	gap: 0.5rem;
-}
-
-.formGroup label {
-	font-weight: 500;
-	color: #333;
-	font-size: 0.9rem;
-}
-
-.formGroup input,
-.formGroup select {
-	padding: 10px 12px;
-	border: 1px solid #ddd;
-	border-radius: 6px;
-	font-size: 1rem;
-	transition: border-color 0.2s ease;
-}
-
-.formGroup input:focus,
-.formGroup select:focus {
-	outline: none;
-	border-color: #007bff;
-	box-shadow: 0 0 0 2px rgba(0, 123, 255, 0.1);
-}
-
-.formGroup input:disabled {
-	background: #f8f9fa;
-	color: #6c757d;
-	cursor: not-allowed;
-}
-
-.inputGroup {
-	display: flex;
-	gap: 8px;
-	align-items: center;
-}
-
-.inputGroup input {
-	flex: 1;
-}
-
-.lookupButton {
-	padding: 10px;
-	border: 1px solid #007bff;
-	border-radius: 6px;
-	background: #007bff;
-	color: white;
-	cursor: pointer;
-	transition: all 0.2s ease;
-	display: flex;
-	align-items: center;
-	justify-content: center;
-	min-width: 44px;
-}
-
-.lookupButton:hover {
-	background: #0056b3;
-	transform: translateY(-1px);
-}
-
-.lookupButton:disabled {
-	opacity: 0.6;
-	cursor: not-allowed;
-	transform: none;
-}
-
-.passwordGroup {
-	position: relative;
-	display: flex;
-	align-items: center;
-}
-
-.passwordGroup input {
-	flex: 1;
-	padding-right: 44px;
-}
-
-.passwordToggle {
-	position: absolute;
-	right: 12px;
-	padding: 4px;
-	border: none;
-	background: transparent;
-	color: #6c757d;
-	cursor: pointer;
-	border-radius: 4px;
-	transition: all 0.2s ease;
-	display: flex;
-	align-items: center;
-	justify-content: center;
-}
-
-.passwordToggle:hover {
-	color: #333;
-	background: #f8f9fa;
-}
-
-/* Loading State */
-.loadingState {
-	display: flex;
-	flex-direction: column;
-	align-items: center;
-	justify-content: center;
-	padding: 3rem;
-	color: #6c757d;
-}
-
-.loadingState p {
-	margin-top: 1rem;
-	font-size: 1rem;
-}
-
-/* Responsive Design */
-@media (max-width: 768px) {
-	.container {
-		padding: 16px;
-	}
-
-	.header {
-		padding: 20px;
-	}
-
-	.headerContent {
-		flex-direction: column;
-		align-items: flex-start;
-		gap: 12px;
-	}
-
-	.headerText h1 {
-		font-size: 1.5rem;
-	}
-
-	.tabContainer {
-		flex-direction: row;
-		padding: 3px;
-		gap: 3px;
-	}
-
-	.tab {
-		justify-content: center;
-		padding: 9px 6px;
-		font-size: 0.8rem;
-		gap: 5px;
-	}
-
-	.tab svg {
-		width: 16px;
-		height: 16px;
-		flex-shrink: 0;
-	}
-
-	.content {
-		padding: 16px;
-	}
-
-	.sectionHeader {
-		flex-direction: column;
-		align-items: flex-start;
-		gap: 16px;
-	}
-
-	.sectionActions {
-		width: 100%;
-		justify-content: stretch;
-	}
-
-	.sectionActions button {
-		flex: 1;
-	}
-
-	.dataGrid {
-		grid-template-columns: 1fr;
-	}
-
-	.modalContent {
-		margin: 16px;
-		max-height: calc(100vh - 32px);
-		max-width: 500px;
-		width: 90%;
-	}
-
-	.modalHeader {
-		padding: 16px;
-	}
-
-	.modalBody {
-		padding: 16px;
-		max-height: 60vh;
-		overflow-y: auto;
-	}
-
-	.modalFooter {
-		padding: 12px 16px;
-		flex-direction: column;
-	}
-
-	.modalFooter button {
-		width: 100%;
-	}
-
-	/* User management responsive styles */
-	.usersTable {
-		overflow-x: auto;
-	}
-
-	.usersTable table {
-		min-width: 600px;
-	}
-
-	.userActions {
-		flex-direction: column;
-		gap: 4px;
-	}
-
-	.inputGroup {
-		flex-direction: column;
-		align-items: stretch;
-	}
-
-	.lookupButton {
-		min-width: auto;
-		padding: 10px 16px;
-	}
 }
 
 .permissionsGrid {
@@ -1865,6 +1103,74 @@
 	max-width: 680px;
 }
 
+/* Desktop: widen further and lay form sections out side-by-side instead of
+   stacking everything in one narrow column. Mobile/tablet (<900px) keeps
+   the original single-column stacked layout untouched.
+
+   Uses semantic className targeting (.formSection--avatar etc. via JSX,
+   or structural :first-of-type/:last-of-type where the markup guarantees
+   exact order) rather than positional :nth-child, which broke silently if
+   sections were ever reordered. The permission groups specifically use a
+   dedicated .permGroup wrapper class (added 2026-06-19) instead of pairing
+   sibling label+grid divs by position. */
+@media (min-width: 900px) {
+	.userModalContent {
+		max-width: 920px;
+	}
+
+	.userForm {
+		display: grid;
+		grid-template-columns: 1fr 1fr;
+		gap: 1rem;
+		align-items: start;
+	}
+
+	/* 角色頭像 (avatar, 1st section) and 基本資料 (basic info, 2nd section)
+	   sit side-by-side in row 1. Permissions (3rd) and password (4th)
+	   sections span full width below them. Each rule targets a distinct,
+	   non-overlapping section so there's no reliance on declaration order
+	   to resolve a conflict. */
+	.userForm > .formSection:nth-of-type(1) {
+		grid-column: 1;
+		grid-row: 1;
+	}
+	.userForm > .formSection:nth-of-type(2) {
+		grid-column: 2;
+		grid-row: 1;
+	}
+	.userForm > .formSection:nth-of-type(3),
+	.userForm > .formSection:nth-of-type(4) {
+		grid-column: 1 / -1;
+	}
+}
+
+@media (min-width: 1400px) {
+	.userModalContent {
+		max-width: 1080px;
+	}
+
+	/* At very wide screens, arrange the 4 permission groups (空服/空服OFC/
+	   地勤/系統) in a clean 2x2 grid. Each .permGroup is one self-contained
+	   unit (label + its checkbox grid), so this is a normal grid layout —
+	   no positional pairing tricks needed. */
+	.permissionsSection {
+		display: grid;
+		grid-template-columns: 1fr 1fr;
+		gap: 0 1.5rem;
+	}
+	.permissionsSection > .formSectionLabel {
+		grid-column: 1 / -1;
+	}
+}
+
+/* Each permission group (label + its checkbox grid) as one self-contained
+   unit — replaces fragile :nth-of-type pairing of loose sibling divs. */
+.permGroup {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+}
+
 /* A grouped card section within the form */
 .formSection {
 	background: #f8fafc;
@@ -1892,24 +1198,55 @@
 	gap: 12px;
 }
 
-/* Collapse to single column on narrow screens */
-@media (max-width: 520px) {
-	.formRow {
-		grid-template-columns: 1fr;
-	}
-
-	.userModalContent {
-		max-width: 100%;
-	}
-}
-
 /* ── User Cards ── */
 
+/* Single source of truth for card grid sizing — DO NOT duplicate this
+   selector elsewhere in this file. A duplicate @media(min-width:1200px)
+   override further down once silently won the cascade and broke desktop
+   column counts (found and removed 2026-06-17). The mobile override for
+   this still lives further down near .userCardActions, intentionally
+   left as-is since it also sets .userCard padding. */
 .userCards {
 	display: grid;
 	grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
 	gap: 16px;
 	margin-top: 4px;
+}
+
+/* ── User groups (cabin crew / OTHER / ground / admin) — grouped, not filtered ── */
+.userGroupsContainer {
+	display: flex;
+	flex-direction: column;
+	gap: 28px;
+}
+
+.userGroupSection {
+	display: flex;
+	flex-direction: column;
+	gap: 12px;
+}
+
+.userGroupSectionHeader {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	padding-bottom: 6px;
+	border-bottom: 2px solid #e2e8f0;
+}
+
+.userGroupSectionTitle {
+	font-size: 1rem;
+	font-weight: 600;
+	color: #1e293b;
+}
+
+.userGroupCount {
+	font-size: 0.72rem;
+	font-weight: 500;
+	padding: 2px 8px;
+	border-radius: 999px;
+	background: #e2e8f0;
+	color: #475569;
 }
 
 .userCard {
@@ -2027,34 +1364,6 @@
 	margin-top: 2px;
 }
 
-.userCardActions .editButton {
-	flex: 1;
-	justify-content: center;
-	gap: 6px;
-	padding: 8px 12px;
-	font-size: 0.85rem;
-	border-radius: 8px;
-	display: flex;
-	align-items: center;
-}
-
-.userCardActions .deleteButton {
-	flex: 1;
-	justify-content: center;
-	gap: 6px;
-	padding: 8px 12px;
-	font-size: 0.85rem;
-	border-radius: 8px;
-	display: flex;
-	align-items: center;
-}
-
-@media (min-width: 1200px) {
-	.userCards {
-		grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-	}
-}
-
 @media (max-width: 640px) {
 	.userCards {
 		grid-template-columns: 1fr;
@@ -2064,7 +1373,22 @@
 	.userCard {
 		padding: 14px;
 	}
+
+	/* Permission checkboxes were hardcoded to 2 columns (1fr 1fr) with no
+	   mobile override — squeezed each label into half the screen width,
+	   causing overflow/truncation on phones. One per row fixes it. */
+	.permissionsGrid {
+		grid-template-columns: 1fr;
+	}
+
+	/* 基本資料 section (姓名/職位, 基地/權限等級) had the exact same bug —
+	   .formRow hardcoded to 2 columns with no mobile override, causing
+	   the same overflow. One per row fixes it. */
+	.formRow {
+		grid-template-columns: 1fr;
+	}
 }
+
 /* ── Gif Avatar Picker ── */
 
 .genderToggleRow {
@@ -2217,6 +1541,7 @@
 		height: 34px;
 	}
 }
+
 /* ── Excel upload section inside upload modal ── */
 .excelUploadSection {
 	margin-bottom: 16px;
@@ -2324,6 +1649,7 @@
 	height: 1px;
 	background: #e5e7eb;
 }
+
 /* ── Ground staff user card — subtle amber tint ── */
 .userCardGround {
 	background: #fffbeb;
@@ -2356,4 +1682,18 @@
 	margin: 10px 0 6px;
 	padding-bottom: 4px;
 	border-bottom: 1px solid #e5e7eb;
+}
+
+/* ── GOD/admin user card — light turquoise tint ────────────────────────── */
+/* Was light blue (clashed with 編輯 button), then purple (clashed with the
+   app-permission chip color #8b5cf6/#7c3aed used elsewhere) — 2026-06-18.
+   Turquoise is unused anywhere else in this card/permission system. */
+.userCardAdmin {
+	background: #ecfeff;
+	border-color: #5eead4;
+}
+
+.userCardAdmin:hover {
+	border-color: #2dd4bf;
+	box-shadow: 0 4px 12px rgba(45, 212, 191, 0.2);
 }

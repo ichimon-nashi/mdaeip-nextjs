@@ -17,6 +17,7 @@ body {
 	background: black url("/assets/bodyBG.jpg") no-repeat;
 	background-size: cover;
 	background-position: center;
+	background-attachment: fixed;
 	color: rgb(0, 0, 0);
 	min-height: 100vh;
 }

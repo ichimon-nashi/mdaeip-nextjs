@@ -194,12 +194,19 @@ export const patchUpdates = [
 			"增加編輯完成標籤以免漏掉更新",
 		],
 	},
-		{
+	{
 		date: "2026-06-04",
 		appName: "GDay劃假系統",
-		updateInfo: [
-			"更改統UI",
-			'增加"複訓G"、"指定任務"',
-		],
+		updateInfo: ["更改統UI", '增加"複訓G"、"指定任務"'],
+	},
+	{
+		date: "2026-06-17",
+		appName: "EIP系統",
+		updateInfo: ["導覽匣增加分類"],
+	},
+	{
+		date: "2026-06-17",
+		appName: "地勤功能",
+		updateInfo: ["增加地勤班表&換班系統"],
 	},
 ];

@@ -10,6 +10,7 @@ import styles from "../../styles/Schedule.module.css";
 import gStyles from "../../styles/GroundSchedule.module.css";
 import {
 	groundEmployeeList,
+	sortGroundEmployees,
 	getGroundEmployeesByBase,
 	getGroundEmployeeById,
 	groundScheduleHelpers,
@@ -233,54 +234,25 @@ const captureFullElement = async (html2canvas, el) => {
 	return canvas;
 };
 
-// Captures the logged-in user's table AND the crew table, stitched into one
-// combined image — so the screenshot never "cuts off" the user's own row,
-// which lives in a visually separate table from the crew list.
-const takeScreenshot = async (
-	userTableRef,
-	crewTableRef,
-	activeBase,
-	currentMonth,
-) => {
+// Captures only the crew/base roster table — same for every user regardless
+// of role. Previously this also stitched the logged-in user's own "Your
+// Schedule" table on top, but that made ground staff screenshots differ
+// from admin's (who has no separate user table). Per 2026-06-18 feedback,
+// screenshots should always look like the admin version: just the one
+// roster table, nothing else.
+const takeScreenshot = async (crewTableRef, activeBase, currentMonth) => {
 	if (!crewTableRef.current) return;
 	try {
 		const html2canvas = (await import("html2canvas")).default;
-
-		const userCanvas = userTableRef?.current
-			? await captureFullElement(html2canvas, userTableRef.current)
-			: null;
-		const crewCanvas = await captureFullElement(
+		const canvas = await captureFullElement(
 			html2canvas,
 			crewTableRef.current,
 		);
 
-		// Stitch vertically: user table on top, small gap, crew table below
-		const GAP = 24;
-		const combinedWidth = Math.max(
-			userCanvas?.width || 0,
-			crewCanvas.width,
-		);
-		const combinedHeight =
-			(userCanvas ? userCanvas.height + GAP : 0) + crewCanvas.height;
-
-		const combined = document.createElement("canvas");
-		combined.width = combinedWidth;
-		combined.height = combinedHeight;
-		const ctx = combined.getContext("2d");
-		ctx.fillStyle = "#ffffff";
-		ctx.fillRect(0, 0, combinedWidth, combinedHeight);
-
-		let yOffset = 0;
-		if (userCanvas) {
-			ctx.drawImage(userCanvas, 0, 0);
-			yOffset = userCanvas.height + GAP;
-		}
-		ctx.drawImage(crewCanvas, 0, yOffset);
-
 		const baseName = activeBase === "ALL" ? "全站" : activeBase;
 		const link = document.createElement("a");
 		link.download = `地勤${baseName}班表-${currentMonth}.png`;
-		link.href = combined.toDataURL("image/png");
+		link.href = canvas.toDataURL("image/png");
 		link.click();
 		toast.success("截圖已下載");
 	} catch (err) {
@@ -474,7 +446,12 @@ const DutyChangeRecords = ({ user, currentMonth }) => {
 			toast("沒有可匯出的記錄", { icon: "ℹ️" });
 			return;
 		}
-		await generateDutyChangePDF(toExport);
+		// PDF rows read top-to-bottom as chronological order: top = earliest
+		// date in the selected range, bottom = latest date.
+		const sortedForExport = [...toExport].sort((a, b) =>
+			a.swap_date.localeCompare(b.swap_date),
+		);
+		await generateDutyChangePDF(sortedForExport);
 	};
 
 	const statusLabel = (s) =>
@@ -986,12 +963,15 @@ export default function GroundSchedulePage() {
 	const MAIN_BASES = ["TSA", "RMQ", "KHH"];
 	const userBase = user?.base || "";
 	const isOtherBase = !MAIN_BASES.includes(userBase);
+	// crewEmployees now includes the logged-in user — per 2026-06-18 feedback,
+	// ground staff want ONE table with everyone's schedule (including their
+	// own), not a separate exclusion. The renderRow function below detects
+	// when a row belongs to the logged-in user and disables swap-click on
+	// it (can't swap with yourself) while still allowing day-off requests.
 	const crewEmployees =
 		activeBase === "ALL"
-			? groundEmployeeList.filter((e) => e.id !== user?.id)
-			: getGroundEmployeesByBase(activeBase).filter(
-					(e) => e.id !== user?.id,
-				);
+			? sortGroundEmployees(groundEmployeeList)
+			: getGroundEmployeesByBase(activeBase);
 
 	// Handlers
 	const handleOwnCellTap = useCallback(
@@ -1490,7 +1470,6 @@ export default function GroundSchedulePage() {
 							className={gStyles.screenshotBtn}
 							onClick={() =>
 								takeScreenshot(
-									userTableRef,
 									crewTableRef,
 									activeBase,
 									currentMonth,
@@ -1504,7 +1483,7 @@ export default function GroundSchedulePage() {
 							<button
 								className={gStyles.importBtn}
 								onClick={() =>
-									toast("Excel匯入功能即將推出", {
+									toast("Excel匯入功能還沒完成", {
 										icon: "ℹ️",
 									})
 								}
@@ -1519,7 +1498,7 @@ export default function GroundSchedulePage() {
 				{assumedEmployee && (
 					<div className={gStyles.assumedBanner}>
 						<span>
-							🔑 管理員代理模式：以{" "}
+							🔑 管理者代理模式：以{" "}
 							<strong>{assumedEmployee.name}</strong>{" "}
 							身份操作換班（不受次數限制）
 						</span>
@@ -1560,7 +1539,7 @@ export default function GroundSchedulePage() {
 						{userEmployee && (
 							<div className={styles.userScheduleContainer}>
 								<h2 className={styles.sectionTitle}>
-									您的班表
+									Your Schedule
 								</h2>
 								<div
 									className={styles.tableContainer}
@@ -1578,7 +1557,9 @@ export default function GroundSchedulePage() {
 
 						{/* Crew Schedule */}
 						<div className={styles.crewSection}>
-							<h2 className={styles.sectionTitle}>同仁班表</h2>
+							<h2 className={styles.sectionTitle}>
+								Crew Members' Schedule
+							</h2>
 							<div className={styles.tabContainer}>
 								{[
 									...(isOtherBase && userBase
@@ -1639,7 +1620,10 @@ export default function GroundSchedulePage() {
 									<tbody>
 										{crewEmployees.length > 0 ? (
 											crewEmployees.map((emp) =>
-												renderRow(emp, false),
+												renderRow(
+													emp,
+													emp.id === user?.id,
+												),
 											)
 										) : (
 											<tr>

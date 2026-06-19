@@ -80,7 +80,9 @@
 	font-size: 10px;
 	font-weight: 700;
 	border: 2px solid white;
-	box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12), 0 1px 2px rgba(0, 0, 0, 0.24);
+	box-shadow:
+		0 1px 3px rgba(0, 0, 0, 0.12),
+		0 1px 2px rgba(0, 0, 0, 0.24);
 }
 
 .userDetails {
@@ -269,47 +271,47 @@
 		height: 100vh;
 		height: 100dvh; /* Dynamic viewport height for mobile browsers */
 	}
-	
+
 	.drawerHeader {
 		padding: 1rem 1rem 0.75rem;
 	}
-	
+
 	.drawerContent {
 		padding: 1rem;
 	}
-	
+
 	.drawerMenuItem {
 		padding: 0.75rem;
 	}
-	
+
 	.userAvatar {
 		width: 40px;
 		height: 40px;
 		font-size: 16px;
 	}
-	
+
 	.userLevelBadge {
 		width: 18px;
 		height: 18px;
 		font-size: 9px;
 	}
-	
+
 	.userName {
 		font-size: 1rem;
 	}
-	
+
 	.userMeta {
 		font-size: 0.75rem;
 	}
-	
+
 	.menuItemTitle {
 		font-size: 14px;
 	}
-	
+
 	.menuItemDescription {
 		font-size: 11px;
 	}
-	
+
 	.accessLevelRequired {
 		font-size: 9px;
 	}
@@ -320,35 +322,35 @@
 	.navigationDrawer {
 		width: 260px;
 	}
-	
+
 	.drawerHeader {
 		padding: 0.75rem;
 	}
-	
+
 	.drawerContent {
 		padding: 0.75rem;
 	}
-	
+
 	.userAvatarContainer {
 		margin-right: 8px;
 	}
-	
+
 	.userAvatar {
 		width: 36px;
 		height: 36px;
 		font-size: 14px;
 	}
-	
+
 	.userLevelBadge {
 		width: 16px;
 		height: 16px;
 		font-size: 8px;
 	}
-	
+
 	.userName {
 		font-size: 0.9rem;
 	}
-	
+
 	.userMeta {
 		font-size: 0.7rem;
 	}
@@ -361,11 +363,8 @@
 	}
 }
 
-/* Prevent body scroll when drawer is open */
 :global(body.drawer-open) {
 	overflow: hidden;
-	position: fixed;
-	width: 100%;
 }
 /* ── Gif Avatar in Drawer Header ── */
 .drawerGifAvatar {
