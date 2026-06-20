@@ -1,3 +1,4 @@
+// src/app/ground-schedule/page.js
 "use client";
 
 import React, { useState, useEffect, useRef, useCallback } from "react";
@@ -18,6 +19,12 @@ import {
 	AUTO_APPROVE_BASES,
 	GROUND_MAIN_BASES,
 	GROUND_OTHER_BASES,
+	parseMonthString,
+	getDaysInMonth,
+	DOW_LABELS,
+	isWeekend,
+	getTodayStr,
+	formatDateHeader,
 } from "../../lib/groundHelpers";
 import { supabase } from "../../lib/supabase";
 
@@ -26,38 +33,10 @@ const MAX_DUTY_CHANGES = 5;
 const RECORD_RETENTION_YEARS = 2;
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
-const parseMonthString = (monthStr) => {
-	const match = monthStr?.match(/^(\d{4})年(\d{2})月$/);
-	if (!match) return null;
-	return { year: parseInt(match[1]), month: parseInt(match[2]) };
-};
-
-const getDaysInMonth = (monthLabel) => {
-	const parsed = parseMonthString(monthLabel);
-	if (!parsed) return [];
-	const { year, month } = parsed;
-	const days = new Date(year, month, 0).getDate();
-	return Array.from({ length: days }, (_, i) => {
-		const d = i + 1;
-		const dateStr = `${year}-${String(month).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
-		const dow = new Date(year, month - 1, d).getDay();
-		return { day: d, dateStr, dow };
-	});
-};
-
-const DOW_LABELS = ["日", "一", "二", "三", "四", "五", "六"];
-const isWeekend = (dow) => dow === 0 || dow === 6;
-
-const getTodayStr = () => {
-	const now = new Date();
-	return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
-};
-
-const formatDateHeader = (monthLabel, day) => {
-	const parsed = parseMonthString(monthLabel);
-	if (!parsed) return String(day);
-	return `${String(parsed.month).padStart(2, "0")}/${String(day).padStart(2, "0")}`;
-};
+// parseMonthString, getDaysInMonth, DOW_LABELS, isWeekend, getTodayStr,
+// formatDateHeader moved to groundHelpers.js (2026-06-19) so ground-roster/
+// page.js can share the exact same logic. Imported above instead of
+// redefined here.
 
 const getDutyCellClass = (code) => {
 	if (!code || code === "-") return "";
@@ -805,6 +784,7 @@ export default function GroundSchedulePage() {
 	const [activeBase, setActiveBase] = useState("ALL");
 	const [scheduleLoading, setScheduleLoading] = useState(false);
 	const [scheduleMap, setScheduleMap] = useState({});
+	const [isMonthFinalized, setIsMonthFinalized] = useState(true); // default true so the badge doesn't flash "WIP" before the real status loads
 	const [dayOffMap, setDayOffMap] = useState({});
 	const [swapRequestMap, setSwapRequestMap] = useState({});
 	// swapTray: array of { targetEmp, targetDate, targetDuty, userDuty }
@@ -856,7 +836,7 @@ export default function GroundSchedulePage() {
 		const load = async () => {
 			setScheduleLoading(true);
 			try {
-				const [{ data: schedules }, swapRes, countRes] =
+				const [{ data: schedules }, swapRes, countRes, finalizedRes] =
 					await Promise.all([
 						groundScheduleHelpers.getSchedulesForMonth(
 							currentMonth,
@@ -874,7 +854,12 @@ export default function GroundSchedulePage() {
 							.select("id", { count: "exact", head: true })
 							.eq("month_label", currentMonth)
 							.eq("employee_a_id", user.id),
+						groundScheduleHelpers.getMonthStatus(
+							currentMonth,
+							user.base || "KHH",
+						),
 					]);
+				setIsMonthFinalized(finalizedRes.isFinalized);
 				const sMap = {};
 				(schedules || []).forEach((row) => {
 					sMap[row.employee_id] = {};
@@ -1381,15 +1366,10 @@ export default function GroundSchedulePage() {
 		],
 	);
 
-	if (loading || !user)
-		return (
-			<div className={styles.loadingScreen}>
-				<div className={styles.loadingContent}>
-					<div className={styles.loadingSpinner} />
-					<p className={styles.loadingScreenText}>驗證登入狀態...</p>
-				</div>
-			</div>
-		);
+	// Loading state is now handled globally by Layout.js (shows one shared
+	// loading screen during auth check instead of every page duplicating
+	// its own). This guard just prevents a render-before-redirect flash.
+	if (loading || !user) return null;
 
 	return (
 		<div className={styles.mainContainer}>
@@ -1447,6 +1427,14 @@ export default function GroundSchedulePage() {
 					<h1 className={styles.scheduleHeading}>
 						{currentMonth} 地勤班表
 					</h1>
+					{!isMonthFinalized && (
+						<span
+							className={gStyles.monthWipBadge}
+							title="此月份排班尚在進行中，可能會有變動"
+						>
+							🚧 排班進行中
+						</span>
+					)}
 				</div>
 
 				{/* Page tab bar */}
@@ -1483,7 +1471,7 @@ export default function GroundSchedulePage() {
 							<button
 								className={gStyles.importBtn}
 								onClick={() =>
-									toast("Excel匯入功能還沒完成", {
+									toast("Excel匯入功能即將推出", {
 										icon: "ℹ️",
 									})
 								}
@@ -1498,7 +1486,7 @@ export default function GroundSchedulePage() {
 				{assumedEmployee && (
 					<div className={gStyles.assumedBanner}>
 						<span>
-							🔑 管理者代理模式：以{" "}
+							🔑 管理員代理模式：以{" "}
 							<strong>{assumedEmployee.name}</strong>{" "}
 							身份操作換班（不受次數限制）
 						</span>

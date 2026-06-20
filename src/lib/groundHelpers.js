@@ -94,6 +94,45 @@ export const AUTO_APPROVE_BASES = ["KHH"];
 // number, not string, so "9929" doesn't sort before "10000").
 // Applied programmatically rather than relying on manual array order in
 // groundEmployeeList, since hand-ordering drifts as people are added/removed.
+// ── Shared date/month helpers ────────────────────────────────────────────────
+// Moved here from ground-schedule/page.js (2026-06-19) so ground-roster/
+// page.js can reuse the exact same month-parsing logic instead of
+// duplicating it. getDutyCellClass was NOT moved — it returns CSS-module
+// classnames specific to each page's own imported stylesheet, so it stays
+// page-local (a small, legitimate exception, not a duplication problem).
+export const parseMonthString = (monthStr) => {
+	const match = monthStr?.match(/^(\d{4})年(\d{2})月$/);
+	if (!match) return null;
+	return { year: parseInt(match[1]), month: parseInt(match[2]) };
+};
+
+export const getDaysInMonth = (monthLabel) => {
+	const parsed = parseMonthString(monthLabel);
+	if (!parsed) return [];
+	const { year, month } = parsed;
+	const days = new Date(year, month, 0).getDate();
+	return Array.from({ length: days }, (_, i) => {
+		const d = i + 1;
+		const dateStr = `${year}-${String(month).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+		const dow = new Date(year, month - 1, d).getDay();
+		return { day: d, dateStr, dow };
+	});
+};
+
+export const DOW_LABELS = ["日", "一", "二", "三", "四", "五", "六"];
+export const isWeekend = (dow) => dow === 0 || dow === 6;
+
+export const getTodayStr = () => {
+	const now = new Date();
+	return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+};
+
+export const formatDateHeader = (monthLabel, day) => {
+	const parsed = parseMonthString(monthLabel);
+	if (!parsed) return String(day);
+	return `${String(parsed.month).padStart(2, "0")}/${String(day).padStart(2, "0")}`;
+};
+
 export const sortGroundEmployees = (employees) => {
 	return [...employees].sort((a, b) => {
 		if (a.rank === "地勤經理" && b.rank !== "地勤經理") return -1;
@@ -240,6 +279,35 @@ export const groundScheduleHelpers = {
 		}
 	},
 
+	// Fetch every month's schedule for a base within a given year — used by
+	// the auto-assign solver's yearly quota ceiling check (Pass 5), which
+	// needs to know how many HL/WL days each employee has already used
+	// across the WHOLE year, not just the month being planned.
+	// Returns { employeeId: [{date, duty_code}, ...] } merged across months.
+	async getSchedulesForYear(year, base) {
+		try {
+			const monthLabels = Array.from({ length: 12 }, (_, i) => `${year}年${String(i + 1).padStart(2, "0")}月`);
+			const results = await Promise.all(
+				monthLabels.map((m) => this.getSchedulesForMonth(m, base)),
+			);
+
+			const merged = {};
+			results.forEach(({ data }) => {
+				(data || []).forEach((row) => {
+					if (!merged[row.employee_id]) merged[row.employee_id] = [];
+					(row.schedule || []).forEach((entry) => {
+						merged[row.employee_id].push(entry);
+					});
+				});
+			});
+
+			return { data: merged, error: null };
+		} catch (error) {
+			console.error("Error in getSchedulesForYear:", error);
+			return { data: {}, error: error.message };
+		}
+	},
+
 	// Upsert a single employee's schedule for a month
 	async upsertEmployeeSchedule(employeeId, monthLabel, base, schedule) {
 		try {
@@ -326,6 +394,57 @@ export const groundScheduleHelpers = {
 			return { error: error?.message || null };
 		} catch (error) {
 			console.error("Error in ensureMonthExists:", error);
+			return { error: error.message };
+		}
+	},
+
+	// Read the current finalization status for a month/base. Returns
+	// { isFinalized: boolean, error } — isFinalized defaults to false if
+	// the month row doesn't exist yet (nothing's been finalized).
+	async getMonthStatus(monthLabel, base) {
+		try {
+			const { data, error } = await supabase
+				.from("ground_schedule_months")
+				.select("is_finalized")
+				.eq("month_label", monthLabel)
+				.eq("base", base)
+				.maybeSingle();
+
+			if (error) return { isFinalized: false, error: error.message };
+			return { isFinalized: data?.is_finalized || false, error: null };
+		} catch (error) {
+			console.error("Error in getMonthStatus:", error);
+			return { isFinalized: false, error: error.message };
+		}
+	},
+
+	// Supervisor toggle: WIP (is_finalized=false) vs Final (true).
+	// While WIP, staff still see live auto-assign/manual-adjust progress
+	// on the ground-schedule page (per 2026-06-19 — "let everyone else know
+	// this is a WIP or final"), but the page should visually flag it as
+	// unfinalized so nobody mistakes a draft for the real schedule.
+	async setMonthFinalized(monthLabel, base, isFinalized) {
+		try {
+			const yearMatch = monthLabel.match(/(\d{4})年/);
+			const monthMatch = monthLabel.match(/(\d{2})月/);
+			if (!yearMatch || !monthMatch) return { error: "Invalid month format" };
+
+			const { error } = await supabase
+				.from("ground_schedule_months")
+				.upsert(
+					{
+						month_label: monthLabel,
+						base,
+						year: parseInt(yearMatch[1]),
+						month: parseInt(monthMatch[1]),
+						is_finalized: isFinalized,
+					},
+					{ onConflict: "year,month,base" },
+				);
+
+			return { error: error?.message || null };
+		} catch (error) {
+			console.error("Error in setMonthFinalized:", error);
 			return { error: error.message };
 		}
 	},
@@ -632,6 +751,41 @@ export const checkGroundFatigue = (schedule) => {
 		}
 	}
 
+	// Rule 3: Maximum 5 consecutive work days (no Z/R/leave code in between).
+	// Walk the FULL sorted schedule (not just workDays) so date gaps and
+	// rest-day codes correctly break a consecutive-work streak.
+	let consecutiveStart = null;
+	let consecutiveCount = 0;
+	let prevDate = null;
+
+	for (const day of sorted) {
+		const isWork = !isGroundRestCode(day.duty_code);
+		const isConsecutiveDate =
+			prevDate &&
+			(new Date(day.date) - new Date(prevDate)) / (1000 * 60 * 60 * 24) === 1;
+
+		if (isWork && isConsecutiveDate) {
+			consecutiveCount += 1;
+		} else if (isWork) {
+			consecutiveStart = day.date;
+			consecutiveCount = 1;
+		} else {
+			consecutiveCount = 0;
+			consecutiveStart = null;
+		}
+
+		if (consecutiveCount > 5) {
+			violations.push({
+				type: "excessive_consecutive_days",
+				date: day.date,
+				dutyCode: day.duty_code,
+				message: `${consecutiveStart} 起已連續上班 ${consecutiveCount} 天（上限5天），${day.date} 仍排有勤務`,
+			});
+		}
+
+		prevDate = day.date;
+	}
+
 	return violations;
 };
 
@@ -795,4 +949,334 @@ export const groundLeaveRequestHelpers = {
 			return { data: [], error: error.message };
 		}
 	},
+};
+
+// ── Roster-wide validator (for the future 地勤排班 auto-assign/manual-adjust
+// page) ─────────────────────────────────────────────────────────────────────
+// Unlike checkGroundFatigue (which checks ONE employee's schedule in
+// isolation), these functions need the WHOLE base's schedule for a month,
+// since AM/PM coverage and quota tracking are properties of the roster as
+// a group, not of any single person.
+
+// Daily AM/PM coverage check — for every day in the month, at least one
+// person must be on an AM-type duty AND at least one on a PM-type duty.
+// schedulesByEmployee: { employeeId: [{ date, duty_code }, ...] }
+export const checkDailyCoverage = (schedulesByEmployee, monthLabel) => {
+	const violations = [];
+	const days = (() => {
+		const match = monthLabel?.match(/^(\d{4})年(\d{2})月$/);
+		if (!match) return [];
+		const year = parseInt(match[1]);
+		const month = parseInt(match[2]);
+		const numDays = new Date(year, month, 0).getDate();
+		return Array.from({ length: numDays }, (_, i) => {
+			const d = i + 1;
+			return `${year}-${String(month).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+		});
+	})();
+
+	for (const date of days) {
+		let hasAm = false;
+		let hasPm = false;
+
+		for (const empId of Object.keys(schedulesByEmployee)) {
+			const dayEntry = schedulesByEmployee[empId]?.find((d) => d.date === date);
+			if (!dayEntry || !dayEntry.duty_code) continue;
+			if (isAmDuty(dayEntry.duty_code)) hasAm = true;
+			if (isPmDuty(dayEntry.duty_code)) hasPm = true;
+		}
+
+		if (!hasAm || !hasPm) {
+			violations.push({
+				type: "missing_daily_coverage",
+				date,
+				message: `${date} 缺少${!hasAm ? "早班" : ""}${!hasAm && !hasPm ? "及" : ""}${!hasPm ? "晚班" : ""}人員覆蓋`,
+			});
+		}
+	}
+
+	return violations;
+};
+
+// Monthly + yearly HL/WL/R/Z quota tracking for one employee, given their
+// FULL YEAR of schedule data (needed because the yearly target is a hard
+// constraint that depends on everything assigned so far this year, not
+// just the month being viewed).
+// yearSchedule: [{ date, duty_code }, ...] across the whole year
+// targetMonth: 1-12, the month currently being planned/viewed
+export const getQuotaProgress = (yearSchedule, targetMonth) => {
+	const counts = { R: 0, Z: 0, HL: 0, WL: 0 };
+	const monthCounts = { R: 0, Z: 0, HL: 0, WL: 0 };
+
+	for (const entry of yearSchedule) {
+		const code = entry.duty_code;
+		if (!Object.prototype.hasOwnProperty.call(counts, code)) continue;
+		counts[code] += 1;
+		const entryMonth = parseInt(entry.date?.split("-")[1], 10);
+		if (entryMonth === targetMonth) monthCounts[code] += 1;
+	}
+
+	const monthlyTarget = GROUND_MONTHLY_QUOTA[targetMonth] || null;
+
+	return {
+		monthly: monthlyTarget
+			? {
+					R: { actual: monthCounts.R, target: monthlyTarget.R },
+					Z: { actual: monthCounts.Z, target: monthlyTarget.Z },
+					HL: { actual: monthCounts.HL, target: monthlyTarget.HL },
+					WL: { actual: monthCounts.WL, target: monthlyTarget.WL },
+				}
+			: null,
+		yearly: {
+			R: { actual: counts.R, target: GROUND_YEARLY_QUOTA.R },
+			Z: { actual: counts.Z, target: GROUND_YEARLY_QUOTA.Z },
+			HL: { actual: counts.HL, target: GROUND_YEARLY_QUOTA.HL },
+			WL: { actual: counts.WL, target: GROUND_YEARLY_QUOTA.WL },
+		},
+	};
+};
+
+// Combined validator — runs everything (per-employee fatigue rules +
+// roster-wide daily coverage) for a full month. This is the single
+// function both the future auto-assign solver and the "驗證" button on
+// the manual-adjust page should call, so the two never disagree about
+// what counts as a violation.
+// schedulesByEmployee: { employeeId: [{ date, duty_code }, ...] }
+export const validateGroundMonth = (schedulesByEmployee, monthLabel) => {
+	const allViolations = [];
+
+	for (const empId of Object.keys(schedulesByEmployee)) {
+		const empViolations = checkGroundFatigue(schedulesByEmployee[empId]);
+		empViolations.forEach((v) => allViolations.push({ ...v, employeeId: empId }));
+	}
+
+	const coverageViolations = checkDailyCoverage(schedulesByEmployee, monthLabel);
+	allViolations.push(...coverageViolations);
+
+	return allViolations;
+};
+
+// ── Auto-assign solver ───────────────────────────────────────────────────────
+// Builds a full month's schedule for every employee at once.
+//
+// STRATEGY (deliberately NOT exhaustive backtracking over every cell):
+// true backtracking across 6 employees × ~30 days × ~15 possible codes per
+// cell is a combinatorial space large enough to risk slow/stuck runs. Instead:
+//
+//   Pass 1 — lock in everything that's already fixed: accepted leave
+//            requests, and any manually pre-filled duty in the existing
+//            schedule (per 2026-06-19: "should take into account manual
+//            pre-filled duties"). These are NEVER overwritten.
+//   Pass 2 — for each employee independently, walk day-by-day and assign
+//            Z/R to satisfy the weekly-rest hard constraint first (this
+//            constraint is the most structurally rigid — every 7-day
+//            window needs one of each — so satisfying it early avoids
+//            painting into a corner later).
+//   Pass 3 — fill remaining empty days with WORK codes, employee by
+//            employee, with a small local backtrack: if assigning a code
+//            to day N breaks the 11-hour-rest or 5-consecutive-day rule,
+//            try the next candidate code for that day; if none work, back
+//            up one day and try a different code there (bounded to a few
+//            steps back, not the whole month — this keeps runtime sane for
+//            6 people while still escaping the most common dead-ends).
+//   Pass 4 — roster-wide daily AM/PM coverage repair: scan every day, and
+//            for any day missing AM or PM coverage, look for an employee
+//            who has slack (under their monthly soft quota, or has an
+//            easily-swappable rest day that isn't load-bearing for their
+//            weekly Z/R requirement) and assign them the needed shift type.
+//   Pass 5 — yearly quota ceiling check: if any employee would exceed their
+//            YEARLY hard target for HL/WL because of this month's
+//            assignments, swap one of those codes for a different valid
+//            rest code (Z/R) where possible. Monthly soft targets are
+//            allowed to be missed — logged as info, not blocked.
+//
+// Returns { schedulesByEmployee, warnings } — warnings list anything the
+// solver couldn't fully satisfy (e.g. monthly quota miss, or a day where
+// AM/PM coverage repair found no eligible employee).
+export const autoAssignGroundMonth = (
+	employees, // [{ id, base, rank }, ...] — already filtered to the target base
+	monthLabel,
+	existingScheduleMap, // { employeeId: { dateStr: duty_code } } — manual pre-fills, NEVER overwritten if non-empty
+	acceptedLeaveRequests, // [{ employee_id, requested_date, leave_type }, ...] — NEVER overwritten
+	yearScheduleByEmployee, // { employeeId: [{date, duty_code}] } — FULL YEAR, for yearly quota ceiling checks
+) => {
+	const warnings = [];
+	const days = getDaysInMonth(monthLabel);
+	const monthMatch = monthLabel.match(/(\d{2})月/);
+	const targetMonth = monthMatch ? parseInt(monthMatch[1], 10) : null;
+
+	// Working copy — { employeeId: { dateStr: duty_code } }
+	const result = {};
+	employees.forEach((emp) => { result[emp.id] = { ...(existingScheduleMap[emp.id] || {}) }; });
+
+	// ── Pass 1: lock in accepted leave requests (never overwritten) ──────────
+	acceptedLeaveRequests.forEach((req) => {
+		if (!result[req.employee_id]) return;
+		// Only set if not already manually filled with something else —
+		// a manual pre-fill takes precedence visually, but in practice an
+		// accepted leave request should already match whatever's there
+		// from the 指定休假 flow, so this is mostly a safety no-op.
+		if (!result[req.employee_id][req.requested_date]) {
+			result[req.employee_id][req.requested_date] = req.leave_type;
+		}
+	});
+
+	const isFixed = (empId, dateStr) =>
+		!!(existingScheduleMap[empId]?.[dateStr] || result[empId][dateStr]);
+
+	// ── Pass 2: satisfy weekly Z/R per employee ───────────────────────────────
+	employees.forEach((emp) => {
+		// Walk in 7-day windows; if a window has no Z or no R among its
+		// non-fixed days, assign one into the first available empty slot.
+		for (let i = 0; i < days.length; i += 7) {
+			const window = days.slice(i, i + 7);
+			if (window.length < 7) continue; // partial trailing window — handled by validator afterward, not solver-critical
+
+			const windowDates = window.map((d) => d.dateStr);
+			const hasZ = windowDates.some((d) => result[emp.id][d] === "Z");
+			const hasR = windowDates.some((d) => result[emp.id][d] === "R");
+
+			const emptySlots = windowDates.filter((d) => !result[emp.id][d]);
+
+			if (!hasZ && emptySlots.length > 0) {
+				result[emp.id][emptySlots.shift()] = "Z";
+			}
+			if (!hasR && emptySlots.length > 0) {
+				result[emp.id][emptySlots.shift()] = "R";
+			}
+			if ((!hasZ || !hasR) && emptySlots.length === 0) {
+				warnings.push({
+					employeeId: emp.id,
+					type: "weekly_rest_unfillable",
+					message: `${emp.name || emp.id}：${windowDates[0]} 起7天內無法排入例假/休假（已無空位）`,
+				});
+			}
+		}
+	});
+
+	// ── Pass 3: fill remaining empty days with work codes ─────────────────────
+	const WORK_CODES = Object.keys(GROUND_DUTY_TIME_LOOKUP);
+
+	const violatesLocalRules = (empId, dateStr, code) => {
+		// Build a minimal schedule slice (just this employee, with the
+		// candidate applied) and run the existing single-employee
+		// validator — reuses checkGroundFatigue instead of duplicating
+		// rest/consecutive-day logic in the solver.
+		const candidate = Object.entries({ ...result[empId], [dateStr]: code })
+			.map(([date, duty_code]) => ({ date, duty_code }));
+		const violations = checkGroundFatigue(candidate);
+		// Only care about violations ON or AFTER this date — earlier
+		// violations aren't caused by this candidate assignment.
+		return violations.some((v) => v.date >= dateStr && (v.type === "insufficient_rest" || v.type === "excessive_consecutive_days"));
+	};
+
+	employees.forEach((emp) => {
+		const emptyDates = days.map((d) => d.dateStr).filter((d) => !result[emp.id][d]);
+
+		for (let idx = 0; idx < emptyDates.length; idx++) {
+			const dateStr = emptyDates[idx];
+			let assigned = false;
+
+			for (const code of WORK_CODES) {
+				if (!violatesLocalRules(emp.id, dateStr, code)) {
+					result[emp.id][dateStr] = code;
+					assigned = true;
+					break;
+				}
+			}
+
+			if (!assigned) {
+				// Bounded local backtrack: step back up to 3 previously-assigned
+				// (non-fixed) days and try a different work code there, then
+				// retry this date. If still stuck, fall back to R (always safe
+				// — a rest day can never itself cause a rest-time violation)
+				// and log a warning rather than leaving the cell empty.
+				let recovered = false;
+				for (let back = 1; back <= 3 && idx - back >= 0; back++) {
+					const backDate = emptyDates[idx - back];
+					if (isFixed(emp.id, backDate)) continue;
+					const originalCode = result[emp.id][backDate];
+					delete result[emp.id][backDate];
+
+					for (const altCode of WORK_CODES) {
+						if (altCode === originalCode) continue;
+						if (!violatesLocalRules(emp.id, backDate, altCode)) {
+							result[emp.id][backDate] = altCode;
+							if (!violatesLocalRules(emp.id, dateStr, code)) {
+								result[emp.id][dateStr] = code;
+								recovered = true;
+								break;
+							}
+						}
+					}
+					if (recovered) break;
+					result[emp.id][backDate] = originalCode; // restore if no recovery found via this day
+				}
+
+				if (!recovered) {
+					result[emp.id][dateStr] = "R";
+					warnings.push({
+						employeeId: emp.id,
+						type: "fallback_to_rest",
+						message: `${emp.name || emp.id}：${dateStr} 無法排入符合休息規則的班別，已自動排為休息日(R)`,
+					});
+				}
+			}
+		}
+	});
+
+	// ── Pass 4: daily AM/PM coverage repair ───────────────────────────────────
+	days.forEach(({ dateStr }) => {
+		let hasAm = employees.some((emp) => isAmDuty(result[emp.id][dateStr]));
+		let hasPm = employees.some((emp) => isPmDuty(result[emp.id][dateStr]));
+
+		if (hasAm && hasPm) return;
+
+		const needType = !hasAm ? "AM" : "PM";
+		const candidateCodes = WORK_CODES.filter((c) =>
+			needType === "AM" ? isAmDuty(c) : isPmDuty(c)
+		);
+
+		// Find an employee on this date who isn't locked (not from leave
+		// request or manual pre-fill) and can take the needed shift type
+		// without breaking their own rest rules.
+		const eligible = employees.find((emp) => {
+			if (isFixed(emp.id, dateStr) && existingScheduleMap[emp.id]?.[dateStr]) return false;
+			return candidateCodes.some((c) => !violatesLocalRules(emp.id, dateStr, c));
+		});
+
+		if (eligible) {
+			const code = candidateCodes.find((c) => !violatesLocalRules(eligible.id, dateStr, c));
+			result[eligible.id][dateStr] = code;
+		} else {
+			warnings.push({
+				date: dateStr,
+				type: "coverage_unfillable",
+				message: `${dateStr}：無法找到可排入${needType === "AM" ? "早班" : "晚班"}且不違反休息規則的人員`,
+			});
+		}
+	});
+
+	// ── Pass 5: yearly quota ceiling check (HL/WL only — R/Z ceilings are
+	// far less operationally strict and not worth forcing swaps over) ────────
+	if (targetMonth) {
+		employees.forEach((emp) => {
+			const yearSched = yearScheduleByEmployee[emp.id] || [];
+			["HL", "WL"].forEach((code) => {
+				const yearCountSoFar = yearSched.filter((d) => d.duty_code === code).length;
+				const thisMonthCount = Object.values(result[emp.id]).filter((c) => c === code).length;
+				const target = GROUND_YEARLY_QUOTA[code];
+
+				if (yearCountSoFar + thisMonthCount > target) {
+					warnings.push({
+						employeeId: emp.id,
+						type: "yearly_quota_exceeded",
+						message: `${emp.name || emp.id}：本月排班會使全年${code}天數超過目標（${yearCountSoFar + thisMonthCount}/${target}），建議手動調整`,
+					});
+				}
+			});
+		});
+	}
+
+	return { schedulesByEmployee: result, warnings };
 };
