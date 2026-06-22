@@ -32,8 +32,15 @@
 	background: #7c3aed;
 	box-shadow: 0 0 0 1.5px white;
 }
+/* dotApproved's background INTENTIONALLY removed (2026-06-22) — the dot
+   is now combined with a duty-color class (getDutyCellClass(leaveType))
+   to show WHICH leave type was requested, not just a flat approved/
+   pending color. Keeping a background here would create the exact
+   same same-specificity cascade conflict found earlier this session
+   (the picker-option color bug) depending on which class wins. The
+   box-shadow ring still applies so the dot stays visible against any
+   background color. */
 .dotApproved {
-	background: #22c55e;
 	box-shadow: 0 0 0 1.5px white;
 }
 
@@ -731,4 +738,89 @@
 	font-size: 0.8rem;
 	font-weight: 600;
 	white-space: nowrap;
+}
+
+/* ── Leave-type picker (2026-06-22) ───────────────────────────────────────
+   Opens when a staff member taps a future cell on their own row, letting
+   them choose WHICH leave type instead of submitting one generic "day
+   off" request. Option buttons deliberately have NO background of their
+   own — color comes entirely from the getDutyCellClass(code) class
+   applied alongside .leaveTypeOption in the JSX, same lesson as the
+   DutyPicker's per-code colors built earlier this session (combining a
+   button's own background with a duty-color class at equal specificity
+   caused a silent cross-file cascade bug previously). */
+.leaveTypePickerBackdrop {
+	position: fixed;
+	inset: 0;
+	background: rgba(0, 0, 0, 0.4);
+	z-index: 10000;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	padding: 1rem;
+}
+
+.leaveTypePickerModal {
+	background: white;
+	border-radius: 0.75rem;
+	width: 100%;
+	max-width: 420px;
+	max-height: 80vh;
+	overflow-y: auto;
+	box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+}
+
+.leaveTypePickerHeader {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	padding: 1rem 1.25rem;
+	border-bottom: 1px solid #e5e7eb;
+	font-weight: 600;
+	color: #111827;
+}
+.leaveTypePickerHeader button {
+	background: none;
+	border: none;
+	cursor: pointer;
+	color: #6b7280;
+	font-size: 1.1rem;
+}
+
+.leaveTypePickerGrid {
+	display: grid;
+	grid-template-columns: 1fr 1fr;
+	gap: 0.5rem;
+	padding: 1rem 1.25rem;
+}
+
+.leaveTypeOption {
+	display: flex;
+	flex-direction: column;
+	align-items: flex-start;
+	gap: 2px;
+	padding: 0.5rem 0.75rem;
+	border: 1px solid #e5e7eb;
+	border-radius: 0.5rem;
+	cursor: pointer;
+	text-align: left;
+}
+.leaveTypeOption:hover {
+	filter: brightness(0.95);
+}
+
+.leaveTypeOptionCode {
+	font-size: 0.85rem;
+	font-weight: 700;
+	color: #111827;
+}
+.leaveTypeOptionLabel {
+	font-size: 0.72rem;
+	color: #374151;
+}
+
+@media (max-width: 480px) {
+	.leaveTypePickerGrid {
+		grid-template-columns: 1fr;
+	}
 }

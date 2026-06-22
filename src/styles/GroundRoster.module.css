@@ -2,54 +2,13 @@
 /* GroundRoster.module.css
    地勤排班 (supervisor schedule builder) page styles.
    Reuses Schedule.module.css for the table/grid base — this file only
-   has page-specific pieces (tabs, overview, validation, manual-edit cells).
+   has page-specific pieces (overview, quota counter, validation,
+   manual-edit cells, duty picker).
+   NOTE: 總覽/手動調整 tabs were merged into one continuous page on
+   2026-06-19 — the old .pageTabBar/.pageTab/.pageTabActive rules were
+   removed since nothing in the page references them anymore.
 */
 
-/* ── Page tab bar (總覽 | 手動調整) ──────────────────────────────────────── */
-.pageTabBar {
-	display: flex;
-	gap: 0.25rem;
-	margin-bottom: 1rem;
-	border-bottom: 2px solid #e5e7eb;
-}
-
-.pageTab {
-	padding: 0.5rem 1.25rem;
-	font-size: 0.9rem;
-	font-weight: 500;
-	background: none;
-	border: none;
-	border-bottom: 2px solid transparent;
-	margin-bottom: -2px;
-	cursor: pointer;
-	color: rgba(255, 255, 255, 0.75);
-	transition:
-		color 0.15s,
-		border-color 0.15s;
-}
-.pageTab:hover {
-	color: white;
-}
-.pageTabActive {
-	color: white;
-	border-bottom-color: white;
-	font-weight: 600;
-}
-
-/* ── 總覽 (overview) ──────────────────────────────────────────────────── */
-.overviewWrapper {
-	background: white;
-	border-radius: 0.75rem;
-	padding: 1.25rem;
-	box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
-}
-
-.overviewSectionTitle {
-	font-size: 1.1rem;
-	font-weight: 600;
-	color: #111827;
-	margin: 0 0 1rem;
-}
 
 .overviewEmpty {
 	text-align: center;
@@ -219,60 +178,639 @@
 	cursor: not-allowed;
 }
 
+/* Admin-only debug export button (2026-06-21) — visually distinct (slate,
+   not red/blue like the other toolbar actions) since it's a diagnostic
+   tool, not a destructive or primary action. */
+.exportDebugBtn {
+	padding: 0.5rem 1.25rem;
+	border-radius: 0.5rem;
+	border: none;
+	background: #111827;
+	color: white;
+	font-size: 0.85rem;
+	font-weight: 600;
+	cursor: pointer;
+}
+.exportDebugBtn:hover {
+	background: #1f2937;
+}
+
 .violationsList {
 	margin-bottom: 1rem;
 	background: white;
 	border-radius: 0.625rem;
 	border: 1px solid #fecaca;
-	overflow: hidden;
+	overflow-y: auto;
+	max-height: 320px; /* flat list can get long with many violations — scroll instead of pushing the grid far down */
 }
 
+/* REVERTED 2026-06-21 per feedback: grouping by employee made specific
+   errors hard to target. Back to a flat, chronologically-sorted list —
+   one row per violation, with date/employee/type/message as separate
+   columns so each piece is easy to scan and ctrl+F. */
 .violationItem {
 	display: flex;
-	gap: 0.75rem;
-	padding: 0.625rem 1rem;
+	flex-wrap: wrap;
+	align-items: baseline;
+	gap: 0.5rem;
+	padding: 0.5rem 1rem;
 	border-bottom: 1px solid #fee2e2;
-	font-size: 0.85rem;
+	font-size: 0.8rem;
 }
 .violationItem:last-child {
 	border-bottom: none;
 }
 
 .violationDate {
+	font-weight: 700;
+	color: #991b1b;
+	white-space: nowrap;
+	font-variant-numeric: tabular-nums;
+}
+
+.violationEmpName {
+	font-weight: 600;
+	color: #7f1d1d;
+	white-space: nowrap;
+}
+
+.violationTypeBadge {
+	font-size: 0.7rem;
 	font-weight: 600;
 	color: #991b1b;
+	background: #fee2e2;
+	padding: 1px 8px;
+	border-radius: 999px;
 	white-space: nowrap;
 }
 
 .violationMessage {
 	color: #7f1d1d;
+	flex: 1;
+	min-width: 200px;
 }
 
-/* Editable duty-code cell input — sits inside the existing .dutyCell from
-   Schedule.module.css, just needs to fill it and look unstyled-but-clickable */
-.cellInput {
-	width: 100%;
-	height: 100%;
-	border: none;
-	background: transparent;
-	text-align: center;
-	font-size: 0.8rem;
-	font-family: inherit;
-	color: inherit;
-	padding: 4px 2px;
+/* Click-to-pick duty cell — replaces the old free-text input
+   (2026-06-19, per request for click/drag-style selection over typing) */
+.pickableCell {
+	cursor: pointer;
+	user-select: none;
 }
-.cellInput:focus {
-	outline: 2px solid #2563eb;
-	outline-offset: -2px;
+.pickableCell:hover {
+	background-color: rgba(37, 99, 235, 0.08) !important;
+}
+
+/* ── DutyPicker popover ──────────────────────────────────────────────────── */
+.pickerBackdrop {
+	position: fixed;
+	inset: 0;
+	background: rgba(0, 0, 0, 0.4);
+	z-index: 10000;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	padding: 1rem;
+}
+
+.picker {
 	background: white;
+	border-radius: 0.75rem;
+	width: 100%;
+	max-width: 420px;
+	max-height: 80vh;
+	display: flex;
+	flex-direction: column;
+	box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
 }
+
+/* Wider on desktop so the two duty-type columns (休假/假別 + 工作班別)
+   have enough room to sit side by side instead of stacking — see
+   .pickerColumns below (2026-06-19, "perhaps have 休假/假別 and 工作班別
+   side by side" on desktop). */
+@media (min-width: 700px) {
+	.picker {
+		max-width: 720px;
+	}
+}
+
+.pickerHeader {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	padding: 1rem 1.25rem;
+	border-bottom: 1px solid #e5e7eb;
+	flex-shrink: 0;
+}
+.pickerTitle {
+	font-size: 1rem;
+	font-weight: 600;
+	color: #111827;
+}
+.pickerClose {
+	background: none;
+	border: none;
+	cursor: pointer;
+	color: #6b7280;
+	font-size: 1.1rem;
+	padding: 0.25rem;
+	border-radius: 0.375rem;
+}
+.pickerClose:hover {
+	background: #f3f4f6;
+}
+
+.pickerBody {
+	padding: 1rem 1.25rem;
+	overflow-y: auto;
+}
+
+.pickerGroupLabel {
+	font-size: 0.75rem;
+	font-weight: 600;
+	color: #6b7280;
+	text-transform: uppercase;
+	letter-spacing: 0.04em;
+	margin: 1rem 0 0.5rem;
+}
+
+/* Stacks on mobile (default), side-by-side on desktop via the media
+   query below. Each .pickerColumn is one duty-type group (休假/假別 or
+   工作班別) — full width on mobile, half on desktop. */
+.pickerColumns {
+	display: flex;
+	flex-direction: column;
+	gap: 0;
+}
+
+.pickerColumn {
+	min-width: 0; /* allow flex children to shrink below content width */
+}
+
+@media (min-width: 700px) {
+	.pickerColumns {
+		flex-direction: row;
+		gap: 1.5rem;
+		margin-top: 0.5rem; /* breathing room above the column labels — was
+		                       crowding the modal edge (2026-06-19) */
+	}
+	.pickerColumn {
+		flex: 1;
+	}
+	.pickerColumn .pickerGroupLabel {
+		margin-top: 0;
+	}
+}
+
+.pickerGrid {
+	display: grid;
+	grid-template-columns: 1fr 1fr;
+	gap: 0.5rem;
+}
+
+.pickerOption {
+	display: flex;
+	flex-direction: column;
+	align-items: flex-start;
+	gap: 2px;
+	padding: 0.5rem 0.75rem;
+	border: 1px solid #e5e7eb;
+	border-radius: 0.5rem;
+	background: white;
+	cursor: pointer;
+	text-align: left;
+	width: 100%;
+}
+.pickerOption:hover {
+	background: #f9fafb;
+	border-color: #cbd5e1;
+}
+.pickerOptionActive {
+	border-color: #2563eb;
+	background: #eff6ff;
+}
+
+/* Self-contained duty-color classes for picker options — same hex values
+   as Schedule.module.css's dutyOff/dutyLeave/dutyWelfare/dutyEmpty, but
+   defined independently here rather than cross-referencing that file's
+   classes directly (see getPickerOptionColorClass in page.js for why:
+   combining two separate CSS Modules' background-setting classes via
+   string concatenation was a silent cross-file specificity race). The
+   !important is intentional — color identity must win over the plain
+   white .pickerOption background regardless of stylesheet load order.
+   Per-code colors (2026-06-21) — same values as Schedule.module.css's
+   per-code classes, kept in sync manually since these are intentionally
+   self-contained (not shared via import) for the reason above. */
+.pickerOptionZ {
+	background-color: #86efac !important; /* mirrors .dutyZ in Schedule.module.css */
+}
+.pickerOptionR {
+	background-color: #93c5fd !important; /* mirrors .dutyR */
+}
+.pickerOptionHL {
+	background-color: #fde68a !important; /* mirrors .dutyHL */
+}
+.pickerOptionAL {
+	background-color: #e0e7ff !important; /* mirrors .dutyAL */
+}
+.pickerOptionPL {
+	background-color: #e5e7eb !important; /* mirrors .dutyPL */
+}
+.pickerOptionSL {
+	background-color: #ddd6fe !important; /* mirrors .dutySL */
+}
+.pickerOptionML {
+	background-color: #fbcfe8 !important; /* mirrors .dutyML */
+}
+.pickerOptionFL {
+	background-color: #d1d5db !important; /* mirrors .dutyFL */
+}
+.pickerOptionLL {
+	background-color: #fecdd3 !important; /* mirrors .dutyLL */
+}
+.pickerOptionRL {
+	background-color: #fdba74 !important; /* mirrors .dutyRL */
+}
+.pickerOptionWL {
+	background-color: #f0abfc !important; /* mirrors .dutyWL */
+}
+.pickerOptionBL {
+	background-color: #a5f3fc !important; /* mirrors .dutyBL — NOTE: Schedule.module.css's .dutyBL currently
+	   also says #fde68a (a real collision with .dutyHL, found 2026-06-22
+	   while fixing this). The picker uses the INTENDED value (#a5f3fc,
+	   cyan) since that's what was designed; .dutyBL itself needs a fix
+	   in Schedule.module.css, flagged separately rather than touched here
+	   per the "don't touch Schedule.module.css" instruction. */
+}
+.pickerOptionEmpty {
+	background-color: #fef3c7 !important; /* mirrors .dutyEmpty */
+}
+/* Active selection border still needs to show even on a colored option */
+.pickerOptionZ.pickerOptionActive,
+.pickerOptionR.pickerOptionActive,
+.pickerOptionHL.pickerOptionActive,
+.pickerOptionAL.pickerOptionActive,
+.pickerOptionPL.pickerOptionActive,
+.pickerOptionSL.pickerOptionActive,
+.pickerOptionML.pickerOptionActive,
+.pickerOptionFL.pickerOptionActive,
+.pickerOptionLL.pickerOptionActive,
+.pickerOptionRL.pickerOptionActive,
+.pickerOptionWL.pickerOptionActive,
+.pickerOptionBL.pickerOptionActive,
+.pickerOptionEmpty.pickerOptionActive {
+	border-color: #2563eb;
+	border-width: 2px;
+}
+
+.pickerCode {
+	font-size: 0.85rem;
+	font-weight: 700;
+	color: #111827;
+}
+.pickerLabel {
+	font-size: 0.72rem;
+	color: #6b7280;
+}
+
+/* REMOVED 2026-06-22: this collapsed the duty picker to 1 column on
+   small mobile screens — per explicit request, keeping it at 2 columns
+   (.pickerGrid's base grid-template-columns: 1fr 1fr above) at all
+   widths instead. */
 
 @media (max-width: 768px) {
 	.manualToolbar {
-		flex-wrap: wrap;
+		display: grid;
+		grid-template-columns: 1fr 1fr;
+		gap: 0.5rem;
+	}
+	.manualToolbar > button {
+		margin-left: 0 !important; /* overrides .resetBtn's margin-left: auto, which only made sense in a flex row */
+		width: 100%;
+	}
+	.manualToolbar > span {
+		grid-column: 1 / -1; /* validation status text takes the full row, doesn't compete with buttons for a grid cell */
 	}
 	.violationItem {
 		flex-direction: column;
 		gap: 0.25rem;
+	}
+}
+
+/* ── 休假類型額度 (quota counter) — redesigned 2026-06-19 ─────────────────
+   Original 8-column dense table (本月/全年 split into separate columns per
+   code) was hard to scan. Now one card per employee, each code shown as a
+   single row with clearly labeled 本月/全年 values side by side instead of
+   table cells. */
+.quotaCards {
+	display: grid;
+	grid-template-columns: repeat(auto-fill, minmax(260px, 320px));
+	gap: 0.75rem;
+	/* Capped max width (was 1fr, stretching unpredictably wide on desktop
+	   — 2026-06-21 "counter on desktop view might need to fix placement") */
+	justify-content: start;
+}
+
+.quotaCard {
+	border: 1px solid #e5e7eb;
+	border-radius: 0.625rem;
+	padding: 0.75rem;
+	background: #f9fafb;
+}
+
+.quotaCardName {
+	font-size: 0.9rem;
+	font-weight: 700;
+	color: #111827;
+	margin-bottom: 0.5rem;
+}
+
+.quotaCardRows {
+	display: flex;
+	flex-direction: column;
+	gap: 0.3rem;
+}
+
+/* Color-coded left border per duty type, matching the schedule grid's
+   own color scheme (dutyOff=green, dutyLeave=blue) — 2026-06-21, "color
+   code might make it more visually appealing and easier to compare". R
+   uses the same blue family as dutyLeave (R is grouped with dutyLeave in
+   getDutyCellClass); HL uses green (grouped with dutyOff); WL uses pink
+   (grouped with dutyWelfare). */
+.quotaCardRow {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: baseline;
+	gap: 0.5rem;
+	font-size: 0.78rem;
+	padding: 0.25rem 0.5rem;
+	border-left: 3px solid transparent;
+	border-radius: 0.25rem;
+}
+.quotaCardRowR {
+	border-left-color: #93c5fd; /* matches .dutyR in Schedule.module.css */
+	background: #eff6ff;
+}
+.quotaCardRowZ {
+	border-left-color: #86efac; /* matches .dutyZ */
+	background: #f0fdf4;
+}
+.quotaCardRowHL {
+	/* BUG FOUND 2026-06-22: this was still #86efac (the OLD pre-rework
+	   HL color, green) — never updated when .dutyHL moved to yellow in
+	   the big palette rework, so the quota counter visually claimed HL
+	   was the same color as Z even though the actual schedule grid
+	   correctly shows HL as yellow. Same class of bug as the duty
+	   picker's stale colors fixed last round — self-contained color
+	   sets need to be manually kept in sync with Schedule.module.css. */
+	border-left-color: #fde68a; /* matches .dutyHL */
+	background: #fefce8;
+}
+.quotaCardRowWL {
+	border-left-color: #f0abfc; /* matches .dutyWL (magenta/pink, not the old orange) */
+	background: #fdf4ff;
+}
+
+.quotaCardCode {
+	font-weight: 700;
+	color: #374151;
+	min-width: 24px;
+}
+
+/* Each period (本月 / 全年) shown with its own small label, so the
+   actual-vs-target meaning of the number is explicit rather than relying
+   on left/right position (2026-06-21 — "which number is which is
+   confusing"). */
+.quotaCardPeriod {
+	display: flex;
+	align-items: baseline;
+	gap: 0.3rem;
+}
+
+.quotaCardPeriodLabel {
+	font-size: 0.68rem;
+	color: #9ca3af;
+	font-weight: 600;
+}
+
+.quotaCardValue {
+	color: #374151;
+	font-variant-numeric: tabular-nums;
+}
+
+/* Flagged when YEARLY actual exceeds yearly target — this is the hard
+   ceiling, so an overage here is worth visually calling out (monthly
+   misses are expected/soft and intentionally NOT highlighted). */
+.quotaOver {
+	color: #991b1b;
+	font-weight: 700;
+}
+
+/* ── Collapsible sections (待處理的休假申請 / 休假類型額度) ─────────────────
+   Added 2026-06-19 — these were pushing the schedule grid (the actual
+   main focus of the page) below the fold. Collapsed by default; click
+   the header to expand. */
+.collapsibleSection {
+	background: white;
+	border-radius: 0.75rem;
+	margin-bottom: 1rem;
+	box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+	overflow: hidden;
+}
+
+.collapsibleHeader {
+	width: 100%;
+	display: flex;
+	align-items: center;
+	padding: 0.875rem 1.25rem;
+	background: none;
+	border: none;
+	cursor: pointer;
+	font-size: 1rem;
+	font-weight: 600;
+	color: #111827;
+	text-align: left;
+}
+.collapsibleHeader:hover {
+	background: #f9fafb;
+}
+
+.collapsibleBody {
+	padding: 0 1.25rem 1.25rem;
+}
+
+/* ── Excel Import modal (2026-06-21) ──────────────────────────────────────
+   Reuses .pickerBackdrop/.pickerHeader/.pickerTitle/.pickerClose/.pickerBody
+   from the DutyPicker modal for visual consistency, with its own wider
+   container and a footer (DutyPicker has no footer of its own). */
+.importModal {
+	background: white;
+	border-radius: 0.75rem;
+	width: 100%;
+	max-width: 560px;
+	max-height: 85vh;
+	display: flex;
+	flex-direction: column;
+	box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+}
+
+.importModalBody {
+	padding: 1.25rem;
+	overflow-y: auto;
+}
+
+.importHint {
+	font-size: 0.85rem;
+	color: #6b7280;
+	margin: 0 0 1rem;
+	line-height: 1.5;
+}
+
+.importUploadZone {
+	display: flex;
+	flex-direction: column;
+	gap: 0.75rem;
+}
+
+.importYearRow {
+	display: flex;
+	align-items: center;
+	gap: 0.5rem;
+	font-size: 0.85rem;
+	color: #374151;
+}
+
+.importYearInput {
+	width: 90px;
+	padding: 0.4rem 0.625rem;
+	border-radius: 0.5rem;
+	border: 1px solid #d1d5db;
+	font-size: 0.85rem;
+}
+
+.importSheetList {
+	display: flex;
+	flex-direction: column;
+	gap: 0.5rem;
+	margin-bottom: 1rem;
+}
+
+.importSheetRow {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 0.625rem;
+	padding: 0.625rem 0.75rem;
+	border: 1px solid #e5e7eb;
+	border-radius: 0.5rem;
+	cursor: pointer;
+	font-size: 0.82rem;
+}
+.importSheetRow:hover {
+	background: #f9fafb;
+}
+
+.importSheetName {
+	font-weight: 700;
+	color: #111827;
+	min-width: 40px;
+}
+
+.importSheetLabel {
+	color: #374151;
+}
+
+.importSheetCount {
+	color: #6b7280;
+	margin-left: auto;
+}
+
+.importSheetWarning {
+	color: #991b1b;
+	font-size: 0.75rem;
+	background: #fee2e2;
+	padding: 1px 8px;
+	border-radius: 999px;
+	width: 100%;
+}
+
+.importChangeFileBtn {
+	padding: 0.4rem 0.875rem;
+	border-radius: 0.5rem;
+	border: 1px solid #d1d5db;
+	background: white;
+	color: #374151;
+	font-size: 0.82rem;
+	cursor: pointer;
+}
+.importChangeFileBtn:hover {
+	background: #f9fafb;
+}
+
+.pickerFooter {
+	display: flex;
+	gap: 0.625rem;
+	padding: 1rem 1.25rem;
+	border-top: 1px solid #e5e7eb;
+	flex-shrink: 0;
+}
+
+.modalCancelBtn {
+	flex: 1;
+	padding: 0.625rem;
+	border-radius: 0.5rem;
+	border: 1px solid #d1d5db;
+	background: white;
+	color: #374151;
+	font-size: 0.9rem;
+	cursor: pointer;
+}
+.modalCancelBtn:hover {
+	background: #f9fafb;
+}
+.modalCancelBtn:disabled {
+	opacity: 0.5;
+	cursor: not-allowed;
+}
+
+.importConfirmBtn {
+	flex: 2;
+	padding: 0.625rem;
+	border-radius: 0.5rem;
+	border: none;
+	background: #dc2626;
+	color: white;
+	font-size: 0.9rem;
+	font-weight: 600;
+	cursor: pointer;
+}
+.importConfirmBtn:hover {
+	opacity: 0.88;
+}
+.importConfirmBtn:disabled {
+	opacity: 0.4;
+	cursor: not-allowed;
+}
+
+.importExcelBtn {
+	padding: 0.5rem 1.25rem;
+	border-radius: 0.5rem;
+	border: none;
+	background: #2563eb;
+	color: white;
+	font-size: 0.85rem;
+	font-weight: 600;
+	cursor: pointer;
+}
+.importExcelBtn:hover {
+	opacity: 0.88;
+}
+
+@media (max-width: 600px) {
+	.importModal {
+		max-width: 100%;
+	}
+	.importSheetCount {
+		margin-left: 0;
+		width: 100%;
 	}
 }

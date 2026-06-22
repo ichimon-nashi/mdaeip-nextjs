@@ -6,7 +6,7 @@ import { useAuth } from "../contexts/AuthContext";
 import PasswordChangeModal from "./PasswordChangeModal";
 import styles from "../styles/Navbar.module.css";
 
-const Navbar = ({ title = "豪神APP", onMenuClick }) => {
+const Navbar = ({ title = "豪神", onMenuClick }) => {
 	const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 	const { user, logout } = useAuth();
 

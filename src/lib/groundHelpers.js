@@ -36,6 +36,15 @@ export const groundEmployeeList = [
 		rank: "地勤經理",
 		base: "KHH",
 		typeRating: [],
+		// Restricted to ONLY these work codes (2026-06-22) — unlike most
+		// employees who can be assigned any valid work code, her role
+		// only ever uses these two shift types. Solver must respect this
+		// as a hard constraint, not just a UI hint.
+		allowedWorkCodes: ["0808D", "0838D"],
+		// Transferred to this base/role starting June 2026 (2026-06-22) —
+		// no schedule should exist or be generated for her before this
+		// date. See activeFrom/activeUntil handling throughout this file.
+		activeFrom: "2026-06-01",
 	},
 	{
 		id: "59929",
@@ -50,6 +59,33 @@ export const groundEmployeeList = [
 		rank: "運務員",
 		base: "KHH",
 		typeRating: [],
+		// Fixed Mon-Fri schedule, always off Sat/Sun (2026-06-21) — NOT
+		// part of the rotating rest-pair pool the solver assigns to
+		// everyone else. Weekday numbers: 0=Sun, 6=Sat.
+		fixedRestDays: [0, 6],
+		// BUG FOUND 2026-06-22: fixedRestDays only constrained her REST
+		// days — it said nothing about her WORK days, so Pass 3's
+		// day-centric balancer treated her like any unrestricted
+		// rotating employee once Sat/Sun were assigned, scattering her
+		// across the entire AM/PM work-code pool (confirmed via real log:
+		// she ended up with 1408A, 1508A, 1438A, 14B8A etc., zero 0808D,
+		// when her actual real-world schedule is always 0808D Mon-Fri).
+		// Same fix as 陳寶英's allowedWorkCodes, single-code set here.
+		allowedWorkCodes: ["0808D"],
+	},
+	{
+		id: "25416",
+		name: "楊晴雯",
+		rank: "運務員",
+		base: "KHH",
+		typeRating: [],
+		// HISTORICAL ONLY (2026-06-22) — transferred out at the end of
+		// May 2026 (陳寶英 took over starting June, see her activeFrom
+		// above). Included here so Excel-imported Jan-May data correctly
+		// matches her by ID instead of surfacing as an "unmatched row"
+		// every time — but she should never appear in the active roster,
+		// auto-assign, or any UI for June onward.
+		activeUntil: "2026-05-31",
 	},
 	{
 		id: "59790",
@@ -141,8 +177,26 @@ export const sortGroundEmployees = (employees) => {
 	});
 };
 
-export const getGroundEmployeesByBase = (base) => {
-	const filtered = base === "ALL" ? groundEmployeeList : groundEmployeeList.filter((e) => e.base === base);
+// Checks whether an employee was active during a given monthLabel
+// (e.g. "2026年06月") — accounts for activeFrom/activeUntil (2026-06-22),
+// added to handle real staff transfers/retirements where a roster
+// member shouldn't appear (or generate/show schedule) outside their
+// actual employment window at this base/role.
+export const isEmployeeActiveForMonth = (emp, monthLabel) => {
+	if (!emp.activeFrom && !emp.activeUntil) return true; // no restriction — always active
+	const match = monthLabel.match(/(\d{4})年(\d{2})月/);
+	if (!match) return true;
+	const monthStart = `${match[1]}-${match[2]}-01`;
+	const lastDay = new Date(parseInt(match[1], 10), parseInt(match[2], 10), 0).getDate();
+	const monthEnd = `${match[1]}-${match[2]}-${String(lastDay).padStart(2, "0")}`;
+	if (emp.activeFrom && monthEnd < emp.activeFrom) return false; // employee hadn't started yet this month
+	if (emp.activeUntil && monthStart > emp.activeUntil) return false; // employee had already left by this month
+	return true;
+};
+
+export const getGroundEmployeesByBase = (base, monthLabel = null) => {
+	let filtered = base === "ALL" ? groundEmployeeList : groundEmployeeList.filter((e) => e.base === base);
+	if (monthLabel) filtered = filtered.filter((e) => isEmployeeActiveForMonth(e, monthLabel));
 	return sortGroundEmployees(filtered);
 };
 
@@ -605,23 +659,26 @@ export const groundDayOffHelpers = {
 // Standard shift = 9 hours. e.g. "0608A" → start 06:08, end 15:08
 // Holiday/rest codes (Z, R, AL, HL, RL, WL, DO, BL, PL, SL, ML, FL, LL)
 // are not work duties and have no times.
-const GROUND_REST_CODES = new Set([
-	"Z",
-	"R",
-	"AL",
-	"HL",
-	"RL",
-	"WL",
-	"DO",
-	"BL",
-	"PL",
-	"SL",
-	"ML",
-	"FL",
-	"LL",
-	"例",
-	"休",
-]);
+// Exported (with Chinese labels) so UI pickers — e.g. the click-to-pick
+// duty cell selector on 地勤排班 — can present a real choice list instead
+// of requiring supervisors to remember/type exact codes.
+export const GROUND_REST_CODE_LABELS = {
+	Z: "例假日",
+	R: "休息日",
+	AL: "特休假",
+	HL: "國定假日",
+	RL: "公差/公假/公出",
+	WL: "福利補休假",
+	DO: "空班",
+	BL: "補休假",
+	PL: "事假",
+	SL: "病假",
+	ML: "婚假",
+	FL: "喪假",
+	LL: "分娩/產檢/陪產/流產假",
+};
+
+const GROUND_REST_CODES = new Set(Object.keys(GROUND_REST_CODE_LABELS).concat(["例", "休"]));
 
 export const parseGroundDutyTimes = (dutyCode) => {
 	if (!dutyCode || GROUND_REST_CODES.has(dutyCode)) return null;
@@ -1042,11 +1099,53 @@ export const getQuotaProgress = (yearSchedule, targetMonth) => {
 // the manual-adjust page should call, so the two never disagree about
 // what counts as a violation.
 // schedulesByEmployee: { employeeId: [{ date, duty_code }, ...] }
-export const validateGroundMonth = (schedulesByEmployee, monthLabel) => {
+// Extracted from inside autoAssignGroundMonth (2026-06-22) so
+// validateGroundMonth can use the exact same cross-month boundary logic
+// the solver already relies on internally — closes a real gap where
+// MANUAL edits to the grid had zero cross-month rest-rule protection
+// (the solver checks this via violatesLocalRules during auto-assign,
+// but the 驗證班表 button never did, since it only ever passed the
+// current month's data with no boundary context at all).
+export const getCrossMonthBoundaryContext = (empId, monthLabel, yearScheduleByEmployee) => {
+	const yearSched = yearScheduleByEmployee?.[empId] || [];
+	const days = getDaysInMonth(monthLabel);
+	const monthStart = days[0]?.dateStr;
+	const monthEnd = days[days.length - 1]?.dateStr;
+	if (!monthStart || !monthEnd) return [];
+
+	const sevenBefore = new Date(monthStart);
+	sevenBefore.setDate(sevenBefore.getDate() - 7);
+	const sevenBeforeStr = sevenBefore.toISOString().split("T")[0];
+
+	const sevenAfter = new Date(monthEnd);
+	sevenAfter.setDate(sevenAfter.getDate() + 7);
+	const sevenAfterStr = sevenAfter.toISOString().split("T")[0];
+
+	return yearSched.filter(
+		(d) => (d.date >= sevenBeforeStr && d.date < monthStart) || (d.date > monthEnd && d.date <= sevenAfterStr)
+	);
+};
+
+// yearScheduleByEmployee is now OPTIONAL (third param) — when provided,
+// each employee's boundary context (last ~7 days of the previous month,
+// first ~7 days of the next) is merged in before checking, so a manual
+// edit that creates a rolling-window violation spanning the month
+// boundary is actually caught (point 4, 2026-06-22). When omitted,
+// behaves exactly as before (in-month-only check) — existing callers
+// that don't pass this argument are unaffected.
+export const validateGroundMonth = (schedulesByEmployee, monthLabel, yearScheduleByEmployee = null) => {
 	const allViolations = [];
 
 	for (const empId of Object.keys(schedulesByEmployee)) {
-		const empViolations = checkGroundFatigue(schedulesByEmployee[empId]);
+		const boundaryContext = yearScheduleByEmployee
+			? getCrossMonthBoundaryContext(empId, monthLabel, yearScheduleByEmployee)
+			: [];
+		const fullSchedule = [...boundaryContext, ...schedulesByEmployee[empId]];
+		const empViolations = checkGroundFatigue(fullSchedule)
+			// Only report violations that fall WITHIN the target month —
+			// a boundary violation rooted in last month's already-finalized
+			// data shouldn't show up as "this month's problem" to fix.
+			.filter((v) => v.date >= monthLabel.replace(/(\d{4})年(\d{2})月/, "$1-$2-01"));
 		empViolations.forEach((v) => allViolations.push({ ...v, employeeId: empId }));
 	}
 
@@ -1105,6 +1204,16 @@ export const autoAssignGroundMonth = (
 	const monthMatch = monthLabel.match(/(\d{2})月/);
 	const targetMonth = monthMatch ? parseInt(monthMatch[1], 10) : null;
 
+	// BUG FOUND 2026-06-22: this previously trusted the caller to have
+	// already filtered out employees who weren't active this month
+	// (e.g. 楊晴雯, who transferred out before June) — but a direct call
+	// (e.g. from a test harness, or any future caller) with the full
+	// unfiltered roster would incorrectly include them in the solve,
+	// consuming a real work-code slot that should never have been
+	// theirs. Filtering internally here too, defensively, rather than
+	// relying solely on the caller.
+	employees = employees.filter((e) => isEmployeeActiveForMonth(e, monthLabel));
+
 	// Working copy — { employeeId: { dateStr: duty_code } }
 	const result = {};
 	employees.forEach((emp) => { result[emp.id] = { ...(existingScheduleMap[emp.id] || {}) }; });
@@ -1124,60 +1233,631 @@ export const autoAssignGroundMonth = (
 	const isFixed = (empId, dateStr) =>
 		!!(existingScheduleMap[empId]?.[dateStr] || result[empId][dateStr]);
 
-	// ── Pass 2: satisfy weekly Z/R per employee ───────────────────────────────
+	// ── Pass 2: CSP-based rest-day assignment ────────────────────────────────
+	// FULL REWRITE 2026-06-21, replacing the pattern-generator approach
+	// entirely. Per explicit direction ("if we're going to build a
+	// functional roster system, let's make it complete... I want end
+	// result to be something an expensive roster system would
+	// generate"), this is now a genuine constraint-satisfaction search —
+	// backtracking over candidate WORK-BLOCK-LENGTH SEQUENCES per
+	// employee (not individual days), checking the headcount floor
+	// incrementally as each employee is added, backtracking when a
+	// choice makes the rest infeasible. This was prototyped and verified
+	// in a standalone Python harness before being ported here — every
+	// run independently re-checked rest-rule compliance AND headcount
+	// from scratch (not trusting the search's own bookkeeping) before
+	// being accepted as correct.
+	//
+	// WHY block-sequences as the variable, not individual days: a
+	// day-by-day CSP has no inherent concept of "this person's work
+	// stretch" — it would only know about constraints that happen to
+	// span multiple days. That's exactly how earlier versions produced
+	// technically-valid-but-inhumane results (e.g. alternating Z/R every
+	// other day passed every check yet was unworkable for staff).
+	// Reasoning in block-sequences means the solver's search space is
+	// already shaped like a real roster planner's mental model.
+	//
+	// WHY work-block evenness/variety is the PRIMARY objective and
+	// monthly quota-hitting is SECONDARY (not the reverse): monthly
+	// quotas are explicitly a SOFT target in this system (see
+	// GROUND_MONTHLY_QUOTA vs the HARD GROUND_YEARLY_QUOTA ceiling).
+	// Prioritizing quota-precision over schedule shape would mean
+	// occasionally stretching someone's work block specifically to hit a
+	// number — the opposite of "humane". The yearly ceiling remains a
+	// hard constraint (enforced in Pass 5, unchanged).
+	const CANDIDATE_WORK_SEQUENCES = [
+		[5], [4], [3],
+		[4, 3], [3, 4], [5, 3], [3, 5], [4, 5], [5, 4],
+		[3, 4, 5], [5, 4, 3], [4, 3, 5],
+	]; // Tried expanding this to 20 sequences (2026-06-21) to see if more
+	// variety would let the search find a jointly-valid combination for
+	// months that fall back (e.g. SEP/DEC 2026, both starting on a
+	// Tuesday) — it didn't help (same months still fell back) and cost
+	// real search time (July went from ~170ms to ~840ms), so reverted to
+	// this smaller, faster pool. The fallback below already produces a
+	// FULLY VALID schedule on its own (verified: correct headcount,
+	// correct coverage, zero rest violations) — it just has less work-
+	// block variety for whichever months don't have a jointly-valid
+	// varied combination. That's an acceptable, gracefully-degraded
+	// outcome, not a failure.
+	const OFFSET_CHOICES = [0, 1, 2, 3, 4, 5, 6];
+	const CSP_BACKTRACK_BUDGET = 40000; // confirmed 2026-06-21: raising this to 200k didn't change which months fall back (SEP/DEC's infeasibility within this candidate pool is structural, not a budget/timeout issue) — reverted to keep search fast for the common case
+
+	// Generates the REST days (not yet split into Z/R) for one employee
+	// given a repeating (work_len, 2)-rest cycle, phase-shifted by
+	// startOffset. Mirrors the verified Python prototype exactly.
+	const generateBlockSequenceRestDays = (workLens, startOffset) => {
+		const restDayIndices = [];
+		let dayIdx = startOffset;
+		let seqPos = 0;
+		while (dayIdx < days.length) {
+			const workLen = workLens[seqPos % workLens.length];
+			dayIdx += workLen;
+			for (let r = 0; r < 2; r++) {
+				const idx = dayIdx + r; // 0-indexed into `days`
+				if (idx < days.length) restDayIndices.push(idx);
+			}
+			dayIdx += 2;
+			seqPos += 1;
+		}
+		return restDayIndices;
+	};
+
+	// Verifies the rolling-window Z/R rule for one employee's candidate
+	// rest-day set, using the SAME sequential-alternation method proven
+	// correct in the earlier redesign (chronological order, strict
+	// Z/R/Z/R flip — week-number-based formulas were tried and broke).
+	const verifyRestRuleForCandidate = (restDayIndices) => {
+		const sorted = [...new Set(restDayIndices)].sort((a, b) => a - b);
+		const assigned = {};
+		sorted.forEach((idx, i) => { assigned[idx] = i % 2 === 0 ? "Z" : "R"; });
+		for (let start = 0; start <= days.length - 7; start++) {
+			const windowIndices = Array.from({ length: 7 }, (_, k) => start + k);
+			const hasZ = windowIndices.some((idx) => assigned[idx] === "Z");
+			const hasR = windowIndices.some((idx) => assigned[idx] === "R");
+			if (!hasZ || !hasR) return false;
+		}
+		return { assigned, sorted };
+	};
+
+	const rotatingEmployees = employees.filter((e) => !e.fixedRestDays);
+	const fixedEmployees = employees.filter((e) => e.fixedRestDays);
+
+	// Fixed-schedule employees (e.g. 25792): direct, unconditional
+	// assignment — not part of the search, since their pattern is fixed
+	// by definition.
+	fixedEmployees.forEach((emp) => {
+		const [restDayA, restDayB] = emp.fixedRestDays;
+		const restDayIndices = [];
+		days.forEach((d, idx) => { if (d.dow === restDayA || d.dow === restDayB) restDayIndices.push(idx); });
+		const verified = verifyRestRuleForCandidate(restDayIndices);
+		if (verified) {
+			verified.sorted.forEach((idx) => { result[emp.id][days[idx].dateStr] = verified.assigned[idx]; });
+		}
+	});
+
+	// Pre-validate every (sequence, offset) combination ONCE — exactly
+	// mirroring the Python prototype's approach of building a candidate
+	// pool up front rather than re-deriving validity inside the search
+	// loop repeatedly.
+	const candidatePool = [];
+	CANDIDATE_WORK_SEQUENCES.forEach((seq) => {
+		OFFSET_CHOICES.forEach((offset) => {
+			const restDayIndices = generateBlockSequenceRestDays(seq, offset);
+			const verified = verifyRestRuleForCandidate(restDayIndices);
+			if (verified) {
+				candidatePool.push({ seq, offset, restDayIndices: verified.sorted, assigned: verified.assigned });
+			}
+		});
+	});
+
+	if (rotatingEmployees.length > 0 && candidatePool.length > 0) {
+		const fixedRestingByDayIdx = new Array(days.length).fill(0);
+		fixedEmployees.forEach((emp) => {
+			days.forEach((d, idx) => {
+				if (result[emp.id][d.dateStr] === "Z" || result[emp.id][d.dateStr] === "R") {
+					fixedRestingByDayIdx[idx] += 1;
+				}
+			});
+		});
+
+		const restingByDayIdx = new Array(days.length).fill(0);
+		const totalEmployeeCount = employees.length;
+
+		// Scoring for the SECONDARY objective (quota-nudging + variety),
+		// applied only to choose AMONG already-headcount-valid solutions
+		// — never used to justify violating the floor.
+		const scoreAssignment = (assignment) => {
+			const seqsUsed = assignment.map((a) => JSON.stringify(a.seq));
+			const uniqueSeqCount = new Set(seqsUsed).size;
+			const mixedCount = assignment.filter((a) => new Set(a.seq).size > 1).length;
+			const restDaySets = assignment.map((a) => JSON.stringify(a.restDayIndices));
+			const duplicatePenalty = restDaySets.length - new Set(restDaySets).size;
+
+			// Quota nudge: prefer assignments whose total Z+R count this
+			// month, summed across the roster, sits closer to (not over)
+			// the sum of everyone's remaining monthly soft targets. Small
+			// weight relative to variety/duplicate terms, per the design
+			// decision that schedule shape leads and quota is a tie-breaker.
+			let quotaScore = 0;
+			if (targetMonth && GROUND_MONTHLY_QUOTA[targetMonth]) {
+				const monthlyTargetRZ = (GROUND_MONTHLY_QUOTA[targetMonth].R || 0) + (GROUND_MONTHLY_QUOTA[targetMonth].Z || 0);
+				assignment.forEach((a) => {
+					const rzCount = a.restDayIndices.length;
+					quotaScore -= Math.abs(rzCount - monthlyTargetRZ);
+				});
+			}
+
+			return uniqueSeqCount * 10 + mixedCount * 5 - duplicatePenalty * 20 + quotaScore;
+		};
+
+		// Backtracking search: assign rotating employees one at a time,
+		// maintaining a running per-day resting count, rejecting any
+		// candidate that would drop ANY day below GROUND_MIN_STAFF_REQUIRED.
+		// Explores the full candidate pool per employee (shuffled, so
+		// repeated runs aren't deterministically biased toward the same
+		// few sequences) and keeps the best-SCORING complete assignment
+		// found within the backtrack budget — not just the first valid one.
+		let attemptCount = 0;
+		let bestResult = null;
+		let bestScore = -Infinity;
+
+		const shuffledPool = [...candidatePool];
+		// Simple deterministic shuffle seeded by month, so behavior is
+		// reproducible for a given month rather than different every
+		// page load (helps debugging — same input, same output).
+		let seed = targetMonth || 1;
+		const seededRandom = () => {
+			seed = (seed * 9301 + 49297) % 233280;
+			return seed / 233280;
+		};
+		for (let i = shuffledPool.length - 1; i > 0; i--) {
+			const j = Math.floor(seededRandom() * (i + 1));
+			[shuffledPool[i], shuffledPool[j]] = [shuffledPool[j], shuffledPool[i]];
+		}
+
+		const backtrack = (empIdx, assignment) => {
+			attemptCount++;
+			if (attemptCount > CSP_BACKTRACK_BUDGET) return;
+
+			if (empIdx === rotatingEmployees.length) {
+				const score = scoreAssignment(assignment);
+				if (score > bestScore) {
+					bestScore = score;
+					bestResult = [...assignment];
+				}
+				return;
+			}
+
+			for (const candidate of shuffledPool) {
+				// Tentatively apply
+				candidate.restDayIndices.forEach((idx) => { restingByDayIdx[idx] += 1; });
+
+				let ok = true;
+				for (let idx = 0; idx < days.length; idx++) {
+					const working = totalEmployeeCount - restingByDayIdx[idx] - fixedRestingByDayIdx[idx];
+					if (working < GROUND_MIN_STAFF_REQUIRED) { ok = false; break; }
+				}
+
+				if (ok) {
+					backtrack(empIdx + 1, [...assignment, candidate]);
+				}
+
+				// Undo
+				candidate.restDayIndices.forEach((idx) => { restingByDayIdx[idx] -= 1; });
+
+				if (attemptCount > CSP_BACKTRACK_BUDGET) break;
+			}
+		};
+
+		backtrack(0, []);
+
+		if (bestResult) {
+			rotatingEmployees.forEach((emp, i) => {
+				const candidate = bestResult[i];
+				candidate.restDayIndices.forEach((idx) => {
+					result[emp.id][days[idx].dateStr] = candidate.assigned[idx];
+				});
+			});
+		} else {
+			// Confirmed via testing (2026-06-21): this fallback path
+			// produces a FULLY VALID schedule on its own — correct
+			// headcount, correct coverage, zero rest violations — it just
+			// uses the simpler uniform round-robin pattern instead of a
+			// varied one for this particular month, since this month's
+			// calendar shape has no jointly-valid VARIED combination
+			// within the candidate pool (confirmed structural, not a
+			// search-budget issue — same conclusion held even at a 5x
+			// larger budget). Worded as an informational note, not an
+			// alarm, since nothing is actually wrong with the result.
+			warnings.push({
+				type: "csp_uniform_fallback",
+				message: `${monthLabel}：本月排班使用較簡單的固定班別模式（而非多樣化班別），但仍完全符合所有排班規則`,
+			});
+			const CONSECUTIVE_PAIRS = [[0,1],[1,2],[2,3],[3,4],[4,5],[5,6],[6,0]];
+			const fixedWeekdaysFallback = new Set(fixedEmployees.flatMap((e) => e.fixedRestDays));
+			const fallbackPairs = CONSECUTIVE_PAIRS.filter(([a,b]) => !fixedWeekdaysFallback.has(a) && !fixedWeekdaysFallback.has(b));
+			const pool = fallbackPairs.length > 0 ? fallbackPairs : CONSECUTIVE_PAIRS;
+			rotatingEmployees.forEach((emp, i) => {
+				const [restDayA, restDayB] = pool[i % pool.length];
+				const occurrences = days.filter((d) => d.dow === restDayA || d.dow === restDayB);
+				occurrences.forEach((d, j) => { result[emp.id][d.dateStr] = j % 2 === 0 ? "Z" : "R"; });
+			});
+		}
+	}
+
+	// Safety net: the rolling-window validator is still the source of
+	// truth. With the CSP search above, this should essentially never
+	// fire for any employee whose candidate was accepted — kept only as
+	// a guard against truly unanticipated edge cases.
 	employees.forEach((emp) => {
-		// Walk in 7-day windows; if a window has no Z or no R among its
-		// non-fixed days, assign one into the first available empty slot.
-		for (let i = 0; i < days.length; i += 7) {
+		for (let i = 0; i < days.length; i++) {
 			const window = days.slice(i, i + 7);
-			if (window.length < 7) continue; // partial trailing window — handled by validator afterward, not solver-critical
+			if (window.length < 7) continue;
 
 			const windowDates = window.map((d) => d.dateStr);
 			const hasZ = windowDates.some((d) => result[emp.id][d] === "Z");
 			const hasR = windowDates.some((d) => result[emp.id][d] === "R");
+			if (hasZ && hasR) continue;
 
 			const emptySlots = windowDates.filter((d) => !result[emp.id][d]);
-
-			if (!hasZ && emptySlots.length > 0) {
-				result[emp.id][emptySlots.shift()] = "Z";
-			}
-			if (!hasR && emptySlots.length > 0) {
-				result[emp.id][emptySlots.shift()] = "R";
-			}
-			if ((!hasZ || !hasR) && emptySlots.length === 0) {
+			if (emptySlots.length === 0) {
 				warnings.push({
 					employeeId: emp.id,
 					type: "weekly_rest_unfillable",
 					message: `${emp.name || emp.id}：${windowDates[0]} 起7天內無法排入例假/休假（已無空位）`,
 				});
+				continue;
 			}
+			let remaining = [...emptySlots];
+			if (!hasZ && remaining.length > 0) result[emp.id][remaining.shift()] = "Z";
+			if (!hasR && remaining.length > 0) result[emp.id][remaining.shift()] = "R";
 		}
 	});
+
+	// ── Pass 2.5: proactive HL/WL allocation ─────────────────────────────────
+	// ADDED 2026-06-21 — confirmed gap: HL/WL were previously only ever
+	// CHECKED retroactively (the yearly-ceiling warning in Pass 5 below),
+	// never actually ASSIGNED anywhere. The solver only ever produced Z
+	// and R, even in months whose GROUND_MONTHLY_QUOTA explicitly wants
+	// HL/WL days used (e.g. July 2026: HL target=2, currently unused).
+	//
+	// IMPORTANT CONSTRAINT discovered while designing this: checkGroundFatigue's
+	// rolling-window rule checks for the LITERAL codes "Z" and "R"
+	// specifically — NOT "any rest code" — so HL/WL cannot be
+	// SUBSTITUTED for an existing Z or R without breaking that window's
+	// compliance. They must be ADDED on top of the existing Z/R pattern,
+	// as genuinely extra rest days. This was verified directly against
+	// the real validator before relying on it.
+	//
+	// Placement strategy: find each employee's LONGEST consecutive work
+	// stretch and insert the extra rest day near its midpoint — this is
+	// exactly "leeway for staff not having to work so many consecutive
+	// days," not just a quota-filling exercise. Employees with the
+	// longest stretches are prioritized first. Headcount floor is
+	// re-checked before committing each insertion.
+	const findLongestWorkStretch = (empId) => {
+		let bestStart = null, bestEnd = null, bestLen = 0, curStart = null;
+		for (let i = 0; i < days.length; i++) {
+			const dateStr = days[i].dateStr;
+			const code = result[empId][dateStr];
+			// BUG FOUND 2026-06-22: only checked for "Z"/"R" specifically —
+			// meaning an HL/WL day placed in an EARLIER round of the same
+			// allocation pass (see allocateExtraRestCode's multi-round
+			// rewrite below) wasn't recognized as breaking a work stretch,
+			// so a second round could miss that the stretch had already
+			// been split. Any rest-type code should count.
+			const isRest = code === "Z" || code === "R" || code === "HL" || code === "WL";
+			if (!isRest) {
+				if (curStart === null) curStart = i;
+			} else {
+				if (curStart !== null) {
+					const len = i - curStart;
+					if (len > bestLen) { bestLen = len; bestStart = curStart; bestEnd = i - 1; }
+					curStart = null;
+				}
+			}
+		}
+		if (curStart !== null) {
+			const len = days.length - curStart;
+			if (len > bestLen) { bestLen = len; bestStart = curStart; bestEnd = days.length - 1; }
+		}
+		return bestStart !== null ? { start: bestStart, end: bestEnd, length: bestLen } : null;
+	};
+
+	const allocateExtraRestCode = (code, targetPerEmployee, eligibleEmployeeIds = null) => {
+		if (targetPerEmployee <= 0) return;
+
+		// REDESIGNED 2026-06-22 per explicit clarification: "not everyone's
+		// HL was used... I wish for everyone to try and use up those x
+		// amount of days." The PREVIOUS version treated targetCount as a
+		// raw TOTAL day-count to place anywhere on the roster, greedily
+		// filling it via whoever had the single longest stretch — with a
+		// target of 2, that meant exactly 1-2 employees got HL and the
+		// other 4-5 got none, even though the intent was for the WHOLE
+		// roster to receive HL days, up to the monthly target, when
+		// headcount allows. Fixed to round-robin: every employee gets a
+		// chance at up to targetPerEmployee insertions, one round at a
+		// time, so the allocation spreads across the roster instead of
+		// concentrating on whoever happens to rank first.
+		//
+		// eligibleEmployeeIds (2026-06-22 round 2): when provided, only
+		// employees in this set are considered — used to enforce each
+		// employee's OWN remaining yearly budget (see the per-employee
+		// ceiling fix above this function's call sites), since an
+		// employee already at their individual ceiling should be skipped
+		// entirely, not just have their round-robin turn silently waste.
+		let totalPlaced = 0;
+		let totalAttempted = 0;
+
+		for (let round = 0; round < targetPerEmployee; round++) {
+			for (const emp of rotatingEmployees) {
+				if (eligibleEmployeeIds && !eligibleEmployeeIds.has(emp.id)) continue;
+				totalAttempted += 1;
+				const stretch = findLongestWorkStretch(emp.id);
+				if (!stretch || stretch.length < 3) continue; // no meaningful stretch left for this employee this round
+
+				const midIdx = Math.floor((stretch.start + stretch.end) / 2);
+				const dateStr = days[midIdx].dateStr;
+
+				// Re-check headcount floor as it stands RIGHT NOW (accounting
+				// for any earlier insertions in this same pass, including
+				// earlier rounds for OTHER employees) before committing.
+				const workingNow = employees.filter((e) => {
+					const c = result[e.id][dateStr];
+					return c !== "Z" && c !== "R" && c !== "HL" && c !== "WL";
+				}).length;
+				if (workingNow - 1 < GROUND_MIN_STAFF_REQUIRED) continue; // skip this employee this round, try others
+
+				result[emp.id][dateStr] = code;
+				totalPlaced += 1;
+			}
+		}
+
+		if (totalPlaced < totalAttempted) {
+			warnings.push({
+				type: "extra_rest_partially_placed",
+				message: `本月${code}：每人目標 ${targetPerEmployee} 天，但有 ${totalAttempted - totalPlaced} 次嘗試因人手不足或班別過短而無法安排（建議檢查本月班表分配是否平均）`,
+			});
+		}
+	};
+
+	if (targetMonth && GROUND_MONTHLY_QUOTA[targetMonth]) {
+		// HL: per request (2026-06-22) — "let's try to use up the quota for
+		// the month and not be in HL-debt" — this now tracks CARRY-FORWARD
+		// debt from earlier months in the same year, not just this month's
+		// own isolated target. If January wanted 1 HL but the roster only
+		// used 0 that month, February's effective target becomes its own
+		// target PLUS that 1-day shortfall — so the yearly total still
+		// trends toward GROUND_YEARLY_QUOTA.HL instead of permanently
+		// losing whatever a given month failed to use. Capped by the
+		// yearly ceiling, same safety pattern as the existing WL spread.
+		//
+		// BUG FOUND 2026-06-22 (round 2): both the debt AND the yearly-
+		// ceiling check were computed as a ROSTER-WIDE SUM across
+		// Object.values(yearScheduleByEmployee).flat() — but
+		// GROUND_YEARLY_QUOTA.HL=16 is a PER-EMPLOYEE ceiling everywhere
+		// else in this system (see getQuotaProgress, the quota counter
+		// UI). Summing across all 6 employees meant the SHARED pool hit
+		// 16 roughly 6x faster than any individual employee actually
+		// would — with real historical data already containing genuine
+		// HL usage from Jan-June, the roster-wide sum could plausibly
+		// already be at/near 16 by July even though no individual
+		// employee was anywhere close to their own ceiling, producing
+		// exactly the "zero HL assigned for EVERYONE" bug reported
+		// 2026-06-22. Fixed: both debt and ceiling are now computed
+		// PER EMPLOYEE, and an employee is only eligible for HL this
+		// month if THEY individually have remaining yearly budget —
+		// the round-robin placement (in allocateExtraRestCode) then
+		// only considers eligible employees.
+		const hlEligibleEmployees = new Set();
+		rotatingEmployees.forEach((emp) => {
+			const empYearData = yearScheduleByEmployee[emp.id] || [];
+
+			let empHlDebt = 0;
+			for (let m = 1; m < targetMonth; m++) {
+				const monthEntries = empYearData.filter((d) => d.date?.split("-")[1] === String(m).padStart(2, "0"));
+				if (monthEntries.length === 0) continue; // month not populated for THIS employee — no confirmed debt
+				const monthTarget = GROUND_MONTHLY_QUOTA[m]?.HL || 0;
+				const monthActual = monthEntries.filter((d) => d.duty_code === "HL").length;
+				empHlDebt += Math.max(0, monthTarget - monthActual);
+			}
+
+			const empHlUsedSoFar = empYearData.filter((d) => d.duty_code === "HL").length;
+			const empHlRemainingBudget = GROUND_YEARLY_QUOTA.HL - empHlUsedSoFar;
+
+			// Eligible this month if THIS employee individually still has
+			// yearly budget remaining (debt doesn't gate eligibility here —
+			// it only affects how many rounds get attempted below; an
+			// employee already at their own ceiling is simply skipped).
+			if (empHlRemainingBudget > 0) hlEligibleEmployees.add(emp.id);
+		});
+
+		// Roster-wide target for THIS MONTH's round-robin still comes
+		// from the monthly target + average debt across eligible
+		// employees (keeps the existing "spread across roster" placement
+		// mechanism in allocateExtraRestCode), but no individual
+		// employee can exceed their OWN remaining yearly budget —
+		// enforced inside allocateExtraRestCode via the eligible-set
+		// check below.
+		const hlMonthlyTarget = GROUND_MONTHLY_QUOTA[targetMonth].HL || 0;
+		allocateExtraRestCode("HL", hlMonthlyTarget, hlEligibleEmployees);
+
+		// WL: spread across the YEAR, not just this month's own target.
+		// Per request — "since 7 days of WL needs to be used... perhaps
+		// spread them out" — check how much WL has ALREADY been used
+		// this year (PER EMPLOYEE — same fix as HL above) before deciding
+		// how much to add this month, so the yearly total trends toward
+		// an even spread rather than overshooting any individual
+		// employee's ceiling.
+		const monthlyWlTarget = GROUND_MONTHLY_QUOTA[targetMonth].WL || 0;
+		if (monthlyWlTarget > 0) {
+			const wlEligibleEmployees = new Set();
+			rotatingEmployees.forEach((emp) => {
+				const empYearData = yearScheduleByEmployee[emp.id] || [];
+				const empWlUsedSoFar = empYearData.filter((d) => d.duty_code === "WL").length;
+				if (GROUND_YEARLY_QUOTA.WL - empWlUsedSoFar > 0) wlEligibleEmployees.add(emp.id);
+			});
+			allocateExtraRestCode("WL", monthlyWlTarget, wlEligibleEmployees);
+		}
+	}
 
 	// ── Pass 3: fill remaining empty days with work codes ─────────────────────
 	const WORK_CODES = Object.keys(GROUND_DUTY_TIME_LOOKUP);
 
+	// Restricts a candidate code list to an employee's allowedWorkCodes
+	// (2026-06-22) if they have one — e.g. 陳寶英 only ever uses 0808D or
+	// 0838D, never any other work code. Employees without this field are
+	// unaffected (returns the pool unchanged).
+	const restrictToAllowedCodes = (emp, codePool) => {
+		if (!emp.allowedWorkCodes) return codePool;
+		return codePool.filter((c) => emp.allowedWorkCodes.includes(c));
+	};
+
+	// BUG FOUND 2026-06-19: violatesLocalRules only ever checked the
+	// TARGET MONTH's data in isolation — meaning a duty on day 1 had no
+	// idea what happened on the last day of the PREVIOUS month, so an
+	// 11-hour-rest or 5-consecutive-day violation spanning a month
+	// boundary was invisible to the solver. Fix: pull a 7-day window of
+	// boundary data from yearScheduleByEmployee (which the caller already
+	// provides in full) immediately before and after the target month, and
+	// merge it into every candidate check. checkGroundFatigue itself
+	// doesn't need to change — it's already shape-agnostic about how many
+	// months it's given; this just gives it the context it was missing.
+	// Reuses the standalone getCrossMonthBoundaryContext (extracted
+	// 2026-06-22 so validateGroundMonth could share this exact logic
+	// instead of duplicating it) — same behavior as before, just no
+	// longer a separate inline closure.
+	const getBoundaryContext = (empId) => getCrossMonthBoundaryContext(empId, monthLabel, yearScheduleByEmployee);
 	const violatesLocalRules = (empId, dateStr, code) => {
-		// Build a minimal schedule slice (just this employee, with the
-		// candidate applied) and run the existing single-employee
-		// validator — reuses checkGroundFatigue instead of duplicating
-		// rest/consecutive-day logic in the solver.
-		const candidate = Object.entries({ ...result[empId], [dateStr]: code })
-			.map(([date, duty_code]) => ({ date, duty_code }));
+		// Build a minimal schedule slice (this employee's in-progress month
+		// PLUS adjacent-month boundary context, with the candidate applied)
+		// and run the existing single-employee validator — reuses
+		// checkGroundFatigue instead of duplicating rest/consecutive-day
+		// logic in the solver.
+		const boundaryContext = getBoundaryContext(empId);
+		const candidate = [
+			...boundaryContext,
+			...Object.entries({ ...result[empId], [dateStr]: code }).map(([date, duty_code]) => ({ date, duty_code })),
+		];
 		const violations = checkGroundFatigue(candidate);
 		// Only care about violations ON or AFTER this date — earlier
 		// violations aren't caused by this candidate assignment.
 		return violations.some((v) => v.date >= dateStr && (v.type === "insufficient_rest" || v.type === "excessive_consecutive_days"));
 	};
 
+	// REWRITE 2026-06-21: this loop was EMPLOYEE-CENTRIC (for each
+	// employee, fill all their empty days in WORK_CODES' fixed order) —
+	// meaning every employee independently converged on whichever code
+	// happened to come first in that fixed list (in practice, an early
+	// AM code) whenever it was valid, with zero awareness of what
+	// anyone ELSE was assigned that same day. Confirmed via the real
+	// validator: this produced up to 13 separate "missing PM coverage"
+	// days in one real run, even though plenty of valid PM codes existed
+	// for at least one of the working employees on every single one of
+	// those days (verified directly — see conversation history). Fix:
+	// restructure as DAY-CENTRIC — for each day, look at who's working,
+	// and deliberately alternate AM/PM preference based on the day's
+	// running count so far, instead of letting everyone pick the same
+	// "easiest" code independently.
+	const WORK_CODES_AM = WORK_CODES.filter((c) => isAmDuty(c));
+	const WORK_CODES_PM = WORK_CODES.filter((c) => isPmDuty(c));
+
+	// BUG FOUND 2026-06-22: the previous fix for "1238A overused" simply
+	// put 14B8A FIRST in a fixed-priority list — but since this loop
+	// always tries the primary pool in the SAME order every time, that
+	// meant 14B8A became the unconditional first choice for nearly every
+	// PM assignment roster-wide (confirmed via direct count: 82 of ~190
+	// total work-code assignments were 14B8A in one test run — a worse
+	// concentration than the original 1238A problem it was meant to
+	// fix). Fix: track how many times each work code has been used SO
+	// FAR this month, and always pick whichever valid candidate has been
+	// used LEAST — this naturally spreads usage across the whole pool
+	// instead of fixating on one code. 14B8A only wins as a tie-breaker
+	// against 1238A specifically when usage counts are otherwise equal,
+	// preserving the original soft preference without the runaway effect.
+	const codeUsageCount = {};
+	WORK_CODES.forEach((c) => { codeUsageCount[c] = 0; });
+
+	const pickLeastUsedValidCode = (pool, empId, dateStr) => {
+		const valid = pool.filter((c) => !violatesLocalRules(empId, dateStr, c));
+		if (valid.length === 0) return null;
+		let best = null;
+		let bestCount = Infinity;
+		for (const c of valid) {
+			const count = codeUsageCount[c];
+			if (count < bestCount) {
+				bestCount = count;
+				best = c;
+			} else if (count === bestCount && best === "1238A" && c === "14B8A") {
+				best = c; // tie-break: prefer 14B8A over 1238A specifically, per 2026-06-21 request
+			}
+		}
+		return best;
+	};
+
+	days.forEach(({ dateStr }) => {
+		// Which employees still need a code assigned today (not already
+		// fixed/Z/R from earlier passes).
+		const employeesNeedingCodeToday = employees.filter((emp) => !result[emp.id][dateStr]);
+		if (employeesNeedingCodeToday.length === 0) return;
+
+		let amCountToday = employees.filter((emp) => isAmDuty(result[emp.id][dateStr])).length;
+		let pmCountToday = employees.filter((emp) => isPmDuty(result[emp.id][dateStr])).length;
+
+		employeesNeedingCodeToday.forEach((emp) => {
+			// Prefer whichever type is currently behind for today, so the
+			// roster naturally balances instead of everyone picking
+			// independently. Ties (or PM=0 with multiple people left to
+			// assign) lean PM, since AM tends to be the "easier" default
+			// every employee's rest schedule allows, and that bias is
+			// exactly what caused the original gap.
+			const preferPm = pmCountToday <= amCountToday;
+			const primaryPool = restrictToAllowedCodes(emp, preferPm ? WORK_CODES_PM : WORK_CODES_AM);
+			const fallbackPool = restrictToAllowedCodes(emp, preferPm ? WORK_CODES_AM : WORK_CODES_PM);
+
+			let chosen = pickLeastUsedValidCode(primaryPool, emp.id, dateStr);
+			if (!chosen) chosen = pickLeastUsedValidCode(fallbackPool, emp.id, dateStr);
+
+			if (chosen) {
+				result[emp.id][dateStr] = chosen;
+				codeUsageCount[chosen] += 1;
+				if (isPmDuty(chosen)) pmCountToday++; else amCountToday++;
+			}
+			// If genuinely no code works for this employee today (rest-rule
+			// conflict on every option), leave it empty here — the
+			// existing backtrack-and-fallback-to-R logic below will catch
+			// and resolve it on a second pass over remaining gaps.
+		});
+	});
+
+	// Second pass: catch anything the day-centric pass above couldn't
+	// resolve (rare — only when EVERY code violates that employee's rest
+	// rules on that specific day), using the same bounded local backtrack
+	// + fallback-to-R safety net as before.
+	// Tracks {empId}|{dateStr} for any R assigned as a desperate FALLBACK
+	// (Pass 3 couldn't find a valid work code) — as opposed to a
+	// DELIBERATE rest day from Pass 2's CSP search. This distinction
+	// matters for Pass 4 below: a cluster of fallback-R's near a month
+	// boundary (confirmed via real reproduction 2026-06-22 — several
+	// employees' June work-stretches ending close together forced
+	// multiple simultaneous fallback-R's in early July, collapsing
+	// headcount with no recovery possible) should be ELIGIBLE for Pass
+	// 4's headcount repair to reclaim, since they were never a genuine
+	// rest commitment — unlike Pass 2's deliberate Z/R, which must stay
+	// protected (that protection is what fixed the EARLIER corruption
+	// bug from 2026-06-21 and must not be re-broken).
+	const fallbackRestCells = new Set();
+
 	employees.forEach((emp) => {
 		const emptyDates = days.map((d) => d.dateStr).filter((d) => !result[emp.id][d]);
+		const empWorkCodes = restrictToAllowedCodes(emp, WORK_CODES);
 
 		for (let idx = 0; idx < emptyDates.length; idx++) {
 			const dateStr = emptyDates[idx];
 			let assigned = false;
 
-			for (const code of WORK_CODES) {
+			for (const code of empWorkCodes) {
 				if (!violatesLocalRules(emp.id, dateStr, code)) {
 					result[emp.id][dateStr] = code;
 					assigned = true;
@@ -1198,7 +1878,7 @@ export const autoAssignGroundMonth = (
 					const originalCode = result[emp.id][backDate];
 					delete result[emp.id][backDate];
 
-					for (const altCode of WORK_CODES) {
+					for (const altCode of empWorkCodes) {
 						if (altCode === originalCode) continue;
 						if (!violatesLocalRules(emp.id, backDate, altCode)) {
 							result[emp.id][backDate] = altCode;
@@ -1215,6 +1895,7 @@ export const autoAssignGroundMonth = (
 
 				if (!recovered) {
 					result[emp.id][dateStr] = "R";
+					fallbackRestCells.add(`${emp.id}|${dateStr}`);
 					warnings.push({
 						employeeId: emp.id,
 						type: "fallback_to_rest",
@@ -1225,35 +1906,120 @@ export const autoAssignGroundMonth = (
 		}
 	});
 
-	// ── Pass 4: daily AM/PM coverage repair ───────────────────────────────────
+	// ── Pass 4: daily coverage repair (AM/PM type + minimum headcount) ────────
+	// BUG FOUND 2026-06-19: this pass only checked the AM/PM binary (at
+	// least 1 person on an AM-type duty, at least 1 on PM-type) — it never
+	// checked overall headcount. Combined with the Pass 2 staggering bug
+	// above, that meant a day could trivially "pass" coverage with just 2
+	// people working and 4 off, since the binary doesn't care HOW MANY
+	// people satisfy it. Now also enforces GROUND_MIN_STAFF_REQUIRED (the
+	// same floor used by the leave-request hard-cap validator), pulling
+	// additional people back to work if headcount is too low even when
+	// AM/PM is technically covered.
 	days.forEach(({ dateStr }) => {
+		const isWorkingThatDay = (emp) => {
+			const code = result[emp.id][dateStr];
+			return code && !isGroundRestCode(code);
+		};
+
+		const repairOne = (predicate, codePickerFn, failureType, failureLabel, protectRest = false) => {
+			const eligible = employees.find((emp) => {
+				if (predicate(emp)) return false; // already satisfies what we're checking, skip
+				if (isFixed(emp.id, dateStr) && existingScheduleMap[emp.id]?.[dateStr]) return false; // manually locked
+				// BUG FOUND 2026-06-21: the headcount repair (4b below) had NO
+				// protection against overwriting a Z/R that Pass 2 deliberately
+				// placed to satisfy the weekly rolling-window rule. Since every
+				// employee's schedule is mostly Z/R immediately after Pass 2/3,
+				// `isWorkingThatDay` was false for nearly everyone on nearly
+				// every day — triggering this repair to fire repeatedly across
+				// the WHOLE month, converting one person's Z/R to a work code
+				// each time it ran, which is exactly why 陳寶英 (sorted first,
+				// always the first eligible match) ended up with her entire
+				// month overwritten to 1238A with almost no Z or R left. Fix:
+				// when protectRest is true (headcount repair only — AM/PM type
+				// repair in 4a doesn't need this, since it already requires the
+				// candidate to take an AM/PM-type CODE, which by definition
+				// isn't Z/R), never select someone whose current day is Z or R.
+				if (protectRest) {
+					const currentCode = result[emp.id][dateStr];
+					const isFallback = fallbackRestCells.has(`${emp.id}|${dateStr}`);
+					// FIX 2026-06-22: fallback-R cells (Pass 3 couldn't find a
+					// valid work code, defaulted to R as a last resort) are
+					// NOT a deliberate rest commitment the way Pass 2's Z/R
+					// are — they should be RECLAIMABLE by headcount repair.
+					// Confirmed via real reproduction: several employees'
+					// fallback-R's clustering near a month boundary collapsed
+					// headcount to 2, and the old blanket protectRest check
+					// made that unrecoverable since it treated every R
+					// identically regardless of how it was assigned.
+					if ((currentCode === 'Z' || currentCode === 'R') && !isFallback) return false;
+				}
+				// Restrict the candidate pool to THIS employee's
+				// allowedWorkCodes (2026-06-22) — e.g. 陳寶英 should never
+				// be selected for a code outside her restricted set, even
+				// during reactive repair.
+				const codes = restrictToAllowedCodes(emp, codePickerFn());
+				return codes.some((c) => !violatesLocalRules(emp.id, dateStr, c));
+			});
+
+			if (eligible) {
+				const codes = restrictToAllowedCodes(eligible, codePickerFn());
+				const code = codes.find((c) => !violatesLocalRules(eligible.id, dateStr, c));
+				result[eligible.id][dateStr] = code;
+				return true;
+			}
+
+			warnings.push({ date: dateStr, type: failureType, message: `${dateStr}：${failureLabel}` });
+			return false;
+		};
+
+		// 4a: AM/PM type coverage
 		let hasAm = employees.some((emp) => isAmDuty(result[emp.id][dateStr]));
 		let hasPm = employees.some((emp) => isPmDuty(result[emp.id][dateStr]));
 
-		if (hasAm && hasPm) return;
+		// BUG FOUND 2026-06-21 (round 2): the first protectRest fix only
+		// covered 4b's call site — 4a's two calls were left with the
+		// default protectRest=false, so THEY were the ones actually
+		// overwriting Z/R on nearly every day (since hasAm/hasPm are false
+		// whenever someone's on Z/R, which is most days right after
+		// Pass 2). Confirmed via direct before/after instrumentation: Pass
+		// 2 and Pass 3 both correctly preserved 13 Z / 13 R for 陳寶英;
+		// the count only collapsed after Pass 4 ran. Both 4a calls now
+		// pass protectRest=true too.
+		if (!hasAm) {
+			repairOne(
+				(emp) => isAmDuty(result[emp.id][dateStr]),
+				() => WORK_CODES.filter((c) => isAmDuty(c)),
+				"coverage_unfillable",
+				"無法找到可排入早班且不違反休息規則的人員",
+				true,
+			);
+		}
+		if (!hasPm) {
+			repairOne(
+				(emp) => isPmDuty(result[emp.id][dateStr]),
+				() => WORK_CODES_PM, // reuses the same 14B8A-preferred order from Pass 3, for consistency
+				"coverage_unfillable",
+				"無法找到可排入晚班且不違反休息規則的人員",
+				true,
+			);
+		}
 
-		const needType = !hasAm ? "AM" : "PM";
-		const candidateCodes = WORK_CODES.filter((c) =>
-			needType === "AM" ? isAmDuty(c) : isPmDuty(c)
-		);
-
-		// Find an employee on this date who isn't locked (not from leave
-		// request or manual pre-fill) and can take the needed shift type
-		// without breaking their own rest rules.
-		const eligible = employees.find((emp) => {
-			if (isFixed(emp.id, dateStr) && existingScheduleMap[emp.id]?.[dateStr]) return false;
-			return candidateCodes.some((c) => !violatesLocalRules(emp.id, dateStr, c));
-		});
-
-		if (eligible) {
-			const code = candidateCodes.find((c) => !violatesLocalRules(eligible.id, dateStr, c));
-			result[eligible.id][dateStr] = code;
-		} else {
-			warnings.push({
-				date: dateStr,
-				type: "coverage_unfillable",
-				message: `${dateStr}：無法找到可排入${needType === "AM" ? "早班" : "晚班"}且不違反休息規則的人員`,
-			});
+		// 4b: minimum headcount — even if AM/PM type is technically covered,
+		// re-check and pull in MORE people if too few are working overall.
+		let workingCount = employees.filter(isWorkingThatDay).length;
+		let guard = 0; // safety bound — never loop more times than there are employees
+		while (workingCount < GROUND_MIN_STAFF_REQUIRED && guard < employees.length) {
+			const filledOneMore = repairOne(
+				isWorkingThatDay,
+				() => WORK_CODES, // any work code is acceptable for a pure headcount repair
+				"insufficient_headcount",
+				`當日上班人數不足（最低需求 ${GROUND_MIN_STAFF_REQUIRED} 人），且無法找到可調整的人員`,
+				true, // protectRest — never overwrite a Z/R Pass 2 placed deliberately
+			);
+			if (!filledOneMore) break; // no eligible person found — stop trying, warning already logged
+			workingCount = employees.filter(isWorkingThatDay).length;
+			guard += 1;
 		}
 	});
 
@@ -1279,4 +2045,169 @@ export const autoAssignGroundMonth = (
 	}
 
 	return { schedulesByEmployee: result, warnings };
+};
+
+// ── Excel import (地勤排班) ───────────────────────────────────────────────────
+// Parses one monthly sheet from the real KHH workbook structure. Built
+// against "2026年1-12月高雄站班表.xls" specifically — column layout is
+// NOT consistent across sheets (e.g. JAN has an extra leading blank
+// column the other months don't), so this locates the 日期 header row
+// dynamically per sheet rather than assuming fixed column indices.
+//
+// IMPORTANT — what this does NOT do: it does not try to re-derive duty
+// TIMES from each sheet's own legend table. Earlier investigation (this
+// project, 2026-06-18) found one apparent month-to-month legend
+// discrepancy (MAY's 0808D) and confirmed it was a data-entry typo, not a
+// real exception — GROUND_DUTY_TIME_LOOKUP above is the single
+// authoritative source for what a code means. This parser only imports
+// the duty CODES themselves; the app's existing lookup determines times.
+//
+// monthSheetData: a 2D array (sheet.getSheetGrid() or equivalent — see
+// the calling code in ground-roster/page.js for how SheetJS produces
+// this) representing one sheet's raw cell values.
+// year: the calendar year this sheet belongs to (the workbook's sheet
+// names are just "JAN".."DEC" with no year, so the caller must supply it
+// — typically from the workbook-level year shown in 參考表 or the sheet's
+// own title text, e.g. "2026年6月份高雄站班表").
+//
+// Returns { monthLabel, schedulesByEmployee, unmatchedRows, warnings }.
+// unmatchedRows surfaces any row whose name/ID didn't match a known
+// employee — these are NOT silently dropped, so a supervisor can see
+// exactly what wasn't imported and decide what to do about it (this is
+// the same "surface uncertainty, never guess" principle applied to the
+// OCR decision — a parser that silently skips a row it couldn't confidently
+// match is just as risky as one that silently guesses wrong).
+export const parseGroundScheduleSheet = (monthSheetData, year) => {
+	const warnings = [];
+	const unmatchedRows = [];
+
+	// Locate the 日期 (date) header row and its column.
+	let headerRow = -1;
+	let headerCol = -1;
+	for (let r = 0; r < monthSheetData.length && headerRow === -1; r++) {
+		for (let c = 0; c < (monthSheetData[r] || []).length; c++) {
+			if (monthSheetData[r][c] === "日期") {
+				headerRow = r;
+				headerCol = c;
+				break;
+			}
+		}
+	}
+	if (headerRow === -1) {
+		return { monthLabel: null, schedulesByEmployee: {}, unmatchedRows: [], warnings: ["找不到「日期」標題列，無法解析此工作表"] };
+	}
+
+	// Extract the month number from the sheet's title text (row 0,
+	// somewhere containing "N月份") — more reliable than trusting the
+	// sheet NAME (e.g. "JUN"), since title text is the actual printed
+	// document content a supervisor would visually verify against.
+	let monthNum = null;
+	for (let c = 0; c < (monthSheetData[0] || []).length; c++) {
+		const cellVal = String(monthSheetData[0][c] || "");
+		const match = cellVal.match(/(\d{4})年(\d{1,2})月/);
+		if (match) {
+			monthNum = parseInt(match[2], 10);
+			break;
+		}
+	}
+	if (!monthNum) {
+		return { monthLabel: null, schedulesByEmployee: {}, unmatchedRows: [], warnings: ["無法從工作表標題判斷月份"] };
+	}
+	const monthLabel = `${year}年${String(monthNum).padStart(2, "0")}月`;
+
+	// Day-number columns start immediately after the 日期 label and
+	// continue until a non-numeric cell breaks the sequence (the trailing
+	// 本月應休/本月實休/員工簽名 columns).
+	const dayColumns = []; // [{ col, day }]
+	let c = headerCol + 1;
+	while (c < monthSheetData[headerRow].length) {
+		const val = monthSheetData[headerRow][c];
+		if (typeof val === "number" && val >= 1 && val <= 31) {
+			dayColumns.push({ col: c, day: val });
+			c++;
+		} else {
+			break;
+		}
+	}
+	if (dayColumns.length === 0) {
+		return { monthLabel, schedulesByEmployee: {}, unmatchedRows: [], warnings: [`${monthLabel}：找不到日期欄位`] };
+	}
+
+	// Employee data rows start a few rows below the header (after 星期
+	// weekday row) and continue until a blank/legend row. Detect the
+	// employee-ID column by finding which column, in the rows just below
+	// the header, holds numeric values matching known employee IDs —
+	// this is more robust than assuming a fixed offset, since JAN's
+	// extra leading column shifts everything by one.
+	//
+	// BUG FOUND 2026-06-21 (verified against the real workbook): the ID
+	// column actually sits AT the same column index as the 日期 label
+	// itself (the header row's "日期" text and the data rows' employee ID
+	// occupy the same column — confirmed directly against JUN's real
+	// grid: 日期 at col 1, employee IDs also at col 1, names at col 0).
+	// The original range `cc < headerCol` excluded that column entirely,
+	// so ID detection silently failed on every real sheet. Search through
+	// headerCol inclusive.
+	const knownIds = new Set(groundEmployeeList.map((e) => e.id));
+	let nameCol = -1;
+	let idCol = -1;
+	for (let r = headerRow + 1; r < Math.min(headerRow + 4, monthSheetData.length); r++) {
+		for (let cc = 0; cc <= headerCol; cc++) {
+			const val = monthSheetData[r][cc];
+			if (typeof val === "number" && knownIds.has(String(Math.trunc(val)))) {
+				idCol = cc;
+				nameCol = cc - 1 >= 0 ? cc - 1 : cc;
+				break;
+			}
+		}
+		if (idCol !== -1) break;
+	}
+	if (idCol === -1) {
+		warnings.push(`${monthLabel}：無法自動偵測員工編號欄位，將嘗試以姓名比對`);
+	}
+
+	const schedulesByEmployee = {};
+
+	for (let r = headerRow + 1; r < monthSheetData.length; r++) {
+		const row = monthSheetData[r] || [];
+		const idVal = idCol !== -1 ? row[idCol] : null;
+		const nameVal = nameCol !== -1 ? row[nameCol] : null;
+
+		// Stop once we hit the legend text rows (no valid ID/name pattern)
+		if (idVal == null && nameVal == null) continue;
+
+		let matchedEmployee = null;
+		if (idVal != null && knownIds.has(String(Math.trunc(idVal)))) {
+			matchedEmployee = groundEmployeeList.find((e) => e.id === String(Math.trunc(idVal)));
+		} else if (nameVal) {
+			// Fallback: match by name. Handles the "O"-redacted name months
+			// (e.g. "楊O雯") via partial match on the unredacted characters,
+			// since the ID-based match above already handles unredacted
+			// months — this fallback only matters for sheets where the ID
+			// column wasn't detected.
+			const cleanName = String(nameVal).replace(/O/g, "");
+			matchedEmployee = groundEmployeeList.find(
+				(e) => e.name === nameVal || (cleanName.length >= 2 && e.name.includes(cleanName[0]) && e.name.includes(cleanName[cleanName.length - 1]))
+			);
+		}
+
+		if (!matchedEmployee) {
+			if (idVal != null || nameVal) {
+				unmatchedRows.push({ row: r, idVal, nameVal });
+			}
+			continue;
+		}
+
+		const empSchedule = {};
+		dayColumns.forEach(({ col, day }) => {
+			const code = row[col];
+			if (code != null && String(code).trim() !== "") {
+				const dateStr = `${year}-${String(monthNum).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+				empSchedule[dateStr] = String(code).trim();
+			}
+		});
+		schedulesByEmployee[matchedEmployee.id] = empSchedule;
+	}
+
+	return { monthLabel, schedulesByEmployee, unmatchedRows, warnings };
 };

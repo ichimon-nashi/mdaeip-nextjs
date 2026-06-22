@@ -7,15 +7,19 @@ import { hasAppAccess, isGroundStaff } from "../../lib/permissionHelpers";
 import { useRouter } from "next/navigation";
 import toast from "react-hot-toast";
 import { X } from "lucide-react";
+import { FaCameraRetro, FaRegTrashAlt } from "react-icons/fa";
+import { FaRoadBarrier } from "react-icons/fa6";
 import styles from "../../styles/Schedule.module.css";
 import gStyles from "../../styles/GroundSchedule.module.css";
 import {
 	groundEmployeeList,
 	sortGroundEmployees,
 	getGroundEmployeesByBase,
+	isEmployeeActiveForMonth,
 	getGroundEmployeeById,
 	groundScheduleHelpers,
-	groundDayOffHelpers,
+	groundLeaveRequestHelpers,
+	GROUND_REST_CODE_LABELS,
 	AUTO_APPROVE_BASES,
 	GROUND_MAIN_BASES,
 	GROUND_OTHER_BASES,
@@ -38,13 +42,39 @@ const RECORD_RETENTION_YEARS = 2;
 // page.js can share the exact same logic. Imported above instead of
 // redefined here.
 
+// Per-code colors (2026-06-21) — each rest/leave code gets its own
+// distinct color instead of 4 broad categories that made several
+// different leave types visually identical. See the matching CSS block
+// in Schedule.module.css for the actual color values and grouping logic.
+const DUTY_CODE_CLASS_MAP = {
+	Z: "dutyZ",
+	例: "dutyZ",
+	R: "dutyR",
+	休: "dutyR",
+	HL: "dutyHL",
+	AL: "dutyAL",
+	PL: "dutyPL",
+	SL: "dutySL",
+	ML: "dutyML",
+	FL: "dutyFL",
+	LL: "dutyLL",
+	RL: "dutyRL",
+	WL: "dutyWL",
+	BL: "dutyBL",
+	DO: "dutyEmpty",
+};
+// Most commonly-used work codes (2026-06-22), given a subtle background
+// to help the scheduler's eye distinguish them at a glance. Mirrors the
+// same change in ground-roster/page.js — these two files keep their own
+// copy of getDutyCellClass deliberately (established earlier this
+// project), so this needs to be applied in both places.
+const COMMON_WORK_CODES = ["0608A", "0908A", "14B8A"];
+
 const getDutyCellClass = (code) => {
 	if (!code || code === "-") return "";
-	if (["Z", "例", "HL"].includes(code)) return styles.dutyOff;
-	if (["R", "休", "AL", "PL", "SL", "ML", "FL", "LL"].includes(code))
-		return styles.dutyLeave;
-	if (["RL", "WL", "BL"].includes(code)) return styles.dutyWelfare;
-	if (code === "DO") return styles.dutyEmpty;
+	const className = DUTY_CODE_CLASS_MAP[code];
+	if (className) return styles[className];
+	if (COMMON_WORK_CODES.includes(code)) return styles.dutyCommonWork;
 	return "";
 };
 
@@ -505,7 +535,8 @@ const DutyChangeRecords = ({ user, currentMonth }) => {
 								className={gStyles.deleteSelectedBtn}
 								onClick={handleDeleteSelected}
 							>
-								🗑 刪除 ({selectedIds.length})
+								<FaRegTrashAlt style={{ marginRight: 6 }} />{" "}
+								刪除 ({selectedIds.length})
 							</button>
 						)}
 					</div>
@@ -646,7 +677,7 @@ const DutyChangeRecords = ({ user, currentMonth }) => {
 														}
 														title="刪除"
 													>
-														🗑
+														<FaRegTrashAlt />
 													</button>
 												</div>
 											</td>
@@ -784,6 +815,13 @@ export default function GroundSchedulePage() {
 	const [activeBase, setActiveBase] = useState("ALL");
 	const [scheduleLoading, setScheduleLoading] = useState(false);
 	const [scheduleMap, setScheduleMap] = useState({});
+	// Per request 2026-06-22: own row hidden from the normal crew table
+	// view (staff shouldn't see their own schedule duplicated in the
+	// "Crew Members" section below their own pinned row elsewhere on the
+	// page), but the screenshot/export should still include everyone —
+	// this flag toggles ON briefly during capture, then back off.
+	const [includeOwnRowForCapture, setIncludeOwnRowForCapture] =
+		useState(false);
 	const [isMonthFinalized, setIsMonthFinalized] = useState(true); // default true so the badge doesn't flash "WIP" before the real status loads
 	const [dayOffMap, setDayOffMap] = useState({});
 	const [swapRequestMap, setSwapRequestMap] = useState({});
@@ -875,18 +913,33 @@ export default function GroundSchedulePage() {
 				});
 				setSwapRequestMap(srMap);
 				setMonthChangeCount(countRes.count || 0);
-				// Day-off requests
+				// Day-off requests — MIGRATED 2026-06-22 from groundDayOffHelpers
+				// (table ground_dayoff_requests) to groundLeaveRequestHelpers
+				// (table ground_leave_requests). These were two separate,
+				// disconnected systems: the staff-facing tap-to-request flow
+				// wrote to ground_dayoff_requests, while the supervisor's
+				// 待處理的休假申請 panel on ground-roster only ever read from
+				// ground_leave_requests — meaning a staff member's request never
+				// appeared there at all. Consolidating onto the richer system
+				// (leave-type tracking, hard-cap availability checking) that the
+				// supervisor panel already uses. Also now captures requestId and
+				// leave_type, needed for the leave-type picker and per-type dot
+				// coloring (point 4/5 color work).
 				const dMap = {};
 				await Promise.all(
 					groundEmployeeList.map(async (emp) => {
 						const { data } =
-							await groundDayOffHelpers.getRequestsForEmployee(
+							await groundLeaveRequestHelpers.getRequestsForEmployee(
 								emp.id,
 								currentMonth,
 							);
 						dMap[emp.id] = {};
 						(data || []).forEach((req) => {
-							dMap[emp.id][req.requested_date] = req.status;
+							dMap[emp.id][req.requested_date] = {
+								status: req.status,
+								leaveType: req.leave_type,
+								requestId: req.id,
+							};
 						});
 					}),
 				);
@@ -953,23 +1006,62 @@ export default function GroundSchedulePage() {
 	// own), not a separate exclusion. The renderRow function below detects
 	// when a row belongs to the logged-in user and disables swap-click on
 	// it (can't swap with yourself) while still allowing day-off requests.
-	const crewEmployees =
-		activeBase === "ALL"
-			? sortGroundEmployees(groundEmployeeList)
-			: getGroundEmployeesByBase(activeBase);
+	const crewEmployees = (() => {
+		const base =
+			activeBase === "ALL"
+				? sortGroundEmployees(groundEmployeeList)
+				: getGroundEmployeesByBase(activeBase);
+		// Filtered to whoever was actually active for the SELECTED month
+		// (2026-06-22) — see isEmployeeActiveForMonth.
+		const activeForMonth = base.filter((emp) =>
+			isEmployeeActiveForMonth(emp, currentMonth),
+		);
+		// Per request 2026-06-22: exclude the logged-in user's own row from
+		// this table during normal viewing — their own schedule is already
+		// shown in the pinned "Your Schedule" section above. Only included
+		// here when includeOwnRowForCapture is true (screenshot in progress).
+		if (includeOwnRowForCapture) return activeForMonth;
+		return activeForMonth.filter((emp) => emp.id !== user?.id);
+	})();
 
 	// Handlers
+	// Wraps takeScreenshot to temporarily include the logged-in user's own
+	// row (per 2026-06-22 request — hidden during normal viewing, shown
+	// only in the captured screenshot). Waits two animation frames after
+	// toggling the flag, giving React time to actually commit the
+	// re-render with the fuller crewEmployees list before html2canvas
+	// reads the DOM — a fixed setTimeout would be fragile/arbitrary here.
+	const handleScreenshotClick = useCallback(async () => {
+		setIncludeOwnRowForCapture(true);
+		await new Promise((resolve) =>
+			requestAnimationFrame(() => requestAnimationFrame(resolve)),
+		);
+		try {
+			await takeScreenshot(crewTableRef, activeBase, currentMonth);
+		} finally {
+			setIncludeOwnRowForCapture(false);
+		}
+	}, [activeBase, currentMonth]);
+
+	// Leave-type picker (2026-06-22) — tapping an own-row future cell now
+	// opens a small picker to choose WHICH leave type, instead of
+	// immediately submitting a single generic "day off" request (the old
+	// purple-dot flow had no type at all). { dateStr } when open, null when
+	// closed.
+	const [leaveTypePicker, setLeaveTypePicker] = useState(null);
+
 	const handleOwnCellTap = useCallback(
 		(dateStr) => {
 			if (dateStr <= todayStr) return;
 			const existing = dayOffMap[user?.id]?.[dateStr];
-			if (existing === "approved") {
+			if (existing?.status === "accepted") {
 				toast("此日休假申請已核准", { icon: "✅" });
 				return;
 			}
-			if (existing === "pending") {
-				groundDayOffHelpers
-					.cancelRequest(user.id, dateStr)
+			if (existing) {
+				// Existing (non-cancelled) request on this date — tapping again cancels it.
+				groundLeaveRequestHelpers
+					.cancelRequest(existing.requestId)
 					.then(({ error }) => {
 						if (error) {
 							toast.error("取消失敗");
@@ -984,21 +1076,48 @@ export default function GroundSchedulePage() {
 					});
 				return;
 			}
-			groundDayOffHelpers
-				.submitRequest(user.id, currentMonth, dateStr)
-				.then(({ error }) => {
+			// No existing request — open the leave-type picker instead of
+			// submitting immediately, so the user can choose which type.
+			setLeaveTypePicker({ dateStr });
+		},
+		[dayOffMap, todayStr, user],
+	);
+
+	const handleLeaveTypeSelect = useCallback(
+		(leaveType) => {
+			if (!leaveTypePicker) return;
+			const { dateStr } = leaveTypePicker;
+			setLeaveTypePicker(null);
+			groundLeaveRequestHelpers
+				.submitRequest(
+					user.id,
+					user.base,
+					currentMonth,
+					dateStr,
+					leaveType,
+				)
+				.then(({ error, rejected, reason }) => {
+					if (rejected) {
+						toast.error(reason || "申請未通過，請選擇其他日期");
+						return;
+					}
 					if (error) {
-						toast.error("申請失敗");
+						toast.error("申請失敗：" + error);
 						return;
 					}
 					setDayOffMap((prev) => ({
 						...prev,
-						[user.id]: { ...prev[user.id], [dateStr]: "pending" },
+						[user.id]: {
+							...prev[user.id],
+							[dateStr]: { status: "accepted", leaveType },
+						},
 					}));
-					toast.success(`已申請 ${dateStr} 休假`);
+					toast.success(
+						`已申請 ${dateStr} ${GROUND_REST_CODE_LABELS[leaveType] || leaveType}`,
+					);
 				});
 		},
-		[dayOffMap, todayStr, user, currentMonth],
+		[leaveTypePicker, user, currentMonth],
 	);
 
 	const handleCrewCellTap = useCallback(
@@ -1291,7 +1410,7 @@ export default function GroundSchedulePage() {
 					</td>
 					{days.map(({ dateStr, dow }) => {
 						const dutyCode = scheduleMap[emp.id]?.[dateStr] || "";
-						const dayOffStatus = dayOffMap[emp.id]?.[dateStr];
+						const dayOffEntry = dayOffMap[emp.id]?.[dateStr];
 						const cellSwapStatus =
 							swapRequestMap[`${emp.id}|${dateStr}`];
 						const isPast = dateStr <= todayStr;
@@ -1308,15 +1427,16 @@ export default function GroundSchedulePage() {
 						else if (cellSwapStatus === "pending")
 							cellClass += ` ${styles.dutyCellPending}`;
 						if (!isOwnRow) cellClass += ` ${styles.selectable}`;
-						if (isOwnRow && !isPast && !dayOffStatus)
+						if (isOwnRow && !isPast && !dayOffEntry)
 							cellClass += ` ${styles.selectable}`;
 						if (isInTray) cellClass += ` ${gStyles.traySelected}`;
-						const dotClass =
-							dayOffStatus === "pending"
-								? gStyles.dotPending
-								: dayOffStatus === "approved"
-									? gStyles.dotApproved
-									: null;
+						// Dot color now reflects the REQUESTED LEAVE TYPE (2026-06-22),
+						// reusing the same per-code palette as the duty cells themselves
+						// (getDutyCellClass) instead of a single flat purple dot with no
+						// type information at all.
+						const dotColorClass = dayOffEntry
+							? getDutyCellClass(dayOffEntry.leaveType)
+							: null;
 						return (
 							<td
 								key={dateStr}
@@ -1339,7 +1459,16 @@ export default function GroundSchedulePage() {
 								<div className={styles.dutyContent}>
 									{dutyCode}
 								</div>
-								{dotClass && <span className={dotClass} />}
+								{dayOffEntry && (
+									<span
+										className={`${gStyles.dotApproved} ${dotColorClass}`}
+										title={
+											GROUND_REST_CODE_LABELS[
+												dayOffEntry.leaveType
+											] || dayOffEntry.leaveType
+										}
+									/>
+								)}
 								{isInTray && (
 									<span className={gStyles.trayCheckmark}>
 										✓
@@ -1373,6 +1502,54 @@ export default function GroundSchedulePage() {
 
 	return (
 		<div className={styles.mainContainer}>
+			{leaveTypePicker && (
+				<div
+					className={gStyles.leaveTypePickerBackdrop}
+					onClick={() => setLeaveTypePicker(null)}
+				>
+					<div
+						className={gStyles.leaveTypePickerModal}
+						onClick={(e) => e.stopPropagation()}
+					>
+						<div className={gStyles.leaveTypePickerHeader}>
+							<span>
+								選擇休假類型 — {leaveTypePicker.dateStr}
+							</span>
+							<button onClick={() => setLeaveTypePicker(null)}>
+								✕
+							</button>
+						</div>
+						<div className={gStyles.leaveTypePickerGrid}>
+							{Object.entries(GROUND_REST_CODE_LABELS)
+								.filter(([code]) => code !== "DO") // DO (空班) isn't a real leave type a staff member would request
+								.map(([code, label]) => (
+									<button
+										key={code}
+										className={`${gStyles.leaveTypeOption} ${getDutyCellClass(code)}`}
+										onClick={() =>
+											handleLeaveTypeSelect(code)
+										}
+									>
+										<span
+											className={
+												gStyles.leaveTypeOptionCode
+											}
+										>
+											{code}
+										</span>
+										<span
+											className={
+												gStyles.leaveTypeOptionLabel
+											}
+										>
+											{label}
+										</span>
+									</button>
+								))}
+						</div>
+					</div>
+				</div>
+			)}
 			{swapModalOpen && swapTray.length > 0 && (
 				<SwapModal
 					user={user}
@@ -1432,7 +1609,8 @@ export default function GroundSchedulePage() {
 							className={gStyles.monthWipBadge}
 							title="此月份排班尚在進行中，可能會有變動"
 						>
-							🚧 排班進行中
+							<FaRoadBarrier style={{ marginRight: 6 }} />{" "}
+							排班進行中
 						</span>
 					)}
 				</div>
@@ -1456,29 +1634,11 @@ export default function GroundSchedulePage() {
 					<div className={gStyles.pageTabActions}>
 						<button
 							className={gStyles.screenshotBtn}
-							onClick={() =>
-								takeScreenshot(
-									crewTableRef,
-									activeBase,
-									currentMonth,
-								)
-							}
+							onClick={handleScreenshotClick}
 							disabled={scheduleLoading}
 						>
-							📷 截圖
+							<FaCameraRetro style={{ marginRight: 6 }} /> 截圖
 						</button>
-						{hasAppAccess(user, "database_management") && (
-							<button
-								className={gStyles.importBtn}
-								onClick={() =>
-									toast("Excel匯入功能即將推出", {
-										icon: "ℹ️",
-									})
-								}
-							>
-								📥 匯入班表
-							</button>
-						)}
 					</div>
 				</div>
 

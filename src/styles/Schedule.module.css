@@ -430,6 +430,67 @@
 	background-color: #fed7aa !important;
 }
 
+/* Per-code colors (2026-06-21) — replaces the old 4-category grouping
+   (dutyOff/dutyLeave/dutyWelfare/dutyEmpty), which lumped R, AL, PL, SL,
+   ML, FL, LL all into one identical blue, making them visually
+   indistinguishable from each other on the schedule grid. Each of the 13
+   rest/leave codes now gets its own color. Loosely grouped by hue family
+   (rest=green/teal, personal leave=blue/purple, family-event leave=
+   pink/red, welfare/admin=amber/orange) so related types are visually
+   adjacent without being identical. */
+.dutyZ {
+	background-color: #86efac; /* 例假日 — green, distinct hue from R and HL (2026-06-22 rework) */
+}
+.dutyR {
+	background-color: #93c5fd; /* 休息日 — blue, was green and too close to Z (2026-06-22 rework) */
+}
+.dutyHL {
+	background-color: #fde68a; /* 國定假日 — yellow, was teal-green and too close to Z/R (2026-06-22 rework) */
+}
+.dutyAL {
+	background-color: #e0e7ff; /* 特休假 — pale indigo, demoted/muted per request to reserve bold colors for common duties */
+}
+.dutyPL {
+	background-color: #e5e7eb; /* 事假 — light grey, muted per request (rarely used) */
+}
+.dutySL {
+	background-color: #ddd6fe; /* 病假 — pale violet, muted per request (rarely used) */
+}
+.dutyML {
+	background-color: #fbcfe8; /* 婚假 — pale pink, kept muted per request (rarely used) */
+}
+.dutyFL {
+	background-color: #d1d5db; /* 喪假 — grey, deliberately muted/solemn rather than a bright color */
+}
+.dutyLL {
+	background-color: #fecdd3; /* 分娩/產檢/陪產/流產假 — pale rose, muted per request (rarely used) */
+}
+.dutyRL {
+	background-color: #fed7aa; /* 公差/公假/公出 — orange */
+}
+.dutyWL {
+	background-color: #fdba74; /* 福利補休假 — deeper orange */
+}
+.dutyBL {
+	background-color: #fde68a; /* 補休假 — yellow */
+}
+.dutyEmpty {
+	background-color: #fef3c7; /* DO 空班 — light amber, unchanged */
+}
+
+/* Subtle highlight for the most commonly-used WORK codes (2026-06-22:
+   0608A, 0908A, 14B8A) — deliberately faint so it doesn't compete with
+   the bold rest/leave colors above, which carry more important
+   information (whether someone is working at all). Just enough tint to
+   help the scheduler's eye distinguish these from rarer work codes
+   (which render with no background at all) when scanning a busy grid. */
+.dutyCommonWork {
+	background-color: #f8fafc;
+}
+
+/* Legacy 4-category classes kept ONLY for any code not in the explicit
+   map above (defensive fallback in getDutyCellClass) — should rarely
+   render in practice now that every known code has its own class. */
 .dutyOff {
 	background-color: #dcfce7;
 }
@@ -440,10 +501,6 @@
 
 .dutyWelfare {
 	background-color: #fecaca;
-}
-
-.dutyEmpty {
-	background-color: #fef3c7;
 }
 
 .dutyHomestandby {
@@ -2100,17 +2157,19 @@
 	color: #374151;
 }
 
-/* ── Pending swap request — purple outline ───────────────── */
+/* ── Pending swap request — purple border ───────────────── */
+/* Switched from outline to border: html2canvas (used for schedule
+   screenshots) has unreliable support for the outline property and was
+   silently dropping it from exported images, even though it rendered
+   correctly in the live browser view. border is reliably captured. */
 .dutyCellPending {
-	outline: 2px solid #7c3aed !important;
-	outline-offset: -2px;
+	border: 2px solid #7c3aed !important;
 	box-shadow: inset 0 0 0 2px rgba(124, 58, 237, 0.15);
 }
 
-/* ── Approved swap request — green outline ───────────────── */
+/* ── Approved swap request — green border ───────────────── */
 .dutyCellApproved {
-	outline: 2px solid #22c55e !important;
-	outline-offset: -2px;
+	border: 2px solid #22c55e !important;
 	box-shadow: inset 0 0 0 2px rgba(34, 197, 94, 0.15);
 }
 
