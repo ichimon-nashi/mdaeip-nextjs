@@ -16,8 +16,8 @@
 }
 
 .globalLoadingMascot {
-	width: 35%;
-	height: 35%;
+	width: 25vw;
+	height: 25vh;
 	object-fit: contain;
 }
 
@@ -50,10 +50,10 @@
 
 @media (max-width: 480px) {
 	.globalLoadingMascot {
-		width: 90px;
-		height: 90px;
+		width: 300px;
+		height: 300px;
 	}
 	.globalLoadingText {
-		font-size: 1rem;
+		font-size: 1.5rem;
 	}
 }
