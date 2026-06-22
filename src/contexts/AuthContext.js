@@ -90,6 +90,19 @@ export const AuthProvider = ({ children }) => {
 		} else if (isDashboardPage && !user) {
 			console.log("🔒 No user, redirecting to login");
 			router.replace('/');
+		} else if (isDashboardPage && user && isGroundStaff(user)) {
+			// BUG FOUND 2026-06-22: the branch above only catches ground
+			// staff at the EXACT MOMENT they log in (isLoginPage && user).
+			// If a ground staff member later lands on /dashboard by any
+			// other path — page refresh while already there, a bookmark,
+			// typing the URL directly, a stale link, browser session
+			// restore — nothing rechecked their role once they were past
+			// the login page, so they'd sit on /dashboard with no
+			// schedule data ever loading (the dashboard fetch only knows
+			// about cabin-crew tables). Re-checking here closes that gap
+			// completely, regardless of how they arrived at /dashboard.
+			console.log("👷 Ground staff on dashboard, redirecting to /ground-schedule");
+			router.replace('/ground-schedule');
 		}
 	}, [user, loading, pathname, router]);
 

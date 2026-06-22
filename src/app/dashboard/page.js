@@ -1,3 +1,4 @@
+// src/app/dashboard/page.js
 'use client'
 
 import { useState, useEffect, useRef, useCallback } from 'react';
@@ -13,6 +14,14 @@ import {
 import { supabase, flightDutyHelpers } from '../../lib/supabase';
 import { minutesToDisplay } from '../../lib/pdxHelpers';
 import { exportDispatchPdf } from '../../lib/pdxPdfExport';
+import { isGroundStaff } from '../../lib/permissionHelpers';
+import {
+	groundScheduleHelpers,
+	getGroundEmployeeById,
+	GROUND_REST_CODE_LABELS,
+	isGroundRestCode,
+	parseGroundDutyTimes,
+} from '../../lib/groundHelpers';
 
 // ─── parse YYYY-MM-DD using local parts (avoids UTC-shift off-by-one bug) ───
 const parseDateStr = (dateStr) => {
@@ -164,9 +173,73 @@ export default function DashboardPage() {
 		if (!loading && !user) console.log('User not authenticated, AuthContext will handle redirect...');
 	}, [user, loading]);
 
+	// Ground staff use a completely separate, much simpler data pipeline
+	// (see groundFetchScheduleData below) — this skips the cabin-crew
+	// fetch entirely for them, since none of mdaeip_schedule_months,
+	// schedule_day_overrides, or the PDX tables apply to ground staff at
+	// all (different tables, different duty-code shapes, no PDX sectors).
 	useEffect(() => {
-		if (!loading && user?.id) fetchScheduleData();
+		if (!loading && user?.id && !isGroundStaff(user)) fetchScheduleData();
 	}, [user, loading]);
+
+	// ── Ground staff schedule loading (2026-06-22) ───────────────────────────
+	// BUG FOUND: ground staff were landing on this dashboard with their
+	// schedule never loading at all — fetchScheduleData only ever called
+	// cabin-crew helpers (getEmployeeSchedule/getAllSchedulesForMonth from
+	// DataRoster, mdaeip_schedule_months, PDX tables), none of which apply
+	// to ground staff (different table: ground_schedules, different
+	// duty-code shapes, no PDX/flight-sector concept at all). Rather than
+	// weave ground-staff logic into that deeply cabin-crew-specific
+	// pipeline (which would mean touching getDutyColors, the PDX
+	// enrichment block, the tooltip renderer, and more — all of which
+	// assume cabin-crew duty shapes), this is a separate, self-contained
+	// fetch + render path, reusing the SAME calendar CSS classes
+	// (calendarWrapper/calendarGrid/calendarCell etc. — already
+	// generic, no duty-shape assumptions baked in) so it still looks
+	// like part of this dashboard, not a bolted-on different page.
+	const [groundScheduleMap, setGroundScheduleMap] = useState({}); // { 'YYYY-MM-DD': duty_code }
+	const [groundLoading, setGroundLoading] = useState(true);
+	const groundEmployee = isGroundStaff(user) ? getGroundEmployeeById(user.id) : null;
+
+	const fetchGroundScheduleData = useCallback(async () => {
+		if (!user?.id) return;
+		setGroundLoading(true);
+		try {
+			// Same 4-month window as the cabin-crew fetch (prev, current,
+			// next two), for visual/behavioral consistency between the two
+			// dashboard experiences.
+			const today = new Date();
+			const monthsToLoad = [];
+			for (let i = -1; i <= 2; i++) {
+				const d = new Date(today.getFullYear(), today.getMonth() + i, 1);
+				monthsToLoad.push(`${d.getFullYear()}年${String(d.getMonth() + 1).padStart(2, '0')}月`);
+			}
+
+			const results = await Promise.all(
+				monthsToLoad.map((label) => groundScheduleHelpers.getSchedulesForMonth(label, user.base))
+			);
+
+			const map = {};
+			results.forEach(({ data }) => {
+				(data || []).forEach((row) => {
+					if (row.employee_id !== user.id) return;
+					(row.schedule || []).forEach((entry) => {
+						if (entry?.date) map[entry.date] = entry.duty_code;
+					});
+				});
+			});
+			setGroundScheduleMap(map);
+		} catch (err) {
+			console.error('Error fetching ground staff schedule:', err);
+			toast.error('載入班表時發生錯誤');
+		} finally {
+			setGroundLoading(false);
+		}
+	}, [user]);
+
+	useEffect(() => {
+		if (!loading && user?.id && isGroundStaff(user)) fetchGroundScheduleData();
+	}, [loading, user, fetchGroundScheduleData]);
 
 	// ─── Build a route string from PDX sectors e.g. "KHH→TSA→KHH→RMQ→KHH" ──
 	const buildRouteString = (sectors) => {
@@ -750,6 +823,153 @@ export default function DashboardPage() {
 			<p className={styles.loadingText}>轉向登入頁面...</p>
 		</div>
 	);
+
+	// ── Ground staff: separate, self-contained render path (2026-06-22) ──
+	if (isGroundStaff(user)) {
+		const groundFirstDay = new Date(calendarMonth.year, calendarMonth.month, 1).getDay();
+		const groundDaysInMonth = new Date(calendarMonth.year, calendarMonth.month + 1, 0).getDate();
+		const groundCells = [];
+		for (let i = 0; i < groundFirstDay; i++) groundCells.push(null);
+		for (let d = 1; d <= groundDaysInMonth; d++) groundCells.push(d);
+		while (groundCells.length % 7 !== 0) groundCells.push(null);
+		const groundIsCurrentMonth = calendarMonth.year === today.getFullYear() && calendarMonth.month === today.getMonth();
+
+		// Reuses the SAME color logic style as getDutyColors above, just
+		// matched against ground duty codes instead of cabin-crew ones.
+		const getGroundDutyColors = (code) => {
+			if (!code) return { bg: 'rgba(255,255,255,0.12)', text: '#9ca3af', border: 'rgba(255,255,255,0.15)' };
+			if (isGroundRestCode(code)) return { bg: '#bbf7d0', text: '#14532d', border: '#4ade80' }; // rest/leave — green, matches cabin-crew OFF color
+			return { bg: '#c7d2fe', text: '#1e1b4b', border: '#818cf8' }; // work duty — indigo, matches cabin-crew flight-duty color
+		};
+
+		const todayGroundCode = groundScheduleMap[todayStr];
+		const tomorrowGroundCode = groundScheduleMap[tomorrowStr];
+		const todayGroundTimes = todayGroundCode ? parseGroundDutyTimes(todayGroundCode) : null;
+
+		return (
+			<div className={styles.dashboardContainer}>
+				<div className={styles.welcomeSection}>
+					<div className={styles.welcomeCard}>
+						<div className={styles.welcomeGreeting}>
+							<span className={styles.welcomeIcon}>{greeting.icon}</span>
+							<span className={styles.welcomeText}>{greeting.text}，{groundEmployee?.name || user?.name || user?.id}</span>
+							<span className={styles.welcomeTime}>{currentTime}</span>
+						</div>
+						{groundLoading ? (
+							<div className={styles.welcomeLoading}>
+								<div className={styles.welcomeLoadingDot} />
+								<div className={styles.welcomeLoadingDot} />
+								<div className={styles.welcomeLoadingDot} />
+							</div>
+						) : (
+							<div className={styles.welcomeDutyRows}>
+								<div className={styles.welcomeDutyRow}>
+									<div className={styles.welcomeDayLabel}>
+										<span className={styles.welcomeDayBadge}>今天</span>
+										<span className={styles.welcomeDayDate}>{todayStr.slice(5)}</span>
+									</div>
+									<div className={styles.welcomeDutyInfo}>
+										<span className={styles.welcomeDutyChip} style={{
+											backgroundColor: getGroundDutyColors(todayGroundCode).bg,
+											color: getGroundDutyColors(todayGroundCode).text,
+											borderColor: getGroundDutyColors(todayGroundCode).border,
+										}}>
+											{todayGroundCode ? (GROUND_REST_CODE_LABELS[todayGroundCode] ? `${todayGroundCode} (${GROUND_REST_CODE_LABELS[todayGroundCode]})` : todayGroundCode) : '無班表資料'}
+										</span>
+										{todayGroundTimes && (
+											<span className={styles.welcomeRoute}>{todayGroundTimes.start}–{todayGroundTimes.end}</span>
+										)}
+									</div>
+								</div>
+								<div className={`${styles.welcomeDutyRow} ${styles.welcomeDutyRowSecondary}`}>
+									<div className={styles.welcomeDayLabel}>
+										<span className={`${styles.welcomeDayBadge} ${styles.welcomeDayBadgeTomorrow}`}>明天</span>
+										<span className={styles.welcomeDayDate}>{tomorrowStr.slice(5)}</span>
+									</div>
+									<div className={styles.welcomeDutyInfo}>
+										<span className={styles.welcomeDutyChip} style={{
+											backgroundColor: getGroundDutyColors(tomorrowGroundCode).bg,
+											color: getGroundDutyColors(tomorrowGroundCode).text,
+											borderColor: getGroundDutyColors(tomorrowGroundCode).border,
+										}}>
+											{tomorrowGroundCode ? (GROUND_REST_CODE_LABELS[tomorrowGroundCode] ? `${tomorrowGroundCode} (${GROUND_REST_CODE_LABELS[tomorrowGroundCode]})` : tomorrowGroundCode) : '無班表資料'}
+										</span>
+									</div>
+								</div>
+							</div>
+						)}
+					</div>
+				</div>
+
+				<div className={styles.calendarWrapper}>
+					{groundLoading ? (
+						<div className={styles.loadingContainer}>
+							<div className={styles.loadingSpinner}></div>
+							<span className={styles.loadingText}>載入班表資料...</span>
+						</div>
+					) : (
+						<>
+							<div className={styles.calendarHeader}>
+								<button className={styles.calendarNavBtn} onClick={goToPrevMonth} aria-label="上個月">
+									<ChevronLeft size={20} />
+								</button>
+								<div className={styles.calendarMonthTitle}>
+									<span className={styles.calendarYear}>{calendarMonth.year}</span>
+									<span className={styles.calendarMonthName}>{MONTH_NAMES_ZH[calendarMonth.month]}</span>
+									{!groundIsCurrentMonth && (
+										<button className={styles.todayChip} onClick={goToToday}>今天</button>
+									)}
+								</div>
+								<button className={styles.calendarNavBtn} onClick={goToNextMonth} aria-label="下個月">
+									<ChevronRight size={20} />
+								</button>
+							</div>
+
+							<div className={styles.weekdayRow}>
+								{WEEKDAY_LABELS.map((label, i) => (
+									<div key={i} className={`${styles.weekdayLabel} ${i === 0 || i === 6 ? styles.weekendLabel : ''}`}>
+										{label}
+									</div>
+								))}
+							</div>
+
+							<div className={styles.calendarGrid} data-calendar="true">
+								{groundCells.map((day, idx) => {
+									if (day === null) return <div key={`empty-${idx}`} className={styles.calendarCellEmpty} />;
+									const dateStr = `${calendarMonth.year}-${String(calendarMonth.month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+									const code = groundScheduleMap[dateStr];
+									const isToday = dateStr === todayStr;
+									const isWeekendDay = new Date(calendarMonth.year, calendarMonth.month, day).getDay() % 6 === 0;
+									const colors = code ? getGroundDutyColors(code) : null;
+
+									return (
+										<div
+											key={dateStr}
+											className={[
+												styles.calendarCell,
+												isToday ? styles.calendarCellToday : '',
+												isWeekendDay ? styles.calendarCellWeekend : '',
+												!code ? styles.calendarCellNoData : '',
+											].filter(Boolean).join(' ')}
+										>
+											<div className={`${styles.calendarDayNumber} ${isToday ? styles.calendarDayNumberToday : ''}`}>
+												{day}
+											</div>
+											{code && (
+												<div className={styles.calendarDutyBadge} style={{ backgroundColor: colors.bg, color: colors.text }}>
+													{code}
+												</div>
+											)}
+										</div>
+									);
+								})}
+							</div>
+						</>
+					)}
+				</div>
+			</div>
+		);
+	}
 
 	return (
 		<div className={styles.dashboardContainer}>

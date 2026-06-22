@@ -1536,33 +1536,61 @@ export const autoAssignGroundMonth = (
 	// days," not just a quota-filling exercise. Employees with the
 	// longest stretches are prioritized first. Headcount floor is
 	// re-checked before committing each insertion.
-	const findLongestWorkStretch = (empId) => {
-		let bestStart = null, bestEnd = null, bestLen = 0, curStart = null;
+	// REWORKED 2026-06-22 (improvement, not a bug fix — confirmed via
+	// direct August-boundary simulation that the OLD "always pick the
+	// single longest stretch" approach was safe, just front-loaded: every
+	// employee's HL landed in the first half of the month, since a fresh
+	// month's single longest stretch tends to be near the start before
+	// any other rest days fragment things). Now returns ALL valid
+	// stretches (length >= 3), so the caller can pick based on which
+	// THIRD of the month is currently under-served, spreading insertions
+	// across early/mid/late instead of always grabbing the same region.
+	const findAllWorkStretches = (empId) => {
+		const stretches = [];
+		let curStart = null;
 		for (let i = 0; i < days.length; i++) {
 			const dateStr = days[i].dateStr;
 			const code = result[empId][dateStr];
-			// BUG FOUND 2026-06-22: only checked for "Z"/"R" specifically —
-			// meaning an HL/WL day placed in an EARLIER round of the same
-			// allocation pass (see allocateExtraRestCode's multi-round
-			// rewrite below) wasn't recognized as breaking a work stretch,
-			// so a second round could miss that the stretch had already
-			// been split. Any rest-type code should count.
 			const isRest = code === "Z" || code === "R" || code === "HL" || code === "WL";
 			if (!isRest) {
 				if (curStart === null) curStart = i;
 			} else {
 				if (curStart !== null) {
-					const len = i - curStart;
-					if (len > bestLen) { bestLen = len; bestStart = curStart; bestEnd = i - 1; }
+					stretches.push({ start: curStart, end: i - 1, length: i - curStart });
 					curStart = null;
 				}
 			}
 		}
 		if (curStart !== null) {
-			const len = days.length - curStart;
-			if (len > bestLen) { bestLen = len; bestStart = curStart; bestEnd = days.length - 1; }
+			stretches.push({ start: curStart, end: days.length - 1, length: days.length - curStart });
 		}
-		return bestStart !== null ? { start: bestStart, end: bestEnd, length: bestLen } : null;
+		return stretches.filter((s) => s.length >= 3);
+	};
+
+	// Global tracker (shared across the WHOLE allocateExtraRestCode call,
+	// reset per code type) — how many HL/WL insertions have already
+	// landed in each third of the month, across ALL employees. Used to
+	// bias selection toward whichever third is currently least-served.
+	const monthThirdSize = days.length / 3;
+	const whichThird = (dayIdx) => Math.min(2, Math.floor(dayIdx / monthThirdSize));
+
+	const pickBalancedStretch = (stretches, thirdCounts) => {
+		if (stretches.length === 0) return null;
+		let best = null;
+		let bestScore = null;
+		for (const s of stretches) {
+			const midIdx = Math.floor((s.start + s.end) / 2);
+			const third = whichThird(midIdx);
+			// Lower thirdCount sorts first (prefer under-served regions);
+			// among equal thirdCounts, prefer the longer stretch (more
+			// safety margin / headroom for the headcount check below).
+			const scoreKey = [-thirdCounts[third], s.length];
+			if (best === null || scoreKey[0] > bestScore[0] || (scoreKey[0] === bestScore[0] && scoreKey[1] > bestScore[1])) {
+				best = s;
+				bestScore = scoreKey;
+			}
+		}
+		return best;
 	};
 
 	const allocateExtraRestCode = (code, targetPerEmployee, eligibleEmployeeIds = null) => {
@@ -1589,13 +1617,19 @@ export const autoAssignGroundMonth = (
 		// entirely, not just have their round-robin turn silently waste.
 		let totalPlaced = 0;
 		let totalAttempted = 0;
+		// Tracks how many insertions have landed in each third of the
+		// month so far THIS CALL (i.e. across this one code's whole
+		// allocation — HL and WL each get their own independent tracker
+		// since they're separate calls) — see pickBalancedStretch above.
+		const thirdCounts = [0, 0, 0];
 
 		for (let round = 0; round < targetPerEmployee; round++) {
 			for (const emp of rotatingEmployees) {
 				if (eligibleEmployeeIds && !eligibleEmployeeIds.has(emp.id)) continue;
 				totalAttempted += 1;
-				const stretch = findLongestWorkStretch(emp.id);
-				if (!stretch || stretch.length < 3) continue; // no meaningful stretch left for this employee this round
+				const stretches = findAllWorkStretches(emp.id);
+				const stretch = pickBalancedStretch(stretches, thirdCounts);
+				if (!stretch) continue; // no meaningful stretch left for this employee this round
 
 				const midIdx = Math.floor((stretch.start + stretch.end) / 2);
 				const dateStr = days[midIdx].dateStr;
@@ -1609,6 +1643,7 @@ export const autoAssignGroundMonth = (
 				}).length;
 				if (workingNow - 1 < GROUND_MIN_STAFF_REQUIRED) continue; // skip this employee this round, try others
 
+				thirdCounts[whichThird(midIdx)] += 1;
 				result[emp.id][dateStr] = code;
 				totalPlaced += 1;
 			}
