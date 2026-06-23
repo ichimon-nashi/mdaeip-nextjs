@@ -52,6 +52,14 @@ export const groundEmployeeList = [
 		rank: "地勤督導",
 		base: "KHH",
 		typeRating: [],
+		// PREFERRED default work codes (2026-06-22) — NOT a hard
+		// restriction like 陳寶英/張小梅's allowedWorkCodes. Auto-assign
+		// tries these first; other codes remain valid fallback when
+		// these don't work for a given day (rest-rule conflict etc.),
+		// and the manual picker still shows every code as an option for
+		// supervisor adjustment.
+		defaultAmCode: "0608A",
+		defaultPmCode: "14B8A",
 	},
 	{
 		id: "25792",
@@ -93,6 +101,11 @@ export const groundEmployeeList = [
 		rank: "運務員",
 		base: "KHH",
 		typeRating: [],
+		// Preferred default work codes (2026-06-22) — see 張芷菱's comment
+		// above for the full explanation of how this differs from a hard
+		// allowedWorkCodes restriction.
+		defaultAmCode: "0608A",
+		defaultPmCode: "14B8A",
 	},
 	{
 		id: "60090",
@@ -100,6 +113,9 @@ export const groundEmployeeList = [
 		rank: "運務員",
 		base: "KHH",
 		typeRating: [],
+		// Preferred default work codes (2026-06-22) — see 張芷菱's comment above.
+		defaultAmCode: "0608A",
+		defaultPmCode: "14B8A",
 	},
 
 	{
@@ -108,6 +124,9 @@ export const groundEmployeeList = [
 		rank: "運務員",
 		base: "KHH",
 		typeRating: [],
+		// Preferred default work codes (2026-06-22) — see 張芷菱's comment above.
+		defaultAmCode: "0608A",
+		defaultPmCode: "14B8A",
 	},
 ];
 
@@ -1594,7 +1613,10 @@ export const autoAssignGroundMonth = (
 	};
 
 	const allocateExtraRestCode = (code, targetPerEmployee, eligibleEmployeeIds = null) => {
-		if (targetPerEmployee <= 0) return;
+		const hasAnyTarget = targetPerEmployee instanceof Map
+			? Array.from(targetPerEmployee.values()).some((v) => v > 0)
+			: targetPerEmployee > 0;
+		if (!hasAnyTarget) return;
 
 		// REDESIGNED 2026-06-22 per explicit clarification: "not everyone's
 		// HL was used... I wish for everyone to try and use up those x
@@ -1615,17 +1637,32 @@ export const autoAssignGroundMonth = (
 		// ceiling fix above this function's call sites), since an
 		// employee already at their individual ceiling should be skipped
 		// entirely, not just have their round-robin turn silently waste.
+		//
+		// targetPerEmployee (2026-06-22 round 3): now accepts EITHER a
+		// flat number (applied uniformly — HL's existing usage, unchanged)
+		// OR a Map of empId -> individual target (WL's new PACE-BASED
+		// usage — someone badly behind pace against the yearly ceiling
+		// needs a higher target this month than someone comfortably
+		// ahead, so a single shared number can't express this).
+		const getTargetFor = (empId) =>
+			targetPerEmployee instanceof Map ? (targetPerEmployee.get(empId) || 0) : targetPerEmployee;
+		const maxTarget = targetPerEmployee instanceof Map
+			? Math.max(0, ...Array.from(targetPerEmployee.values()))
+			: targetPerEmployee;
+
 		let totalPlaced = 0;
 		let totalAttempted = 0;
+		const placedCountByEmp = {};
 		// Tracks how many insertions have landed in each third of the
 		// month so far THIS CALL (i.e. across this one code's whole
 		// allocation — HL and WL each get their own independent tracker
 		// since they're separate calls) — see pickBalancedStretch above.
 		const thirdCounts = [0, 0, 0];
 
-		for (let round = 0; round < targetPerEmployee; round++) {
+		for (let round = 0; round < maxTarget; round++) {
 			for (const emp of rotatingEmployees) {
 				if (eligibleEmployeeIds && !eligibleEmployeeIds.has(emp.id)) continue;
+				if ((placedCountByEmp[emp.id] || 0) >= getTargetFor(emp.id)) continue; // this employee's own target already met
 				totalAttempted += 1;
 				const stretches = findAllWorkStretches(emp.id);
 				const stretch = pickBalancedStretch(stretches, thirdCounts);
@@ -1633,6 +1670,21 @@ export const autoAssignGroundMonth = (
 
 				const midIdx = Math.floor((stretch.start + stretch.end) / 2);
 				const dateStr = days[midIdx].dateStr;
+
+				// BUG FOUND 2026-06-22: pickBalancedStretch's chosen midpoint
+				// can become stale by the time we actually go to write —
+				// e.g. an earlier call in this SAME pass (HL running before
+				// WL, or an earlier employee/round within the same call)
+				// may have already placed something on this exact day for
+				// THIS employee specifically, and the stretch's start/end
+				// boundaries don't get recomputed per-candidate-day, only
+				// per round. Defensive check: never overwrite a cell that's
+				// already occupied by anything (rest, leave, or HL/WL from
+				// an earlier allocation pass) — skip to the next employee/
+				// round instead of silently clobbering an earlier
+				// placement (confirmed via direct trace: this was
+				// happening for 陳寶英's WL pace-based placement).
+				if (result[emp.id][dateStr]) continue;
 
 				// Re-check headcount floor as it stands RIGHT NOW (accounting
 				// for any earlier insertions in this same pass, including
@@ -1644,6 +1696,7 @@ export const autoAssignGroundMonth = (
 				if (workingNow - 1 < GROUND_MIN_STAFF_REQUIRED) continue; // skip this employee this round, try others
 
 				thirdCounts[whichThird(midIdx)] += 1;
+				placedCountByEmp[emp.id] = (placedCountByEmp[emp.id] || 0) + 1;
 				result[emp.id][dateStr] = code;
 				totalPlaced += 1;
 			}
@@ -1652,7 +1705,7 @@ export const autoAssignGroundMonth = (
 		if (totalPlaced < totalAttempted) {
 			warnings.push({
 				type: "extra_rest_partially_placed",
-				message: `本月${code}：每人目標 ${targetPerEmployee} 天，但有 ${totalAttempted - totalPlaced} 次嘗試因人手不足或班別過短而無法安排（建議檢查本月班表分配是否平均）`,
+				message: `本月${code}：${targetPerEmployee instanceof Map ? '依各員工進度個別設定目標' : `每人目標 ${targetPerEmployee} 天`}，但有 ${totalAttempted - totalPlaced} 次嘗試因人手不足或班別過短而無法安排（建議檢查本月班表分配是否平均）`,
 			});
 		}
 	};
@@ -1718,22 +1771,37 @@ export const autoAssignGroundMonth = (
 		const hlMonthlyTarget = GROUND_MONTHLY_QUOTA[targetMonth].HL || 0;
 		allocateExtraRestCode("HL", hlMonthlyTarget, hlEligibleEmployees);
 
-		// WL: spread across the YEAR, not just this month's own target.
-		// Per request — "since 7 days of WL needs to be used... perhaps
-		// spread them out" — check how much WL has ALREADY been used
-		// this year (PER EMPLOYEE — same fix as HL above) before deciding
-		// how much to add this month, so the yearly total trends toward
-		// an even spread rather than overshooting any individual
-		// employee's ceiling.
-		const monthlyWlTarget = GROUND_MONTHLY_QUOTA[targetMonth].WL || 0;
-		if (monthlyWlTarget > 0) {
-			const wlEligibleEmployees = new Set();
-			rotatingEmployees.forEach((emp) => {
-				const empYearData = yearScheduleByEmployee[emp.id] || [];
-				const empWlUsedSoFar = empYearData.filter((d) => d.duty_code === "WL").length;
-				if (GROUND_YEARLY_QUOTA.WL - empWlUsedSoFar > 0) wlEligibleEmployees.add(emp.id);
-			});
-			allocateExtraRestCode("WL", monthlyWlTarget, wlEligibleEmployees);
+		// WL: REDESIGNED 2026-06-22 per explicit clarification — unlike HL,
+		// WL has NO monthly quota at all, only the yearly ceiling
+		// (GROUND_YEARLY_QUOTA.WL = 7). Allocation should be based on
+		// PACE against that yearly ceiling, not a fixed per-month number:
+		// if it's late in the year and someone's used 0 of their 7 WL
+		// days, that's urgent (they're badly behind, risking ending the
+		// year with unused days). If it's early in the year and someone's
+		// already used 6 of 7, there's no rush — plenty of months left
+		// for the last day. Each employee gets their OWN target this
+		// month based on (expectedByNow - actualUsed), spread across the
+		// remaining months rather than dumped all at once, and capped at
+		// their own remaining yearly budget.
+		const wlTargetByEmployee = new Map();
+		rotatingEmployees.forEach((emp) => {
+			const empYearData = yearScheduleByEmployee[emp.id] || [];
+			const empWlUsedSoFar = empYearData.filter((d) => d.duty_code === "WL").length;
+			const remainingBudget = GROUND_YEARLY_QUOTA.WL - empWlUsedSoFar;
+			if (remainingBudget <= 0) return; // already at/over their own ceiling — never place more
+
+			const expectedByNow = (targetMonth / 12) * GROUND_YEARLY_QUOTA.WL;
+			const deficit = expectedByNow - empWlUsedSoFar;
+			if (deficit <= 0) return; // on pace or ahead of pace — no urgency this month
+
+			const monthsRemaining = 12 - targetMonth + 1; // includes this month
+			const monthlyShare = deficit / monthsRemaining;
+			const target = Math.min(Math.round(monthlyShare + 0.5), remainingBudget); // round up conservatively, never exceed own ceiling
+			if (target > 0) wlTargetByEmployee.set(emp.id, target);
+		});
+
+		if (wlTargetByEmployee.size > 0) {
+			allocateExtraRestCode("WL", wlTargetByEmployee, new Set(wlTargetByEmployee.keys()));
 		}
 	}
 
@@ -1851,7 +1919,22 @@ export const autoAssignGroundMonth = (
 			const primaryPool = restrictToAllowedCodes(emp, preferPm ? WORK_CODES_PM : WORK_CODES_AM);
 			const fallbackPool = restrictToAllowedCodes(emp, preferPm ? WORK_CODES_AM : WORK_CODES_PM);
 
-			let chosen = pickLeastUsedValidCode(primaryPool, emp.id, dateStr);
+			// PREFERRED DEFAULT CODE (2026-06-22) — for employees with
+			// defaultAmCode/defaultPmCode set (e.g. 林妍蓓/陳俊嘉/張芷菱/
+			// 盧詠薇 → 0608A AM, 14B8A PM), try that specific code FIRST,
+			// before falling through to the usage-balanced pool logic
+			// below. This is a soft preference, not allowedWorkCodes'
+			// hard restriction — if the default code doesn't work for
+			// this employee today (rest-rule conflict, etc.), every
+			// other code in the normal pool remains a valid fallback,
+			// and the manual picker still shows every code regardless.
+			const defaultCode = preferPm ? emp.defaultPmCode : emp.defaultAmCode;
+			let chosen = null;
+			if (defaultCode && primaryPool.includes(defaultCode) && !violatesLocalRules(emp.id, dateStr, defaultCode)) {
+				chosen = defaultCode;
+			}
+
+			if (!chosen) chosen = pickLeastUsedValidCode(primaryPool, emp.id, dateStr);
 			if (!chosen) chosen = pickLeastUsedValidCode(fallbackPool, emp.id, dateStr);
 
 			if (chosen) {

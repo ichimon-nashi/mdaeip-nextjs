@@ -127,7 +127,7 @@
 	padding: 0.5rem 1.25rem;
 	border-radius: 0.5rem;
 	border: none;
-	background: #2563eb;
+	background: #16a34a; /* green — distinct from autoAssignBtn (blue) and importExcelBtn (purple), per 2026-06-22 feedback that all three looked identical and misleading */
 	color: white;
 	font-size: 0.9rem;
 	font-weight: 600;
@@ -381,8 +381,16 @@
 	width: 100%;
 }
 .pickerOption:hover {
-	background: #f9fafb;
-	border-color: #cbd5e1;
+	/* FIXED 2026-06-22: previously just set background:#f9fafb, which was
+	   already losing to every colored option's own !important background
+	   (Z/R/HL/etc., and now the 0608A/14B8A default-work highlight too) —
+	   meaning hover did almost nothing once most options had a real
+	   color. Switched to a border + shadow treatment that's visible
+	   REGARDLESS of whatever background color sits underneath, instead
+	   of trying to compete with it. */
+	border-color: #2563eb;
+	box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.35);
+	transform: translateY(-1px);
 }
 .pickerOptionActive {
 	border-color: #2563eb;
@@ -443,6 +451,17 @@
 }
 .pickerOptionEmpty {
 	background-color: #fef3c7 !important; /* mirrors .dutyEmpty */
+}
+/* Highlight for the two designated DEFAULT work codes (2026-06-22:
+   0608A AM, 14B8A PM) — distinct from the rest/leave per-code colors
+   above, since this is specifically about making these two easy to spot
+   in the WORK codes column, not part of the rest/leave palette. Lighter
+   than the rest/leave colors (those carry more important information —
+   whether someone is resting at all) but still clearly visible against
+   the plain white default of every other work code. */
+.pickerOptionDefaultWork {
+	background-color: #e0f2fe !important;
+	border-color: #38bdf8 !important;
 }
 /* Active selection border still needs to show even on a colored option */
 .pickerOptionZ.pickerOptionActive,
@@ -795,7 +814,7 @@
 	padding: 0.5rem 1.25rem;
 	border-radius: 0.5rem;
 	border: none;
-	background: #2563eb;
+	background: #7c3aed; /* purple — distinct from validateBtn (green) and autoAssignBtn (blue), per 2026-06-22 feedback */
 	color: white;
 	font-size: 0.85rem;
 	font-weight: 600;

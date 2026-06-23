@@ -525,7 +525,15 @@
 
 /* ── 其他 base dropdown — amber/orange to distinguish from main bases ─────── */
 .otherBaseSelect {
-	background: linear-gradient(135deg, #f59e0b, #d97706);
+	/* BUG FOUND 2026-06-22: this lost to .tab's background:none (from
+	   Schedule.module.css, a SEPARATE CSS Modules file applied to the
+	   same <select> element) depending on which stylesheet the browser
+	   happened to load second — same class of cross-file specificity
+	   race as the duty-picker color bug found earlier this session.
+	   !important guarantees this wins regardless of load order, so the
+	   orange shows up immediately, before any selection, not just once
+	   .active/:focus kicks in. */
+	background: linear-gradient(135deg, #f59e0b, #d97706) !important;
 	color: white;
 	font-weight: 600;
 	border: 2px solid rgba(255, 255, 255, 0.3);

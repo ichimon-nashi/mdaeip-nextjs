@@ -200,7 +200,7 @@ const DutyPicker = ({ currentCode, onSelect, onClose }) => {
                 {workCodes.map(([code, times]) => (
                   <button
                     key={code}
-                    className={`${rStyles.pickerOption} ${currentCode === code ? rStyles.pickerOptionActive : ''}`}
+                    className={`${rStyles.pickerOption} ${['0608A', '14B8A'].includes(code) ? rStyles.pickerOptionDefaultWork : ''} ${currentCode === code ? rStyles.pickerOptionActive : ''}`}
                     onClick={() => onSelect(code)}
                   >
                     <span className={rStyles.pickerCode}>{code}</span>
