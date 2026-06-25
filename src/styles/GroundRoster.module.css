@@ -204,6 +204,20 @@
 	max-height: 320px; /* flat list can get long with many violations — scroll instead of pushing the grid far down */
 }
 
+/* Header label distinguishing the solver-warnings list from the
+   validation-violations list (2026-06-25) — these are two genuinely
+   different checks (solver's own bookkeeping vs. validateGroundMonth's
+   rest-rule/coverage checks) and were being conflated in the toast
+   message with nowhere for the solver warnings to actually render. */
+.violationsListHeader {
+	padding: 0.625rem 1rem;
+	font-size: 0.8rem;
+	font-weight: 700;
+	color: #991b1b;
+	background: #fef2f2;
+	border-bottom: 1px solid #fecaca;
+}
+
 /* REVERTED 2026-06-21 per feedback: grouping by employee made specific
    errors hard to target. Back to a flat, chronologically-sorted list —
    one row per violation, with date/employee/type/message as separate
@@ -248,6 +262,59 @@
 	color: #7f1d1d;
 	flex: 1;
 	min-width: 200px;
+}
+
+/* Click-to-expand context window (2026-06-25 request — "it would be
+   helpful to see a block around the affected days") */
+.violationItemExpandable {
+	cursor: pointer;
+}
+.violationItemExpandable:hover {
+	background: #fef2f2;
+}
+
+.violationExpandHint {
+	font-size: 0.72rem;
+	color: #b91c1c;
+	white-space: nowrap;
+	margin-left: auto;
+}
+
+.violationContextWindow {
+	display: flex;
+	gap: 0.4rem;
+	padding: 0.625rem 1rem 0.875rem;
+	background: #fafafa;
+	border-bottom: 1px solid #fee2e2;
+	overflow-x: auto;
+}
+
+.violationContextCell {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: 2px;
+	padding: 0.4rem 0.5rem;
+	border-radius: 0.4rem;
+	border: 1px solid #e5e7eb;
+	min-width: 64px;
+	flex-shrink: 0;
+}
+
+.violationContextCellCenter {
+	border: 2px solid #dc2626;
+	font-weight: 700;
+}
+
+.violationContextDate {
+	font-size: 0.68rem;
+	color: #6b7280;
+}
+
+.violationContextCode {
+	font-size: 0.8rem;
+	font-weight: 700;
+	color: #111827;
 }
 
 /* Click-to-pick duty cell — replaces the old free-text input
@@ -832,4 +899,24 @@
 		margin-left: 0;
 		width: 100%;
 	}
+}
+
+/* Flagged-cell marker on the schedule grid (2026-06-25 request — "days
+   affected aren't marked"). A small red dot in the corner of any cell
+   implicated by a validation violation or solver warning, with the
+   actual message available via the native title tooltip on hover. */
+.flaggedCell {
+	position: relative;
+	box-shadow: inset 0 0 0 2px #dc2626;
+}
+.flaggedCellDot {
+	position: absolute;
+	top: 2px;
+	right: 2px;
+	width: 7px;
+	height: 7px;
+	border-radius: 50%;
+	background: #dc2626;
+	box-shadow: 0 0 0 1.5px white;
+	pointer-events: none;
 }

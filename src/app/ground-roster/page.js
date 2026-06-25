@@ -1,7 +1,7 @@
 // src/app/ground-roster/page.js
 'use client';
 
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { BsRobot } from 'react-icons/bs';
 import { FaRegTrashAlt, FaCameraRetro } from 'react-icons/fa';
 import { LuImport } from 'react-icons/lu';
@@ -226,6 +226,23 @@ export default function GroundRosterPage() {
   const [scheduleMap, setScheduleMap] = useState({}); // { employeeId: { dateStr: duty_code } }
   const [yearScheduleByEmployee, setYearScheduleByEmployee] = useState({}); // { employeeId: [{date, duty_code}] } — for quota counter + cross-month fatigue checks
   const [violations, setViolations] = useState(null); // null = not yet validated
+  // Solver's OWN warnings (HL/WL allocation shortfalls, pool shortages,
+  // fallback-to-rest) — genuinely different from `violations` above
+  // (validateGroundMonth's rest-rule/coverage checks). BUG FOUND
+  // 2026-06-25: the toast after auto-assign correctly reported BOTH
+  // counts separately, but only `violations` had anywhere to render —
+  // the solver's own warnings were mentioned in the toast and then
+  // completely invisible anywhere in the UI. This state + its render
+  // block below close that gap.
+  const [autoAssignWarnings, setAutoAssignWarnings] = useState(null);
+  // Per request 2026-06-25 — clicking a violation/warning row shows a
+  // small calendar context block (the affected employee's schedule for
+  // a few days before/after the flagged date), since a bare date+
+  // message on its own doesn't show WHY a rest-rule or coverage problem
+  // happened. Tracks which row is currently expanded (by a synthetic
+  // key combining type+date+employee, since violations don't have their
+  // own stable id).
+  const [expandedViolationKey, setExpandedViolationKey] = useState(null);
   const [validating, setValidating] = useState(false);
   const [autoAssigning, setAutoAssigning] = useState(false);
   const [isFinalized, setIsFinalized] = useState(false);
@@ -276,6 +293,7 @@ export default function GroundRosterPage() {
     const load = async () => {
       setDataLoading(true);
       setViolations(null); // stale results from a previous month shouldn't carry over
+      setAutoAssignWarnings(null); // same — solver warnings from a different month aren't relevant here
       try {
         const monthMatch = currentMonth.match(/(\d{4})年(\d{2})月/);
         const year = parseInt(monthMatch[1], 10);
@@ -384,7 +402,56 @@ export default function GroundRosterPage() {
     });
 
     setViolations(null); // edited since last validation — stale results
+    setAutoAssignWarnings(null); // manual edit means the schedule no longer matches what the solver actually produced
   }, [currentMonth]);
+
+  // Builds a ±3-day context window of {date, dow, code} around a flagged
+  // date, for one employee — used to render the calendar-block context
+  // when a violation/warning row is expanded (2026-06-25 request).
+  // Pulls from scheduleMap for in-month dates and yearScheduleByEmployee
+  // for any dates that fall outside the current month (e.g. a violation
+  // on the 1st needs late-previous-month context).
+  // Combined lookup of every {empId}|{dateStr} that's flagged by EITHER
+  // validation violations OR solver warnings (2026-06-25 request — "days
+  // affected aren't marked"). The text list below already shows these,
+  // but nothing connected that back to the actual grid cells, so a
+  // supervisor scanning the calendar had no visual signal at all about
+  // which specific cells were implicated.
+  const flaggedCellKeys = useMemo(() => {
+    const map = {}; // `${empId}|${dateStr}` -> array of {source: 'violation'|'warning', type, message}
+    (violations || []).forEach((v) => {
+      if (!v.employeeId || !v.date) return;
+      const key = `${v.employeeId}|${v.date}`;
+      (map[key] = map[key] || []).push({ source: 'violation', type: v.type, message: v.message });
+    });
+    (autoAssignWarnings || []).forEach((w) => {
+      if (!w.employeeId || !w.date) return;
+      const key = `${w.employeeId}|${w.date}`;
+      (map[key] = map[key] || []).push({ source: 'warning', type: w.type, message: w.message });
+    });
+    return map;
+  }, [violations, autoAssignWarnings]);
+
+  const buildViolationContextWindow = useCallback((empId, centerDateStr) => {
+    if (!empId || !centerDateStr) return [];
+    const centerDate = new Date(centerDateStr);
+    const window = [];
+    for (let offset = -3; offset <= 3; offset++) {
+      const d = new Date(centerDate);
+      d.setDate(d.getDate() + offset);
+      const dateStr = d.toISOString().split('T')[0];
+      const dow = d.getDay();
+      let code = scheduleMap[empId]?.[dateStr];
+      if (code === undefined) {
+        // Outside the current month's scheduleMap — check the year-wide
+        // data instead (covers month-boundary context).
+        const yearEntry = (yearScheduleByEmployee[empId] || []).find((e) => e.date === dateStr);
+        code = yearEntry?.duty_code;
+      }
+      window.push({ dateStr, dow, code: code || null, isCenter: dateStr === centerDateStr });
+    }
+    return window;
+  }, [scheduleMap, yearScheduleByEmployee]);
 
   const handleValidate = useCallback(() => {
     setValidating(true);
@@ -612,13 +679,41 @@ export default function GroundRosterPage() {
         return next;
       });
 
-      setViolations(null);
+      // BUG FOUND 2026-06-22: this was setViolations(null) — clearing the
+      // panel entirely — while the toast message right below explicitly
+      // told the supervisor to "查看下方驗證結果" (check the validation
+      // results below). The panel would show NOTHING until separately
+      // clicking 驗證班表, and even then, that button runs
+      // validateGroundMonth (checkGroundFatigue + checkDailyCoverage),
+      // which checks DIFFERENT things than the solver's own warnings
+      // array (HL/WL allocation shortfalls, am_pm_pool_shortage etc. are
+      // solver-internal bookkeeping that validateGroundMonth has no way
+      // to know about) — so even after manually validating, the count
+      // shown (3) never matched what the toast claimed (5), because
+      // they're answering two different questions. Fix: run the SAME
+      // validation immediately, right here, so the panel populates with
+      // real results the moment auto-assign finishes — no separate click
+      // needed — and word the toast around what THAT will actually show.
+      const schedulesByEmployeeArrays = {};
+      Object.entries(schedulesByEmployee).forEach(([empId, dateMap]) => {
+        schedulesByEmployeeArrays[empId] = Object.entries(dateMap).map(([date, duty_code]) => ({ date, duty_code }));
+      });
+      const freshViolations = validateGroundMonth(schedulesByEmployeeArrays, currentMonth, yearScheduleByEmployee);
+      setViolations(freshViolations);
+      setAutoAssignWarnings(warnings.length > 0 ? warnings : null);
 
       toast.dismiss(toastId);
-      if (warnings.length === 0) {
+      if (warnings.length === 0 && freshViolations.length === 0) {
         toast.success('自動排班完成，已寫入班表');
       } else {
-        toast.error(`自動排班完成，但有 ${warnings.length} 項提醒，請查看下方驗證結果`);
+        // Solver warnings (HL/WL allocation, pool shortages) and
+        // validation violations (rest rules, coverage) are genuinely
+        // different checks — surface both counts explicitly rather than
+        // pick one number that doesn't match what's actually displayed.
+        const parts = [];
+        if (warnings.length > 0) parts.push(`${warnings.length} 項排班提醒`);
+        if (freshViolations.length > 0) parts.push(`${freshViolations.length} 項驗證問題`);
+        toast.error(`自動排班完成，但有${parts.join('、')}，請查看下方`);
       }
     } catch (err) {
       toast.dismiss(toastId);
@@ -687,6 +782,7 @@ export default function GroundRosterPage() {
       });
 
       setViolations(null);
+      setAutoAssignWarnings(null);
       toast.dismiss(toastId);
       toast.success(`已清空 ${currentMonth} 班表`);
     } catch (err) {
@@ -1108,6 +1204,57 @@ export default function GroundRosterPage() {
               </button>
             </div>
 
+            {autoAssignWarnings !== null && autoAssignWarnings.length > 0 && (() => {
+              const WARNING_TYPE_LABELS = {
+                extra_rest_partially_placed: 'HL/WL額度未完全分配',
+                fallback_to_rest: '自動改排為休息日',
+                insufficient_headcount: '當日上班人數不足',
+                am_pm_pool_shortage: '4人輪值組覆蓋不足',
+                csp_search_exhausted: '排班搜尋未找到最佳解',
+                csp_uniform_fallback: '使用簡化排班模式',
+                weekly_rest_unfillable: '無法排入例假/休假',
+                yearly_quota_exceeded: '全年額度超標',
+              };
+              const sortedWarnings = [...autoAssignWarnings].sort((a, b) => (a.date || '').localeCompare(b.date || ''));
+              return (
+                <div className={rStyles.violationsList}>
+                  <div className={rStyles.violationsListHeader}>自動排班提醒（共 {autoAssignWarnings.length} 項）</div>
+                  {sortedWarnings.map((w, i) => {
+                    const empName = w.employeeId
+                      ? (employees.find((e) => e.id === w.employeeId)?.name || w.employeeId)
+                      : '全站';
+                    const rowKey = `warning-${w.type}-${w.date}-${w.employeeId || 'all'}-${i}`;
+                    const isExpanded = expandedViolationKey === rowKey;
+                    const canExpand = !!w.employeeId && !!w.date;
+                    return (
+                      <div key={i}>
+                        <div
+                          className={`${rStyles.violationItem} ${canExpand ? rStyles.violationItemExpandable : ''}`}
+                          onClick={canExpand ? () => setExpandedViolationKey(isExpanded ? null : rowKey) : undefined}
+                        >
+                          {w.date && <span className={rStyles.violationDate}>{w.date}</span>}
+                          <span className={rStyles.violationEmpName}>{empName}</span>
+                          <span className={rStyles.violationTypeBadge}>{WARNING_TYPE_LABELS[w.type] || w.type}</span>
+                          <span className={rStyles.violationMessage}>{w.message}</span>
+                          {canExpand && <span className={rStyles.violationExpandHint}>{isExpanded ? '▾' : '▸'} 查看附近班表</span>}
+                        </div>
+                        {isExpanded && canExpand && (
+                          <div className={rStyles.violationContextWindow}>
+                            {buildViolationContextWindow(w.employeeId, w.date).map((d) => (
+                              <div key={d.dateStr} className={`${rStyles.violationContextCell} ${d.isCenter ? rStyles.violationContextCellCenter : ''} ${getDutyCellClass(d.code)}`}>
+                                <span className={rStyles.violationContextDate}>{d.dateStr.slice(5)} ({DOW_LABELS[d.dow]})</span>
+                                <span className={rStyles.violationContextCode}>{d.code || '—'}</span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              );
+            })()}
+
             {violations !== null && violations.length > 0 && (() => {
               // REVERTED 2026-06-21 per feedback: "not sure if that's a
               // good idea, as it is hard to target specific errors."
@@ -1134,12 +1281,31 @@ export default function GroundRosterPage() {
                     const empName = v.employeeId
                       ? (employees.find((e) => e.id === v.employeeId)?.name || v.employeeId)
                       : '全站';
+                    const rowKey = `violation-${v.type}-${v.date}-${v.employeeId || 'all'}-${i}`;
+                    const isExpanded = expandedViolationKey === rowKey;
+                    const canExpand = !!v.employeeId; // context window needs a specific employee — roster-wide ("全站") violations don't have one
                     return (
-                      <div key={i} className={rStyles.violationItem}>
-                        <span className={rStyles.violationDate}>{v.date}</span>
-                        <span className={rStyles.violationEmpName}>{empName}</span>
-                        <span className={rStyles.violationTypeBadge}>{TYPE_LABELS[v.type] || v.type}</span>
-                        <span className={rStyles.violationMessage}>{v.message}</span>
+                      <div key={i}>
+                        <div
+                          className={`${rStyles.violationItem} ${canExpand ? rStyles.violationItemExpandable : ''}`}
+                          onClick={canExpand ? () => setExpandedViolationKey(isExpanded ? null : rowKey) : undefined}
+                        >
+                          <span className={rStyles.violationDate}>{v.date}</span>
+                          <span className={rStyles.violationEmpName}>{empName}</span>
+                          <span className={rStyles.violationTypeBadge}>{TYPE_LABELS[v.type] || v.type}</span>
+                          <span className={rStyles.violationMessage}>{v.message}</span>
+                          {canExpand && <span className={rStyles.violationExpandHint}>{isExpanded ? '▾' : '▸'} 查看附近班表</span>}
+                        </div>
+                        {isExpanded && canExpand && (
+                          <div className={rStyles.violationContextWindow}>
+                            {buildViolationContextWindow(v.employeeId, v.date).map((d) => (
+                              <div key={d.dateStr} className={`${rStyles.violationContextCell} ${d.isCenter ? rStyles.violationContextCellCenter : ''} ${getDutyCellClass(d.code)}`}>
+                                <span className={rStyles.violationContextDate}>{d.dateStr.slice(5)} ({DOW_LABELS[d.dow]})</span>
+                                <span className={rStyles.violationContextCode}>{d.code || '—'}</span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
                       </div>
                     );
                   })}
@@ -1178,14 +1344,17 @@ export default function GroundRosterPage() {
                       </td>
                       {days.map(({ dateStr, dow }) => {
                         const dutyCode = scheduleMap[emp.id]?.[dateStr] || '';
+                        const flags = flaggedCellKeys[`${emp.id}|${dateStr}`];
                         return (
                           <td
                             key={dateStr}
-                            className={`${styles.dutyCell} ${getDutyCellClass(dutyCode)} ${rStyles.pickableCell}`}
+                            className={`${styles.dutyCell} ${getDutyCellClass(dutyCode)} ${rStyles.pickableCell} ${flags ? rStyles.flaggedCell : ''}`}
                             style={isWeekend(dow) && !dutyCode ? { backgroundColor: '#fefce8' } : undefined}
                             onClick={() => setOpenPicker({ empId: emp.id, dateStr })}
+                            title={flags ? flags.map((f) => f.message).join(' / ') : undefined}
                           >
                             <span className={styles.dutyContent}>{dutyCode || '-'}</span>
+                            {flags && <span className={rStyles.flaggedCellDot} />}
                           </td>
                         );
                       })}

@@ -876,6 +876,16 @@ export const checkGroundFatigue = (schedule) => {
 // confirmed default — no specific number was mandated, this is a starting
 // point and can be adjusted if it proves too strict/loose in practice.
 const GROUND_MIN_STAFF_REQUIRED = 3;
+// The 4 employees who rotate covering 0608A (AM) and 14B8A (PM) every
+// day (2026-06-22/25) — 陳寶英 and 張小梅 are explicitly excluded since
+// they have their own separate fixed/restricted schedules. At least 2 of
+// these 4 must be working any given day so one can take 0608A and the
+// other 14B8A; checked both in Pass 2's CSP rest-pair search AND in
+// Pass 2.5's HL/WL extra-rest insertion (allocateExtraRestCode), since
+// confirmed via direct testing that protecting only one of those two
+// insertion points still left real shortage days.
+const GROUND_AM_PM_POOL_IDS = ["54762", "59790", "59929", "60090"];
+const GROUND_AM_PM_POOL_MIN_REQUIRED = 2;
 
 // Codes that count as "AM-type" vs "PM-type" coverage for the daily
 // overlap check, derived from GROUND_DUTY_TIME_LOOKUP start times.
@@ -1383,6 +1393,24 @@ export const autoAssignGroundMonth = (
 		const restingByDayIdx = new Array(days.length).fill(0);
 		const totalEmployeeCount = employees.length;
 
+		// ADDED 2026-06-25 per explicit requirement: "there must be at
+		// least 2 out of the 4 ground staff everyday (one AM, one PM)".
+		// The roster-wide floor (GROUND_MIN_STAFF_REQUIRED=3 above) has
+		// NO awareness of this specific 4-person subset — confirmed via
+		// real reproduction that 3 days had only 1 of the 4 working
+		// simultaneously, purely by coincidence of independent rest-pair
+		// placement. This tracker is checked ALONGSIDE the roster-wide
+		// floor inside the same backtracking loop below, so a candidate
+		// rest-pair combination is rejected if it would drop the POOL's
+		// own headcount below 2, even if the roster-wide floor of 3 is
+		// still technically satisfied by someone outside the pool.
+		// (GROUND_AM_PM_POOL_IDS / GROUND_AM_PM_POOL_MIN_REQUIRED are
+		// module-level constants — see top of file — so the SAME values
+		// are also enforced in allocateExtraRestCode's HL/WL placement
+		// below, closing a gap where protecting only ONE of these two
+		// insertion points still left real shortage days.)
+		const poolRestingByDayIdx = new Array(days.length).fill(0);
+
 		// Scoring for the SECONDARY objective (quota-nudging + variety),
 		// applied only to choose AMONG already-headcount-valid solutions
 		// — never used to justify violating the floor.
@@ -1448,14 +1476,25 @@ export const autoAssignGroundMonth = (
 				return;
 			}
 
+			const currentEmp = rotatingEmployees[empIdx];
+			const isPoolMember = GROUND_AM_PM_POOL_IDS.includes(currentEmp.id);
+
 			for (const candidate of shuffledPool) {
 				// Tentatively apply
-				candidate.restDayIndices.forEach((idx) => { restingByDayIdx[idx] += 1; });
+				candidate.restDayIndices.forEach((idx) => {
+					restingByDayIdx[idx] += 1;
+					if (isPoolMember) poolRestingByDayIdx[idx] += 1;
+				});
 
 				let ok = true;
 				for (let idx = 0; idx < days.length; idx++) {
 					const working = totalEmployeeCount - restingByDayIdx[idx] - fixedRestingByDayIdx[idx];
 					if (working < GROUND_MIN_STAFF_REQUIRED) { ok = false; break; }
+					// Pool-specific floor: at least 2 of the 4 named
+					// employees must be working every day, checked
+					// alongside (not instead of) the roster-wide floor.
+					const poolWorking = GROUND_AM_PM_POOL_IDS.length - poolRestingByDayIdx[idx];
+					if (poolWorking < GROUND_AM_PM_POOL_MIN_REQUIRED) { ok = false; break; }
 				}
 
 				if (ok) {
@@ -1463,7 +1502,10 @@ export const autoAssignGroundMonth = (
 				}
 
 				// Undo
-				candidate.restDayIndices.forEach((idx) => { restingByDayIdx[idx] -= 1; });
+				candidate.restDayIndices.forEach((idx) => {
+					restingByDayIdx[idx] -= 1;
+					if (isPoolMember) poolRestingByDayIdx[idx] -= 1;
+				});
 
 				if (attemptCount > CSP_BACKTRACK_BUDGET) break;
 			}
@@ -1489,9 +1531,17 @@ export const autoAssignGroundMonth = (
 			// search-budget issue — same conclusion held even at a 5x
 			// larger budget). Worded as an informational note, not an
 			// alarm, since nothing is actually wrong with the result.
+			// NOTE 2026-06-25: this fallback's round-robin distribution
+			// does NOT go through the backtracking search above, so it has
+			// no awareness of the 4-person 0608A/14B8A pool floor added
+			// that day (GROUND_AM_PM_POOL_MIN_REQUIRED) — Pass 4.5's own
+			// shortage warnings (and 驗證班表) remain the real safety net
+			// if this fallback's simpler distribution happens to violate
+			// that specific constraint. Wording corrected to not
+			// overclaim universal compliance.
 			warnings.push({
 				type: "csp_uniform_fallback",
-				message: `${monthLabel}：本月排班使用較簡單的固定班別模式（而非多樣化班別），但仍完全符合所有排班規則`,
+				message: `${monthLabel}：本月排班使用較簡單的固定班別模式（而非多樣化班別）；基本排班規則仍符合，但4人輪值組覆蓋情況請參考下方驗證結果`,
 			});
 			const CONSECUTIVE_PAIRS = [[0,1],[1,2],[2,3],[3,4],[4,5],[5,6],[6,0]];
 			const fixedWeekdaysFallback = new Set(fixedEmployees.flatMap((e) => e.fixedRestDays));
@@ -1694,6 +1744,40 @@ export const autoAssignGroundMonth = (
 					return c !== "Z" && c !== "R" && c !== "HL" && c !== "WL";
 				}).length;
 				if (workingNow - 1 < GROUND_MIN_STAFF_REQUIRED) continue; // skip this employee this round, try others
+
+				// BUG FOUND 2026-06-25: this only checked the ROSTER-WIDE
+				// floor — the 4-person 0608A/14B8A pool floor (added in
+				// Pass 2's CSP search above) had no equivalent protection
+				// here, so an HL/WL insertion could independently push a
+				// pool member's day below the pool's own 2-person minimum
+				// even when the roster-wide floor was still satisfied.
+				// Confirmed via direct re-test: fixing ONLY the CSP search
+				// still left 3 shortage days (just different ones),
+				// proving this was a separate gap, not the same bug.
+				// BUG FOUND 2026-06-25: this checked `c && !isGroundRestCode(c)`
+				// — meaning a cell that's still UNASSIGNED (undefined, since
+				// Pass 3's work-code filling hasn't run yet at this point in
+				// the pipeline) was counted as "NOT working", when in
+				// reality every non-rest day WILL get a work code once
+				// Pass 3 runs. Confirmed via direct trace: poolWorkingNow
+				// was computing as 0 on days where 2 of the 4 pool members
+				// were simply not-yet-assigned (not actually resting),
+				// causing this check to reject nearly EVERY HL/WL
+				// placement attempt for pool members — which is exactly
+				// why only 陳寶英 (not in the pool) ever got HL/WL while
+				// all 4 pool members got zero. Fix: count a cell as
+				// "working" if it's EITHER an actual work code OR still
+				// unassigned (will become one) — only Z/R/HL/WL/leave
+				// codes count as genuinely NOT working.
+				if (GROUND_AM_PM_POOL_IDS.includes(emp.id)) {
+					const poolWorkingNow = GROUND_AM_PM_POOL_IDS.filter((id) => {
+						const e = employees.find((emp2) => emp2.id === id);
+						if (!e) return false;
+						const c = result[e.id][dateStr];
+						return !c || !isGroundRestCode(c); // unassigned (will work) OR already a real work code
+					}).length;
+					if (poolWorkingNow - 1 < 2) continue; // would drop the pool below its own floor — skip
+				}
 
 				thirdCounts[whichThird(midIdx)] += 1;
 				placedCountByEmp[emp.id] = (placedCountByEmp[emp.id] || 0) + 1;
@@ -2138,6 +2222,137 @@ export const autoAssignGroundMonth = (
 			if (!filledOneMore) break; // no eligible person found — stop trying, warning already logged
 			workingCount = employees.filter(isWorkingThatDay).length;
 			guard += 1;
+		}
+	});
+
+	// ── Pass 4.5: specific 0608A/14B8A coverage from the 4-person pool ──────
+	// ADDED 2026-06-22 — confirmed gap: the existing AM/PM coverage check
+	// (4a above) only verifies "someone is on an AM-type code, someone is
+	// on a PM-type code" using TIME OF DAY, not specific codes. 陳寶英
+	// (0808D/0838D) and 張小梅 (0808D) both count as "AM-type" under that
+	// check even though they should NEVER count toward this requirement —
+	// per explicit clarification, every day needs SPECIFICALLY one 0608A
+	// and one 14B8A, covered by rotating among exactly 4 employees
+	// (54762, 59790, 59929, 60090 — GROUND_AM_PM_POOL_IDS, module-level
+	// constant, see top of file). If more than 2 of those 4 are working
+	// a given day, the extra person(s) get 0908A ("paperwork duty")
+	// instead of a duplicate 0608A/14B8A — chosen by priority order
+	// (54762, then 59929, then 60090; 59790 only as a last resort if the
+	// other three aren't available that day).
+	const PAPERWORK_PRIORITY_IDS = ["54762", "59929", "60090"]; // 59790 deliberately excluded from preferential paperwork assignment
+
+	days.forEach(({ dateStr }) => {
+		const poolWorkingToday = employees.filter((emp) => {
+			if (!GROUND_AM_PM_POOL_IDS.includes(emp.id)) return false;
+			const code = result[emp.id][dateStr];
+			return code && !isGroundRestCode(code);
+		});
+
+		if (poolWorkingToday.length === 0) {
+			warnings.push({
+				date: dateStr,
+				type: "am_pm_pool_shortage",
+				message: `${dateStr}：4人輪值組（林妍蓓/陳俊嘉/張芷菱/盧詠薇）當日無人上班，無法安排0608A/14B8A`,
+			});
+			return;
+		}
+		if (poolWorkingToday.length === 1) {
+			const emp = poolWorkingToday[0];
+			// Try 0608A first, fall back to 14B8A if that specifically
+			// violates this person's rest rules — either way, this is a
+			// genuine shortage (only 1 of the 4-person pool working) and
+			// gets flagged regardless of which single code ends up
+			// covered, since the OTHER one is necessarily left uncovered.
+			if (!violatesLocalRules(emp.id, dateStr, "0608A")) {
+				result[emp.id][dateStr] = "0608A";
+			} else if (!violatesLocalRules(emp.id, dateStr, "14B8A")) {
+				result[emp.id][dateStr] = "14B8A";
+			}
+			warnings.push({
+				date: dateStr,
+				type: "am_pm_pool_shortage",
+				message: `${dateStr}：4人輪值組當日僅 1 人上班，無法同時涵蓋0608A與14B8A`,
+			});
+			return;
+		}
+
+		const numExtra = poolWorkingToday.length - 2;
+		const assignedPaperwork = [];
+
+		if (numExtra > 0) {
+			// Assign paperwork (0908A) FIRST, in priority order, to
+			// whoever's working today and highest on the priority list.
+			for (const empId of PAPERWORK_PRIORITY_IDS) {
+				if (assignedPaperwork.length >= numExtra) break;
+				const emp = poolWorkingToday.find((e) => e.id === empId);
+				if (emp && !violatesLocalRules(emp.id, dateStr, "0908A")) {
+					result[emp.id][dateStr] = "0908A";
+					assignedPaperwork.push(emp.id);
+				}
+			}
+			// Fallback: if the priority list couldn't fill every extra slot
+			// (e.g. 59790 is the only "extra" person and isn't on the
+			// priority list at all), assign remaining extras paperwork too,
+			// in whatever order they appear.
+			for (const emp of poolWorkingToday) {
+				if (assignedPaperwork.length >= numExtra) break;
+				if (assignedPaperwork.includes(emp.id)) continue;
+				if (!violatesLocalRules(emp.id, dateStr, "0908A")) {
+					result[emp.id][dateStr] = "0908A";
+					assignedPaperwork.push(emp.id);
+				}
+			}
+		}
+
+		// Whoever's left (not assigned paperwork) splits 0608A/14B8A.
+		// BUG FOUND 2026-06-22: the original version only ever tried
+		// remaining[0]→0608A and remaining[1]→14B8A in that fixed order —
+		// if EITHER assignment violated that specific person's rest
+		// rules, the `if` condition was simply false and nothing happened,
+		// silently leaving whatever code Pass 3 had already put there
+		// (often a DUPLICATE of the other person's code, since both had
+		// independently been assigned via the general AM/PM balancer
+		// earlier). Confirmed via direct trace: 2026-07-01 ended up with
+		// TWO people on 0608A and nobody on 14B8A this way. Fix: try BOTH
+		// orderings (remaining[0]→0608A & remaining[1]→14B8A, OR
+		// remaining[0]→14B8A & remaining[1]→0608A) and use whichever one
+		// actually works for both people — only falling back to a
+		// genuine shortage warning if NEITHER ordering is valid for both.
+		const remaining = poolWorkingToday.filter((e) => !assignedPaperwork.includes(e.id));
+		if (remaining.length >= 2) {
+			const [a, b] = remaining;
+			const aCanAm = !violatesLocalRules(a.id, dateStr, "0608A");
+			const bCanPm = !violatesLocalRules(b.id, dateStr, "14B8A");
+			const aCanPm = !violatesLocalRules(a.id, dateStr, "14B8A");
+			const bCanAm = !violatesLocalRules(b.id, dateStr, "0608A");
+
+			if (aCanAm && bCanPm) {
+				result[a.id][dateStr] = "0608A";
+				result[b.id][dateStr] = "14B8A";
+			} else if (aCanPm && bCanAm) {
+				result[a.id][dateStr] = "14B8A";
+				result[b.id][dateStr] = "0608A";
+			} else {
+				// Neither ordering works for both — place whichever single
+				// assignment IS valid, and flag the genuine shortage
+				// instead of leaving a silent duplicate.
+				if (aCanAm) result[a.id][dateStr] = "0608A";
+				else if (aCanPm) result[a.id][dateStr] = "14B8A";
+				if (bCanPm) result[b.id][dateStr] = "14B8A";
+				else if (bCanAm) result[b.id][dateStr] = "0608A";
+				warnings.push({
+					date: dateStr,
+					type: "am_pm_pool_shortage",
+					message: `${dateStr}：無法同時為${a.name}與${b.name}安排0608A/14B8A（休息規則衝突）`,
+				});
+			}
+		} else if (remaining.length === 1) {
+			const emp = remaining[0];
+			if (!violatesLocalRules(emp.id, dateStr, "0608A")) {
+				result[emp.id][dateStr] = "0608A";
+			} else if (!violatesLocalRules(emp.id, dateStr, "14B8A")) {
+				result[emp.id][dateStr] = "14B8A";
+			}
 		}
 	});
 
