@@ -101,6 +101,16 @@ function dutyAppliesToDate(duty, dateStr) {
 	return duty.active_weekdays?.includes(isoWeekday(dateStr));
 }
 
+// Whether a duty is ever active on a given ISO weekday (1=Mon..7=Sun) —
+// for specific_dates duties this checks the actual dates, not active_weekdays
+// (which is always [1..7] under the unified calendar and can't be trusted).
+function dutyActiveOnIsoWeekday(duty, iso) {
+	if (duty.specific_dates?.length) {
+		return duty.specific_dates.some((d) => isoWeekday(d) === iso);
+	}
+	return duty.active_weekdays?.includes(iso);
+}
+
 function formatGroundStop(s1, s2) {
 	if (!s1 || !s2) return null;
 	const [h1, m1] = s1.arr_time.split(":").map(Number);
@@ -488,8 +498,10 @@ export default function DispatchMonthView({
 				const dateOverlap =
 					a.date_from <= b.date_to && b.date_from <= a.date_to;
 				if (!dateOverlap) return false;
-				return (a.active_weekdays || []).some((d) =>
-					(b.active_weekdays || []).includes(d),
+				return [1, 2, 3, 4, 5, 6, 7].some(
+					(iso) =>
+						dutyActiveOnIsoWeekday(a, iso) &&
+						dutyActiveOnIsoWeekday(b, iso),
 				);
 			};
 
@@ -530,7 +542,7 @@ export default function DispatchMonthView({
 	// For a merged row, get FT for a specific ISO weekday
 	function ftForDay(entries, iso) {
 		const applicable = entries.find((e) =>
-			(e.active_weekdays || []).includes(iso),
+			dutyActiveOnIsoWeekday(e, iso),
 		);
 		if (!applicable) return null;
 		const s = stats[applicable.id];
@@ -583,7 +595,7 @@ export default function DispatchMonthView({
 
 	function weeklyTotalFt(isoDay) {
 		return duties
-			.filter((d) => d.active_weekdays?.includes(isoDay))
+			.filter((d) => dutyActiveOnIsoWeekday(d, isoDay))
 			.reduce((sum, d) => sum + (stats[d.id]?.ft_minutes || 0), 0);
 	}
 
@@ -1281,23 +1293,21 @@ export default function DispatchMonthView({
 																			`${duty.date_from?.slice(5)} – ${duty.date_to?.slice(5)}`}
 																	</div>
 
-																	{/* Weekday characters — skip for specific-date duties */}
-																	{!duty.specific_dates?.length && (
-																		<div className={styles.dutyCardDots}>
-																			{WEEKDAYS.map((d, i) => {
-																				const active = duty.active_weekdays?.includes(d);
-																				return (
-																					<span
-																						key={d}
-																						className={styles.dutyCardWeekDot}
-																						style={active ? { color: baseColors[base] } : undefined}
-																					>
-																						{DAY_NAMES[i]}
-																					</span>
-																				);
-																			})}
-																		</div>
-																	)}
+																	{/* Weekday characters — shows actual pattern from specific_dates */}
+																	<div className={styles.dutyCardDots}>
+																		{WEEKDAYS.map((d, i) => {
+																			const active = dutyActiveOnIsoWeekday(duty, d);
+																			return (
+																				<span
+																					key={d}
+																					className={styles.dutyCardWeekDot}
+																					style={active ? { color: baseColors[base] } : undefined}
+																				>
+																					{DAY_NAMES[i]}
+																				</span>
+																			);
+																		})}
+																	</div>
 																	{/* Special date dot — absolute, left of done button */}
 																	{duty.label && (
 																		<span className={styles.dutyCardDotAbs} />
@@ -1679,7 +1689,7 @@ export default function DispatchMonthView({
 										{WEEKDAYS.map((d) => (
 											<div
 												key={d}
-												className={`${styles.dayPill} ${selectedDuty.active_weekdays?.includes(d) ? styles.dayPillOn : styles.dayPillOff}`}
+												className={`${styles.dayPill} ${dutyActiveOnIsoWeekday(selectedDuty, d) ? styles.dayPillOn : styles.dayPillOff}`}
 											>
 												{weekdayLabel(d)}
 											</div>

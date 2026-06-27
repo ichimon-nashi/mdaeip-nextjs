@@ -759,42 +759,55 @@ export const checkGroundFatigue = (schedule) => {
 		.filter((d) => d.duty_code && d.duty_code.trim())
 		.sort((a, b) => a.date.localeCompare(b.date));
 
-	// Rule 1: Must have at least one 例(Z) and one 休(R) in every rolling 7-day window
-	// We check from each day's start, looking at that day + next 6 days
-	// To avoid flooding violations, deduplicate by week window start
-	const checkedWindows = new Set();
-	for (let i = 0; i < sorted.length; i++) {
-		const windowStartDate = sorted[i].date;
-		if (checkedWindows.has(windowStartDate)) continue;
-		checkedWindows.add(windowStartDate);
+	// Rule 1: REDESIGNED 2026-06-25 per explicit clarification — "there
+	// must be one Z and one R for every week (7 days), but not rolling
+	// 7 days." The PREVIOUS version checked every possible ROLLING 7-day
+	// window starting from any date, which is a fundamentally different
+	// (and stricter) rule than what the real schedule is actually built
+	// on. Confirmed via direct verification against real June data: a
+	// rolling window straddling two boundary-adjacent FIXED weeks can
+	// legitimately show zero Z's even when both individual weeks are
+	// perfectly compliant (e.g. a Z landing on the last day of week 1
+	// and another Z on the last day of week 2 — a window starting
+	// mid-week-1 can miss both). This produced 23 FALSE violations on a
+	// real, valid June schedule. Weeks are calendar weeks, Monday-Sunday
+	// (confirmed: "monday-sunday, but need to take into consideration of
+	// previous month's schedule" — i.e. NOT reset to day-1-of-month,
+	// genuine ISO-style weeks that can straddle a month boundary).
+	const getMondayOfWeek = (dateStr) => {
+		const d = new Date(dateStr);
+		const dow = d.getDay(); // 0=Sun..6=Sat
+		const daysSinceMonday = dow === 0 ? 6 : dow - 1;
+		const monday = new Date(d);
+		monday.setDate(monday.getDate() - daysSinceMonday);
+		return monday.toISOString().split("T")[0];
+	};
 
-		const windowStart = new Date(windowStartDate);
-		const windowEnd = new Date(windowStart);
-		windowEnd.setDate(windowEnd.getDate() + 6);
+	const entriesByWeek = {};
+	sorted.forEach((entry) => {
+		const weekKey = getMondayOfWeek(entry.date);
+		(entriesByWeek[weekKey] = entriesByWeek[weekKey] || []).push(entry);
+	});
 
-		const windowDays = sorted.filter((d) => {
-			const dt = new Date(d.date);
-			return dt >= windowStart && dt <= windowEnd;
-		});
+	Object.entries(entriesByWeek).forEach(([weekMonday, entries]) => {
+		// Only flag a week with a FULL 7 days of real data — a week
+		// that's only partially populated (e.g. the trailing boundary
+		// week of a month, where the NEXT month's portion hasn't been
+		// scheduled yet) shouldn't produce a false "missing Z/R"
+		// violation just because it's incomplete, not actually violated.
+		if (entries.length < 7) return;
 
-		// Only flag if we have a full 7-day window of data
-		if (windowDays.length < 7) continue;
-
-		const hasLi = windowDays.some(
-			(d) => d.duty_code === "Z" || d.duty_code === "例",
-		);
-		const hasXiu = windowDays.some(
-			(d) => d.duty_code === "R" || d.duty_code === "休",
-		);
+		const hasLi = entries.some((d) => d.duty_code === "Z" || d.duty_code === "例");
+		const hasXiu = entries.some((d) => d.duty_code === "R" || d.duty_code === "休");
 
 		if (!hasLi || !hasXiu) {
 			violations.push({
 				type: "missing_rest",
-				date: windowStartDate,
-				message: `${windowStartDate} 起7天內缺少${!hasLi ? "例假(Z)" : ""}${!hasLi && !hasXiu ? "及" : ""}${!hasXiu ? "休假(R)" : ""}`,
+				date: weekMonday,
+				message: `本週（${weekMonday} 起）缺少${!hasLi ? "例假(Z)" : ""}${!hasLi && !hasXiu ? "及" : ""}${!hasXiu ? "休假(R)" : ""}`,
 			});
 		}
-	}
+	});
 
 	// Rule 2: Minimum 11 hours rest between consecutive work duties
 	const workDays = sorted.filter((d) => !isGroundRestCode(d.duty_code));
