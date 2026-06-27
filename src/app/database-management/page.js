@@ -3,7 +3,8 @@
 // uploaded this from). This REPLACES that file.
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
+import { createPortal } from "react-dom";
 import { useAuth } from "../../contexts/AuthContext";
 import { useRouter } from "next/navigation";
 import { hasAppAccess } from "../../lib/permissionHelpers";
@@ -95,6 +96,8 @@ const DatabaseManagement = () => {
 	const [editingCellIndex, setEditingCellIndex] = useState(null); // index of day being edited in the cell sub-modal, or null
 	const [editingCellDraft, setEditingCellDraft] = useState(""); // draft value inside the cell sub-modal, committed on explicit confirm only
 	const [isImageZoomed, setIsImageZoomed] = useState(false); // full-size lightbox for the reference screenshot
+	const entryIdInputRef = useRef(null); // measured to position the portaled filter dropdown
+	const [entryIdDropdownRect, setEntryIdDropdownRect] = useState(null); // { top, left, width } in viewport coords
 
 	// User management states
 	const [users, setUsers] = useState([]);
@@ -336,6 +339,49 @@ const DatabaseManagement = () => {
 	// Derived month string in the "2026年05月" format used everywhere else
 	// in this codebase (mdaeip_schedule_months.month, getDaysInMonthFromStr).
 	const entryMonth = `${entryYear}年${entryMonthNum}月`;
+
+	// Mirrors the exact condition the dropdown JSX uses to decide whether
+	// to render — kept as one boolean so the position-measuring effect
+	// below and the JSX render condition can't silently drift apart.
+	const showEntryIdDropdown =
+		!entryEmployeeInfo && entryEmployeeId.trim().length > 0 && users.length > 0;
+
+	// The filter dropdown is portaled to document.body (see render below)
+	// because .modalBody has overflow-y:auto — any absolutely-positioned
+	// child stays clipped to that scrolling ancestor's visible bounds no
+	// matter its z-index, which is a hard CSS/browser rule, not something
+	// tunable via stacking order alone. Portaling escapes that ancestor
+	// entirely, but then the dropdown needs its position calculated in
+	// viewport coordinates instead of relying on CSS to anchor it, and
+	// that position needs to stay in sync if the modal body scrolls or the
+	// window resizes while the dropdown is open.
+	useEffect(() => {
+		if (!showEntryIdDropdown || !entryIdInputRef.current) {
+			setEntryIdDropdownRect(null);
+			return;
+		}
+
+		const updateRect = () => {
+			const el = entryIdInputRef.current;
+			if (!el) return;
+			const rect = el.getBoundingClientRect();
+			setEntryIdDropdownRect({
+				top: rect.bottom + 4,
+				left: rect.left,
+				width: rect.width,
+			});
+		};
+
+		updateRect();
+		// capture:true so this also fires on scroll inside .modalBody, not
+		// just window-level scroll
+		window.addEventListener("scroll", updateRect, true);
+		window.addEventListener("resize", updateRect);
+		return () => {
+			window.removeEventListener("scroll", updateRect, true);
+			window.removeEventListener("resize", updateRect);
+		};
+	}, [showEntryIdDropdown]);
 
 	const handleOpenEmployeeEntryModal = () => {
 		const now = new Date();
@@ -1654,7 +1700,10 @@ const DatabaseManagement = () => {
 										</div>
 										<div className={styles.entryFieldGroup}>
 											<label className={styles.entryFieldLabel}>員工編號</label>
-											<div className={styles.entryIdInputWrapper}>
+											<div
+												className={styles.entryIdInputWrapper}
+												ref={entryIdInputRef}
+											>
 												<input
 													type="text"
 													value={entryEmployeeId}
@@ -1673,52 +1722,29 @@ const DatabaseManagement = () => {
 													</div>
 												)}
 											</div>
-											{!entryEmployeeInfo &&
-												entryEmployeeId.trim().length > 0 &&
-												users.length > 0 && (
-													<div className={styles.entryIdFilterDropdown}>
-														{users
-															.filter(
-																(u) =>
-																	u.id !== "admin" &&
-																	u.id
-																		.toLowerCase()
-																		.includes(
-																			entryEmployeeId.trim().toLowerCase()
-																		)
-															)
-															.slice(0, 8)
-															.map((u) => (
-																<button
-																	type="button"
-																	key={u.id}
-																	className={styles.entryIdFilterOption}
-																	onClick={() => {
-																		setEntryEmployeeId(u.id);
-																		setEntryEmployeeInfo({
-																			name: u.name,
-																			rank: u.rank,
-																			base: u.base,
-																		});
-																		const daysInMonth =
-																			getDaysInMonthFromStr(entryMonth);
-																		setEntryDuties(
-																			new Array(daysInMonth).fill("")
-																		);
-																		setEntryReviewed(
-																			new Array(daysInMonth).fill(false)
-																		);
-																	}}
-																>
-																	<span className={styles.entryIdFilterId}>
-																		{u.id}
-																	</span>
-																	<span className={styles.entryIdFilterName}>
-																		{u.name}　{u.rank}
-																	</span>
-																</button>
-															))}
-														{users.filter(
+										</div>
+										{showEntryIdDropdown &&
+											entryIdDropdownRect &&
+											typeof document !== "undefined" &&
+											createPortal(
+												<div
+													className={styles.entryIdFilterDropdown}
+													style={{
+														top: entryIdDropdownRect.top,
+														left: entryIdDropdownRect.left,
+														width: Math.max(
+															entryIdDropdownRect.width,
+															220
+														),
+														// Clamp so the dropdown can't extend past the
+														// right edge of the viewport on narrow/mobile
+														// screens, where the input itself may be close
+														// to full width already.
+														maxWidth: `calc(100vw - ${entryIdDropdownRect.left + 16}px)`,
+													}}
+												>
+													{users
+														.filter(
 															(u) =>
 																u.id !== "admin" &&
 																u.id
@@ -1726,14 +1752,54 @@ const DatabaseManagement = () => {
 																	.includes(
 																		entryEmployeeId.trim().toLowerCase()
 																	)
-														).length === 0 && (
-															<div className={styles.entryIdFilterEmpty}>
-																找不到符合的員工編號
-															</div>
-														)}
-													</div>
-												)}
-										</div>
+														)
+														.slice(0, 8)
+														.map((u) => (
+															<button
+																type="button"
+																key={u.id}
+																className={styles.entryIdFilterOption}
+																onClick={() => {
+																	setEntryEmployeeId(u.id);
+																	setEntryEmployeeInfo({
+																		name: u.name,
+																		rank: u.rank,
+																		base: u.base,
+																	});
+																	const daysInMonth =
+																		getDaysInMonthFromStr(entryMonth);
+																	setEntryDuties(
+																		new Array(daysInMonth).fill("")
+																	);
+																	setEntryReviewed(
+																		new Array(daysInMonth).fill(false)
+																	);
+																}}
+															>
+																<span className={styles.entryIdFilterId}>
+																	{u.id}
+																</span>
+																<span className={styles.entryIdFilterName}>
+																	{u.name}　{u.rank}
+																</span>
+															</button>
+														))}
+													{users.filter(
+														(u) =>
+															u.id !== "admin" &&
+															u.id
+																.toLowerCase()
+																.includes(
+																	entryEmployeeId.trim().toLowerCase()
+																)
+													).length === 0 && (
+														<div className={styles.entryIdFilterEmpty}>
+															找不到符合的員工編號
+														</div>
+													)}
+												</div>,
+												document.body
+											)}
 										{entryEmployeeInfo && (
 											<button
 												className={styles.cancelButton}
