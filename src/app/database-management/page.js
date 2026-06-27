@@ -651,12 +651,11 @@ const DatabaseManagement = () => {
 		return new Date(parseInt(yearMatch[1]), parseInt(monthMatch[1]), 0).getDate();
 	};
 
-	// The company roster's weekday header runs 五六日一二三四 (Fri-start, see
-	// the original PDF/Excel column headers), not the ISO Mon-start week.
-	// Returns 0-6 = which of those 7 columns day 1 of the month falls into,
-	// so the manual-entry grid can show the same leading blank cells the
-	// real roster would, instead of always starting day 1 in column 0
-	// regardless of the actual weekday.
+	// Standard ISO Mon-start week (一二三四五六日), confirmed explicitly by
+	// the user even though it diverges from the roster PDF's own printed
+	// header order (五六日一二三四, Fri-start). Returns 0-6 = which of the
+	// 7 Mon-Sun columns day 1 of the month falls into, so the manual-entry
+	// grid shows the correct leading blank cells.
 	const getFirstDayColumnFromStr = (monthStr) => {
 		const yearMatch = monthStr.match(/(\d{4})年/);
 		const monthMatch = monthStr.match(/(\d{2})月/);
@@ -666,10 +665,10 @@ const DatabaseManagement = () => {
 			parseInt(monthMatch[1]) - 1,
 			1
 		).getDay(); // 0=Sun, 1=Mon, ... 6=Sat (JS native)
-		// Map JS's Sun-start (0-6) to the roster's Fri-start column order
-		// (五六日一二三四 = Fri,Sat,Sun,Mon,Tue,Wed,Thu):
-		const friStartOrder = [2, 3, 4, 5, 6, 0, 1]; // jsDay -> column index
-		return friStartOrder[jsDay];
+		// Map JS's Sun-start (0-6) to Mon-start column order
+		// (一二三四五六日 = Mon,Tue,Wed,Thu,Fri,Sat,Sun):
+		const monStartOrder = [6, 0, 1, 2, 3, 4, 5]; // jsDay -> column index
+		return monStartOrder[jsDay];
 	};
 
 	const convertToDataRoster = (worksheet, month) => {
@@ -1862,7 +1861,7 @@ const DatabaseManagement = () => {
 											</div>
 
 											<div className={styles.entryWeekdayHeader}>
-												{["五", "六", "日", "一", "二", "三", "四"].map((d) => (
+												{["一", "二", "三", "四", "五", "六", "日"].map((d) => (
 													<span key={d}>{d}</span>
 												))}
 											</div>
