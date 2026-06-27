@@ -26,6 +26,7 @@ import {
 	EyeOff,
 } from "lucide-react";
 import styles from "../../styles/DatabaseManagement.module.css";
+import { employeeList } from "../../lib/DataRoster";
 
 // All available gif keys, split by gender prefix
 // User grouping for filter tabs and card tinting
@@ -343,8 +344,13 @@ const DatabaseManagement = () => {
 	// Mirrors the exact condition the dropdown JSX uses to decide whether
 	// to render — kept as one boolean so the position-measuring effect
 	// below and the JSX render condition can't silently drift apart.
+	// Uses employeeList (DataRoster.js — the full crew roster, same source
+	// the Excel upload pipeline treats as ground truth) rather than the
+	// `users` state array, which only contains mdaeip_users rows — i.e.
+	// crew who have actually been given app accounts. Real crew without
+	// app access still need to show up in this search.
 	const showEntryIdDropdown =
-		!entryEmployeeInfo && entryEmployeeId.trim().length > 0 && users.length > 0;
+		!entryEmployeeInfo && entryEmployeeId.trim().length > 0;
 
 	// The filter dropdown is portaled to document.body (see render below)
 	// because .modalBody has overflow-y:auto — any absolutely-positioned
@@ -396,13 +402,6 @@ const DatabaseManagement = () => {
 		setEditingCellDraft("");
 		setIsImageZoomed(false);
 		setShowEmployeeEntryModal(true);
-		// The ID filter below matches against the `users` state array, which
-		// is otherwise only populated when the user-management tab has been
-		// visited (see the activeTab==="users" effect above). Load it here
-		// too so the filter works even if this modal is opened first.
-		if (users.length === 0) {
-			loadUsers();
-		}
 	};
 
 	// Shared by both paste and file-upload. No OCR — this is purely a local
@@ -1716,11 +1715,6 @@ const DatabaseManagement = () => {
 													disabled={!!entryEmployeeInfo}
 													autoComplete="off"
 												/>
-												{!entryEmployeeInfo && users.length === 0 && (
-													<div className={styles.entryIdStatusIcon}>
-														<div className={styles.buttonSpinner}></div>
-													</div>
-												)}
 											</div>
 										</div>
 										{showEntryIdDropdown &&
@@ -1743,7 +1737,7 @@ const DatabaseManagement = () => {
 														maxWidth: `calc(100vw - ${entryIdDropdownRect.left + 16}px)`,
 													}}
 												>
-													{users
+													{employeeList
 														.filter(
 															(u) =>
 																u.id !== "admin" &&
@@ -1784,7 +1778,7 @@ const DatabaseManagement = () => {
 																</span>
 															</button>
 														))}
-													{users.filter(
+													{employeeList.filter(
 														(u) =>
 															u.id !== "admin" &&
 															u.id
