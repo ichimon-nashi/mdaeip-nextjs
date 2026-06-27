@@ -88,7 +88,6 @@ const DatabaseManagement = () => {
 	);
 	const [entryEmployeeId, setEntryEmployeeId] = useState("");
 	const [entryEmployeeInfo, setEntryEmployeeInfo] = useState(null); // { name, rank, base } once confirmed
-	const [entryLookupStatus, setEntryLookupStatus] = useState(null); // null | "loading" | "found" | "not_found" | "error"
 	const [entryDuties, setEntryDuties] = useState([]); // array of strings, one per day
 	const [entryReviewed, setEntryReviewed] = useState([]); // array of booleans, one per day
 	const [isSavingEntry, setIsSavingEntry] = useState(false);
@@ -338,44 +337,6 @@ const DatabaseManagement = () => {
 	// in this codebase (mdaeip_schedule_months.month, getDaysInMonthFromStr).
 	const entryMonth = `${entryYear}年${entryMonthNum}月`;
 
-	// Debounced live-search: fires ~500ms after the last keystroke, and only
-	// once the ID matches the 5-digit employee ID pattern used elsewhere in
-	// this codebase (see convertToDataRoster's empCell regex). Partial digits
-	// while typing don't trigger a lookup or an error toast.
-	useEffect(() => {
-		if (!showEmployeeEntryModal) return;
-		if (entryEmployeeInfo) return; // already confirmed, don't re-search
-		if (!/^\d{5}$/.test(entryEmployeeId.trim())) {
-			setEntryLookupStatus(null);
-			return;
-		}
-
-		const timer = setTimeout(async () => {
-			try {
-				setEntryLookupStatus("loading");
-				const response = await fetch(
-					`/api/users/lookup?employeeId=${entryEmployeeId}&userAccessLevel=${user.access_level}`
-				);
-				const result = await response.json();
-
-				if (result.success) {
-					setEntryLookupStatus("found");
-					setEntryEmployeeInfo(result.data);
-					const daysInMonth = getDaysInMonthFromStr(entryMonth);
-					setEntryDuties(new Array(daysInMonth).fill(""));
-					setEntryReviewed(new Array(daysInMonth).fill(false));
-				} else {
-					setEntryLookupStatus("not_found");
-				}
-			} catch (error) {
-				console.error("Error looking up employee:", error);
-				setEntryLookupStatus("error");
-			}
-		}, 500);
-
-		return () => clearTimeout(timer);
-	}, [entryEmployeeId, showEmployeeEntryModal, entryEmployeeInfo]);
-
 	const handleOpenEmployeeEntryModal = () => {
 		const now = new Date();
 		setEntryYear(String(now.getFullYear()));
@@ -389,6 +350,13 @@ const DatabaseManagement = () => {
 		setEditingCellDraft("");
 		setIsImageZoomed(false);
 		setShowEmployeeEntryModal(true);
+		// The ID filter below matches against the `users` state array, which
+		// is otherwise only populated when the user-management tab has been
+		// visited (see the activeTab==="users" effect above). Load it here
+		// too so the filter works even if this modal is opened first.
+		if (users.length === 0) {
+			loadUsers();
+		}
 	};
 
 	// Shared by both paste and file-upload. No OCR — this is purely a local
@@ -636,6 +604,27 @@ const DatabaseManagement = () => {
 		const monthMatch = monthStr.match(/(\d{2})月/);
 		if (!yearMatch || !monthMatch) return 31;
 		return new Date(parseInt(yearMatch[1]), parseInt(monthMatch[1]), 0).getDate();
+	};
+
+	// The company roster's weekday header runs 五六日一二三四 (Fri-start, see
+	// the original PDF/Excel column headers), not the ISO Mon-start week.
+	// Returns 0-6 = which of those 7 columns day 1 of the month falls into,
+	// so the manual-entry grid can show the same leading blank cells the
+	// real roster would, instead of always starting day 1 in column 0
+	// regardless of the actual weekday.
+	const getFirstDayColumnFromStr = (monthStr) => {
+		const yearMatch = monthStr.match(/(\d{4})年/);
+		const monthMatch = monthStr.match(/(\d{2})月/);
+		if (!yearMatch || !monthMatch) return 0;
+		const jsDay = new Date(
+			parseInt(yearMatch[1]),
+			parseInt(monthMatch[1]) - 1,
+			1
+		).getDay(); // 0=Sun, 1=Mon, ... 6=Sat (JS native)
+		// Map JS's Sun-start (0-6) to the roster's Fri-start column order
+		// (五六日一二三四 = Fri,Sat,Sun,Mon,Tue,Wed,Thu):
+		const friStartOrder = [2, 3, 4, 5, 6, 0, 1]; // jsDay -> column index
+		return friStartOrder[jsDay];
 	};
 
 	const convertToDataRoster = (worksheet, month) => {
@@ -1669,34 +1658,81 @@ const DatabaseManagement = () => {
 												<input
 													type="text"
 													value={entryEmployeeId}
-													onChange={(e) => setEntryEmployeeId(e.target.value)}
+													onChange={(e) => {
+														setEntryEmployeeId(e.target.value);
+														setEntryEmployeeInfo(null);
+													}}
 													placeholder="51892"
 													className={styles.entryTextInput}
 													disabled={!!entryEmployeeInfo}
+													autoComplete="off"
 												/>
-												{!entryEmployeeInfo && entryLookupStatus === "loading" && (
+												{!entryEmployeeInfo && users.length === 0 && (
 													<div className={styles.entryIdStatusIcon}>
 														<div className={styles.buttonSpinner}></div>
 													</div>
 												)}
-												{!entryEmployeeInfo && entryLookupStatus === "not_found" && (
-													<div
-														className={`${styles.entryIdStatusIcon} ${styles.entryIdStatusError}`}
-													>
-														<X size={16} />
+											</div>
+											{!entryEmployeeInfo &&
+												entryEmployeeId.trim().length > 0 &&
+												users.length > 0 && (
+													<div className={styles.entryIdFilterDropdown}>
+														{users
+															.filter(
+																(u) =>
+																	u.id !== "admin" &&
+																	u.id
+																		.toLowerCase()
+																		.includes(
+																			entryEmployeeId.trim().toLowerCase()
+																		)
+															)
+															.slice(0, 8)
+															.map((u) => (
+																<button
+																	type="button"
+																	key={u.id}
+																	className={styles.entryIdFilterOption}
+																	onClick={() => {
+																		setEntryEmployeeId(u.id);
+																		setEntryEmployeeInfo({
+																			name: u.name,
+																			rank: u.rank,
+																			base: u.base,
+																		});
+																		const daysInMonth =
+																			getDaysInMonthFromStr(entryMonth);
+																		setEntryDuties(
+																			new Array(daysInMonth).fill("")
+																		);
+																		setEntryReviewed(
+																			new Array(daysInMonth).fill(false)
+																		);
+																	}}
+																>
+																	<span className={styles.entryIdFilterId}>
+																		{u.id}
+																	</span>
+																	<span className={styles.entryIdFilterName}>
+																		{u.name}　{u.rank}
+																	</span>
+																</button>
+															))}
+														{users.filter(
+															(u) =>
+																u.id !== "admin" &&
+																u.id
+																	.toLowerCase()
+																	.includes(
+																		entryEmployeeId.trim().toLowerCase()
+																	)
+														).length === 0 && (
+															<div className={styles.entryIdFilterEmpty}>
+																找不到符合的員工編號
+															</div>
+														)}
 													</div>
 												)}
-											</div>
-											{entryLookupStatus === "not_found" && (
-												<span className={styles.entryIdStatusText}>
-													員工編號不存在於名冊中
-												</span>
-											)}
-											{entryLookupStatus === "error" && (
-												<span className={styles.entryIdStatusText}>
-													查詢失敗，請稍後再試
-												</span>
-											)}
 										</div>
 										{entryEmployeeInfo && (
 											<button
@@ -1704,7 +1740,6 @@ const DatabaseManagement = () => {
 												onClick={() => {
 													setEntryEmployeeId("");
 													setEntryEmployeeInfo(null);
-													setEntryLookupStatus(null);
 													setEntryDuties([]);
 													setEntryReviewed([]);
 													setEntryImagePreview(null);
@@ -1766,7 +1801,22 @@ const DatabaseManagement = () => {
 												</span>
 											</div>
 
+											<div className={styles.entryWeekdayHeader}>
+												{["五", "六", "日", "一", "二", "三", "四"].map((d) => (
+													<span key={d}>{d}</span>
+												))}
+											</div>
+
 											<div className={styles.entryGrid}>
+												{Array.from(
+													{ length: getFirstDayColumnFromStr(entryMonth) },
+													(_, i) => (
+														<div
+															key={`blank-${i}`}
+															className={styles.entryCellBlank}
+														/>
+													)
+												)}
 												{entryDuties.map((value, index) => (
 													<div
 														key={index}

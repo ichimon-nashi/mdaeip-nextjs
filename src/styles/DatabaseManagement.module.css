@@ -1896,10 +1896,28 @@
 	font-weight: 600;
 }
 
+.entryWeekdayHeader {
+	display: grid;
+	grid-template-columns: repeat(7, 1fr);
+	gap: 8px;
+	margin-bottom: 6px;
+}
+
+.entryWeekdayHeader span {
+	text-align: center;
+	font-size: 0.6875rem;
+	color: #94a3b8;
+	font-weight: 600;
+}
+
 .entryGrid {
 	display: grid;
 	grid-template-columns: repeat(7, 1fr);
 	gap: 8px;
+}
+
+.entryCellBlank {
+	min-height: 48px;
 }
 
 .entryCellWrapper {
@@ -2014,14 +2032,54 @@
 	align-items: center;
 }
 
-.entryIdStatusError {
-	color: #ef4444;
+.entryIdFilterDropdown {
+	margin-top: 4px;
+	border: 1px solid #e2e8f0;
+	border-radius: 8px;
+	background: #fff;
+	max-height: 220px;
+	overflow-y: auto;
+	box-shadow: 0 4px 12px -2px rgba(0, 0, 0, 0.1);
 }
 
-.entryIdStatusText {
+.entryIdFilterOption {
+	display: flex;
+	flex-direction: column;
+	align-items: flex-start;
+	gap: 2px;
+	width: 100%;
+	padding: 8px 12px;
+	border: none;
+	background: none;
+	cursor: pointer;
+	text-align: left;
+	border-bottom: 1px solid #f1f5f9;
+}
+
+.entryIdFilterOption:last-child {
+	border-bottom: none;
+}
+
+.entryIdFilterOption:hover {
+	background: #f8fafc;
+}
+
+.entryIdFilterId {
+	font-size: 0.8125rem;
+	font-weight: 600;
+	color: #1e293b;
+}
+
+.entryIdFilterName {
 	font-size: 0.75rem;
-	color: #ef4444;
-	margin-top: 4px;
+	color: #64748b;
+}
+
+.entryIdFilterEmpty {
+	padding: 10px 12px;
+	font-size: 0.8125rem;
+	color: #94a3b8;
+	text-align: center;
 }
 
 .entryCell:focus-visible {
@@ -2148,14 +2206,23 @@
 		min-width: 0;
 	}
 
-	.entryGrid {
-		grid-template-columns: repeat(4, 1fr);
-		gap: 6px;
+	.entryGrid,
+	.entryWeekdayHeader {
+		gap: 4px;
 	}
 
 	.entryCell {
-		min-height: 52px;
-		font-size: 0.875rem;
+		min-height: 40px;
+		font-size: 0.6875rem;
+		padding: 12px 2px 4px;
+	}
+
+	.entryCellBlank {
+		min-height: 40px;
+	}
+
+	.entryWeekdayHeader span {
+		font-size: 0.625rem;
 	}
 
 	/* Side panel moves below the grid instead of beside it, and drops the
@@ -2180,7 +2247,17 @@
 }
 
 @media (max-width: 480px) {
-	.entryGrid {
-		grid-template-columns: repeat(3, 1fr);
+	.entryCell {
+		min-height: 36px;
+		font-size: 0.625rem;
+		padding: 11px 1px 3px;
+	}
+
+	.entryCellBlank {
+		min-height: 36px;
+	}
+
+	.entryCellDayLabel {
+		font-size: 0.5rem;
 	}
 }
