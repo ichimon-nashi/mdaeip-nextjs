@@ -209,4 +209,9 @@ export const patchUpdates = [
 		appName: "地勤功能",
 		updateInfo: ["增加地勤班表&換班系統"],
 	},
+	{
+		date: "2026-06-27",
+		appName: "EIP系統",
+		updateInfo: ["增加手動輸入班表功能"],
+	},
 ];
