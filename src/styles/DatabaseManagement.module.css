@@ -1,3 +1,6 @@
+/* TARGET PATH: styles/DatabaseManagement.module.css */
+/* This REPLACES the existing file at that path — appended classes only,
+   nothing else in this file was modified. */
 /* DatabaseManagement.module.css - Complete with User Management Styles */
 
 .container {
@@ -214,6 +217,27 @@
 	background: #059669;
 	transform: translateY(-1px);
 	box-shadow: 0 4px 8px -1px rgba(16, 185, 129, 0.4);
+}
+
+.manualEntryButton {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	padding: 10px 16px;
+	background: #3b82f6;
+	color: white;
+	border: none;
+	border-radius: 8px;
+	cursor: pointer;
+	font-weight: 500;
+	transition: all 0.2s ease;
+	box-shadow: 0 2px 4px -1px rgba(59, 130, 246, 0.3);
+}
+
+.manualEntryButton:hover {
+	background: #2563eb;
+	transform: translateY(-1px);
+	box-shadow: 0 4px 8px -1px rgba(59, 130, 246, 0.4);
 }
 
 .cleanupButton {
@@ -1696,4 +1720,467 @@
 .userCardAdmin:hover {
 	border-color: #2dd4bf;
 	box-shadow: 0 4px 12px rgba(45, 212, 191, 0.2);
+}
+
+/* ── Manual-entry vs Excel conflict resolution list ────────────────────── */
+.conflictList {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+	max-height: 320px;
+	overflow-y: auto;
+}
+
+.conflictRow {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	padding: 10px 14px;
+	background: #f8fafc;
+	border: 1px solid #e2e8f0;
+	border-radius: 8px;
+	gap: 16px;
+}
+
+.conflictEmployeeId {
+	font-size: 0.875rem;
+	font-weight: 600;
+	color: #1e293b;
+	flex-shrink: 0;
+}
+
+.conflictChoiceGroup {
+	display: flex;
+	gap: 16px;
+}
+
+.conflictChoiceLabel {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	font-size: 0.8125rem;
+	color: #374151;
+	cursor: pointer;
+	white-space: nowrap;
+}
+
+.conflictChoiceLabel input[type="radio"] {
+	accent-color: #3b82f6;
+	cursor: pointer;
+}
+
+/* ── Per-employee manual/OCR schedule entry modal ──────────────────────── */
+.entryModalContent {
+	max-width: 920px;
+}
+
+.entryModalLayout {
+	display: flex;
+	max-height: 80vh;
+}
+
+.entryModalMain {
+	flex: 1;
+	display: flex;
+	flex-direction: column;
+	min-width: 0;
+}
+
+.entrySearchRow {
+	display: flex;
+	align-items: flex-end;
+	gap: 12px;
+	margin-bottom: 14px;
+}
+
+.entryFieldGroup {
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+}
+
+.entryFieldLabel {
+	font-size: 0.75rem;
+	color: #64748b;
+	font-weight: 500;
+}
+
+.entryTextInput {
+	padding: 9px 12px;
+	border: 1px solid #d1d5db;
+	border-radius: 8px;
+	font-size: 0.875rem;
+	min-width: 150px;
+}
+
+.entryTextInput:focus {
+	outline: none;
+	border-color: #3b82f6;
+	box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+}
+
+.entryTextInput:disabled {
+	background: #f1f5f9;
+	color: #64748b;
+}
+
+.entryConfirmedBanner {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	padding: 8px 12px;
+	background: #eff6ff;
+	border-radius: 6px;
+	font-size: 0.8125rem;
+	color: #1e3a8a;
+	font-weight: 500;
+	margin-bottom: 16px;
+}
+
+.entryPasteZone {
+	border: 1.5px dashed #cbd5e1;
+	border-radius: 10px;
+	padding: 20px;
+	text-align: center;
+	margin-bottom: 16px;
+	cursor: text;
+	transition: border-color 0.2s ease;
+}
+
+.entryPasteZone:focus {
+	outline: none;
+	border-color: #3b82f6;
+	background: #f8fafc;
+}
+
+.entryPasteZoneContent {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: 8px;
+	font-size: 0.875rem;
+	color: #475569;
+}
+
+.entryUploadLink {
+	font-size: 0.8125rem;
+	color: #3b82f6;
+	cursor: pointer;
+	text-decoration: underline;
+}
+
+.entryFileInput {
+	position: absolute;
+	width: 1px;
+	height: 1px;
+	opacity: 0;
+	overflow: hidden;
+}
+
+.entryGridHeader {
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	margin-bottom: 10px;
+	font-size: 0.75rem;
+	color: #64748b;
+}
+
+.entryReviewStatusDone {
+	color: #16a34a;
+	font-weight: 600;
+}
+
+.entryReviewStatusPending {
+	color: #d97706;
+	font-weight: 600;
+}
+
+.entryGrid {
+	display: grid;
+	grid-template-columns: repeat(7, 1fr);
+	gap: 8px;
+}
+
+.entryCellWrapper {
+	position: relative;
+}
+
+.entryCellDayLabel {
+	position: absolute;
+	top: 2px;
+	left: 4px;
+	font-size: 0.625rem;
+	color: #cbd5e1;
+	pointer-events: none;
+	z-index: 1;
+}
+
+.entryCell {
+	width: 100%;
+	min-height: 48px;
+	text-align: center;
+	font-size: 0.8125rem;
+	border-radius: 8px;
+	box-sizing: border-box;
+	padding: 14px 6px 6px;
+	cursor: pointer;
+	font-family: inherit;
+	color: #1e293b;
+	word-break: break-all;
+	line-height: 1.2;
+	transition: all 0.15s ease;
+}
+
+.entryCellUnreviewed {
+	border: 1.5px solid #f59e0b;
+	background: #fffbeb;
+}
+
+.entryCellUnreviewed:hover {
+	background: #fef3c7;
+}
+
+.entryCellReviewed {
+	border: 1px solid #d1d5db;
+	background: #fff;
+}
+
+.entryCellReviewed:hover {
+	background: #f8fafc;
+	border-color: #3b82f6;
+}
+
+.entryFormatHint {
+	color: #94a3b8;
+	font-weight: 400;
+}
+
+.entrySidePanel {
+	width: 420px;
+	flex-shrink: 0;
+	background: #1e293b;
+	display: flex;
+	flex-direction: column;
+	border-left: 1px solid #0f172a;
+	overflow-y: auto;
+}
+
+.entrySidePanelLabel {
+	padding: 12px 16px;
+	border-bottom: 1px solid #334155;
+	font-size: 0.75rem;
+	color: #94a3b8;
+	display: flex;
+	align-items: center;
+}
+
+.entrySidePanelZoomBtn {
+	background: none;
+	border: none;
+	color: #60a5fa;
+	font-size: 0.75rem;
+	cursor: pointer;
+	text-decoration: underline;
+	padding: 0;
+}
+
+.entrySidePanelImageScroll {
+	overflow-x: auto;
+	overflow-y: hidden;
+}
+
+.entrySidePanelImage {
+	display: block;
+	cursor: zoom-in;
+	/* Intentionally NOT width: 100% — letting the image render at its
+	   natural size (with horizontal scroll if wider than the panel) keeps
+	   small table text legible instead of being squeezed to illegibility
+	   by forcing a wide screenshot into a 420px column. */
+	max-height: 240px;
+	width: auto;
+}
+
+.entryIdInputWrapper {
+	position: relative;
+}
+
+.entryIdStatusIcon {
+	position: absolute;
+	right: 10px;
+	top: 50%;
+	transform: translateY(-50%);
+	display: flex;
+	align-items: center;
+}
+
+.entryIdStatusError {
+	color: #ef4444;
+}
+
+.entryIdStatusText {
+	font-size: 0.75rem;
+	color: #ef4444;
+	margin-top: 4px;
+}
+
+.entryCell:focus-visible {
+	outline: none;
+	border-color: #3b82f6;
+	box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+}
+
+/* ── Full-size reference screenshot lightbox ───────────────────────────── */
+.imageZoomOverlay {
+	position: fixed;
+	top: 0;
+	left: 0;
+	right: 0;
+	bottom: 0;
+	background: rgba(0, 0, 0, 0.85);
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	z-index: 1100;
+	padding: 24px;
+	overflow: auto;
+}
+
+.imageZoomFull {
+	max-width: 95vw;
+	max-height: 95vh;
+	width: auto;
+	height: auto;
+}
+
+.imageZoomClose {
+	position: fixed;
+	top: 20px;
+	right: 20px;
+	background: rgba(255, 255, 255, 0.15);
+	border: none;
+	color: white;
+	border-radius: 50%;
+	width: 40px;
+	height: 40px;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	cursor: pointer;
+}
+
+.imageZoomClose:hover {
+	background: rgba(255, 255, 255, 0.25);
+}
+
+/* ── Per-cell editor sub-modal ──────────────────────────────────────────── */
+.cellEditorContent {
+	max-width: 420px;
+}
+
+.cellEditorHint {
+	font-size: 0.75rem;
+	color: #64748b;
+	background: #f8fafc;
+	border-radius: 6px;
+	padding: 10px 12px;
+	margin-bottom: 12px;
+	line-height: 1.5;
+}
+
+.cellEditorTextarea {
+	width: 100%;
+	padding: 12px 14px;
+	border: 1px solid #d1d5db;
+	border-radius: 8px;
+	font-size: 1rem;
+	box-sizing: border-box;
+	resize: vertical;
+	font-family: inherit;
+	line-height: 1.5;
+	text-transform: uppercase;
+}
+
+.cellEditorTextarea:focus {
+	outline: none;
+	border-color: #3b82f6;
+	box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+}
+
+/* ── Manual entry modal: mobile/tablet responsive ──────────────────────────
+   Follows the project's existing 768px breakpoint (see the main
+   @media (max-width: 768px) block above, ~line 904). That block already
+   caps .modalContent at max-width:500px/width:90% on mobile, but
+   .entryModalContent's unconditional max-width:920px comes later in file
+   order and would otherwise win on equal specificity — this block
+   restates the cap so it actually applies to this modal too. */
+@media (max-width: 768px) {
+	.entryModalContent {
+		max-width: 100%;
+		width: 100%;
+		margin: 0;
+		max-height: 100vh;
+		border-radius: 0;
+	}
+
+	.entryModalLayout {
+		flex-direction: column;
+		max-height: 100vh;
+		overflow-y: auto;
+	}
+
+	.entryModalMain {
+		min-width: 0;
+	}
+
+	.entrySearchRow {
+		flex-direction: column;
+		align-items: stretch;
+		gap: 10px;
+	}
+
+	.entryFieldGroup {
+		width: 100%;
+	}
+
+	.entryTextInput {
+		width: 100%;
+		min-width: 0;
+	}
+
+	.entryGrid {
+		grid-template-columns: repeat(4, 1fr);
+		gap: 6px;
+	}
+
+	.entryCell {
+		min-height: 52px;
+		font-size: 0.875rem;
+	}
+
+	/* Side panel moves below the grid instead of beside it, and drops the
+	   fixed width entirely so it can never force horizontal page overflow
+	   on a narrow viewport. The screenshot itself still scrolls
+	   horizontally within its own scroll container if wider than the
+	   screen (see .entrySidePanelImageScroll), rather than stretching the
+	   whole modal. */
+	.entrySidePanel {
+		width: 100%;
+		max-height: 220px;
+		border-left: none;
+		border-top: 1px solid #0f172a;
+	}
+
+	.cellEditorContent {
+		max-width: 100%;
+		width: 100%;
+		margin: 0;
+		border-radius: 0;
+	}
+}
+
+@media (max-width: 480px) {
+	.entryGrid {
+		grid-template-columns: repeat(3, 1fr);
+	}
 }

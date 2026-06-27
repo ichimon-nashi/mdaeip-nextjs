@@ -1,3 +1,6 @@
+// TARGET PATH: app/dashboard/database-management/page.js (or wherever your
+// existing DatabaseManagement page.js currently lives — same path you
+// uploaded this from). This REPLACES that file.
 "use client";
 
 import React, { useState, useEffect } from "react";
@@ -70,6 +73,29 @@ const DatabaseManagement = () => {
 	const [xlsxDetectedMonth, setXlsxDetectedMonth] = useState(null);
 	const [xlsxStatus, setXlsxStatus] = useState(null); // { message, type } where type = 'processing'|'success'|'error'
 	const [isProcessingExcel, setIsProcessingExcel] = useState(false);
+
+	// Manual-entry vs Excel conflict resolution (schedule uploads only)
+	const [showConflictModal, setShowConflictModal] = useState(false);
+	const [conflictEmployeeIds, setConflictEmployeeIds] = useState([]);
+	const [conflictChoices, setConflictChoices] = useState({}); // { [employeeId]: "manual" | "excel" }
+	const [pendingUploadData, setPendingUploadData] = useState(null); // scheduleData to resubmit after resolving
+
+	// Per-employee manual schedule entry modal
+	const [showEmployeeEntryModal, setShowEmployeeEntryModal] = useState(false);
+	const [entryYear, setEntryYear] = useState(String(new Date().getFullYear()));
+	const [entryMonthNum, setEntryMonthNum] = useState(
+		String(new Date().getMonth() + 1).padStart(2, "0")
+	);
+	const [entryEmployeeId, setEntryEmployeeId] = useState("");
+	const [entryEmployeeInfo, setEntryEmployeeInfo] = useState(null); // { name, rank, base } once confirmed
+	const [entryLookupStatus, setEntryLookupStatus] = useState(null); // null | "loading" | "found" | "not_found" | "error"
+	const [entryDuties, setEntryDuties] = useState([]); // array of strings, one per day
+	const [entryReviewed, setEntryReviewed] = useState([]); // array of booleans, one per day
+	const [isSavingEntry, setIsSavingEntry] = useState(false);
+	const [entryImagePreview, setEntryImagePreview] = useState(null); // data URL, for the side-panel reference
+	const [editingCellIndex, setEditingCellIndex] = useState(null); // index of day being edited in the cell sub-modal, or null
+	const [editingCellDraft, setEditingCellDraft] = useState(""); // draft value inside the cell sub-modal, committed on explicit confirm only
+	const [isImageZoomed, setIsImageZoomed] = useState(false); // full-size lightbox for the reference screenshot
 
 	// User management states
 	const [users, setUsers] = useState([]);
@@ -203,6 +229,23 @@ const DatabaseManagement = () => {
 				}),
 			});
 
+			// Manually-entered employees overlap with this Excel upload.
+			// Nothing was written yet — show the keep-manual/keep-excel
+			// choice per employee, then resubmit via handleResolveConflicts.
+			if (response.status === 409 && uploadType === "schedule") {
+				const conflictResult = await response.json();
+				setConflictEmployeeIds(conflictResult.conflicts);
+				setConflictChoices(
+					conflictResult.conflicts.reduce((acc, id) => {
+						acc[id] = "manual"; // default: keep manual entry
+						return acc;
+					}, {})
+				);
+				setPendingUploadData(data);
+				setShowConflictModal(true);
+				return;
+			}
+
 			const result = await response.json();
 
 			if (result.success) {
@@ -233,6 +276,249 @@ const DatabaseManagement = () => {
 			toast.error("JSON格式錯誤: " + error.message);
 		} finally {
 			setIsUploading(false);
+		}
+	};
+
+	// Resubmits the pending schedule upload with the admin's per-employee
+	// keep-manual/keep-excel choices. Only used for the schedule upload
+	// path — dispatch-duty uploads never produce a 409 conflict.
+	const handleResolveConflicts = async () => {
+		if (!pendingUploadData) return;
+
+		try {
+			setIsUploading(true);
+
+			const response = await fetch("/api/schedule/upload", {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({
+					scheduleData: pendingUploadData,
+					userId: user.id,
+					userAccessLevel: user.access_level,
+					resolvedConflicts: conflictChoices,
+				}),
+			});
+
+			const result = await response.json();
+
+			if (result.success) {
+				const keptCount = Object.values(conflictChoices).filter(
+					(v) => v === "manual"
+				).length;
+				toast.success(
+					keptCount > 0
+						? `班表上傳成功！已保留 ${keptCount} 位組員的手動輸入資料`
+						: "班表上傳成功！"
+				);
+				setJsonData("");
+				setShowUploadModal(false);
+				setShowConflictModal(false);
+				setConflictEmployeeIds([]);
+				setConflictChoices({});
+				setPendingUploadData(null);
+
+				const scheduleResponse = await fetch("/api/schedule/months");
+				const scheduleResult = await scheduleResponse.json();
+				if (scheduleResult.success) {
+					setAvailableScheduleMonths(scheduleResult.data);
+				}
+			} else {
+				toast.error("上傳失敗: " + result.error);
+			}
+		} catch (error) {
+			toast.error("上傳失敗: " + error.message);
+		} finally {
+			setIsUploading(false);
+		}
+	};
+
+	// ── Per-employee manual schedule entry ──────────────────────────────────
+
+	// Derived month string in the "2026年05月" format used everywhere else
+	// in this codebase (mdaeip_schedule_months.month, getDaysInMonthFromStr).
+	const entryMonth = `${entryYear}年${entryMonthNum}月`;
+
+	// Debounced live-search: fires ~500ms after the last keystroke, and only
+	// once the ID matches the 5-digit employee ID pattern used elsewhere in
+	// this codebase (see convertToDataRoster's empCell regex). Partial digits
+	// while typing don't trigger a lookup or an error toast.
+	useEffect(() => {
+		if (!showEmployeeEntryModal) return;
+		if (entryEmployeeInfo) return; // already confirmed, don't re-search
+		if (!/^\d{5}$/.test(entryEmployeeId.trim())) {
+			setEntryLookupStatus(null);
+			return;
+		}
+
+		const timer = setTimeout(async () => {
+			try {
+				setEntryLookupStatus("loading");
+				const response = await fetch(
+					`/api/users/lookup?employeeId=${entryEmployeeId}&userAccessLevel=${user.access_level}`
+				);
+				const result = await response.json();
+
+				if (result.success) {
+					setEntryLookupStatus("found");
+					setEntryEmployeeInfo(result.data);
+					const daysInMonth = getDaysInMonthFromStr(entryMonth);
+					setEntryDuties(new Array(daysInMonth).fill(""));
+					setEntryReviewed(new Array(daysInMonth).fill(false));
+				} else {
+					setEntryLookupStatus("not_found");
+				}
+			} catch (error) {
+				console.error("Error looking up employee:", error);
+				setEntryLookupStatus("error");
+			}
+		}, 500);
+
+		return () => clearTimeout(timer);
+	}, [entryEmployeeId, showEmployeeEntryModal, entryEmployeeInfo]);
+
+	const handleOpenEmployeeEntryModal = () => {
+		const now = new Date();
+		setEntryYear(String(now.getFullYear()));
+		setEntryMonthNum(String(now.getMonth() + 1).padStart(2, "0"));
+		setEntryEmployeeId("");
+		setEntryEmployeeInfo(null);
+		setEntryDuties([]);
+		setEntryReviewed([]);
+		setEntryImagePreview(null);
+		setEditingCellIndex(null);
+		setEditingCellDraft("");
+		setIsImageZoomed(false);
+		setShowEmployeeEntryModal(true);
+	};
+
+	// Shared by both paste and file-upload. No OCR — this is purely a local
+	// visual reference for the admin to compare against while typing. Never
+	// leaves the browser, no network call, no grid pre-fill.
+	const handleEntryImage = (file) => {
+		if (!entryEmployeeInfo) {
+			toast.error("請先確認員工編號");
+			return;
+		}
+		if (!file || !file.type.startsWith("image/")) {
+			toast.error("請提供圖片檔案");
+			return;
+		}
+
+		const previewUrl = URL.createObjectURL(file);
+		setEntryImagePreview(previewUrl);
+	};
+
+	const handleEntryPaste = (e) => {
+		const items = e.clipboardData?.items;
+		if (!items) return;
+		for (const item of items) {
+			if (item.type.startsWith("image/")) {
+				const file = item.getAsFile();
+				if (file) handleEntryImage(file);
+				e.preventDefault();
+				return;
+			}
+		}
+	};
+
+	const handleEntryFileChange = (e) => {
+		const file = e.target.files?.[0];
+		if (file) handleEntryImage(file);
+	};
+
+	// Cells start unreviewed (no action taken — including OCR-free blanks,
+	// which still need a deliberate look). Submit is blocked while any cell
+	// remains unreviewed.
+	// Tapping a cell opens the sub-modal with a draft copy of its current
+	// value. Opening does NOT mark the cell reviewed — only confirmDraft
+	// does, so opening-and-closing 31 cells without reading them can't
+	// silently satisfy the review gate.
+	//
+	// Stored format is backslash-joined segments (e.g. "OFC\SAG",
+	// "N2\391/2\S") — same convention the existing Excel pipeline already
+	// uses (index.html replaces literal newlines with "\" when combining a
+	// cell's main duty and sub-row annotation). The textarea works in the
+	// inverse direction: one line per segment, joined to "\" on confirm.
+	const handleOpenCellEditor = (index) => {
+		setEditingCellIndex(index);
+		const stored = entryDuties[index] || "";
+		setEditingCellDraft(stored.split("\\").join("\n"));
+	};
+
+	const handleCloseCellEditor = () => {
+		setEditingCellIndex(null);
+		setEditingCellDraft("");
+	};
+
+	const handleConfirmCellEditor = () => {
+		const index = editingCellIndex;
+		if (index === null) return;
+		// Filter empty lines so a stray extra Enter (blank line) doesn't
+		// produce a double-backslash or leading/trailing backslash artifact.
+		// Uppercase each segment — duty codes are uppercase by convention
+		// (OFC, SAG, N2). Safe on Chinese characters: toUpperCase() is a
+		// no-op on non-Latin text, so mixed codes like "課\FAAT" only have
+		// their Latin portion affected.
+		const segments = editingCellDraft
+			.split("\n")
+			.map((line) => line.trim().toUpperCase())
+			.filter((line) => line.length > 0);
+		const joined = segments.join("\\");
+
+		setEntryDuties((prev) => {
+			const next = [...prev];
+			next[index] = joined;
+			return next;
+		});
+		setEntryReviewed((prev) => {
+			const next = [...prev];
+			next[index] = true;
+			return next;
+		});
+		handleCloseCellEditor();
+	};
+
+	const allCellsReviewed = entryReviewed.length > 0 && entryReviewed.every(Boolean);
+
+	const handleSaveEmployeeEntry = async () => {
+		if (!allCellsReviewed) {
+			toast.error("請先核對所有日期格再儲存");
+			return;
+		}
+
+		try {
+			setIsSavingEntry(true);
+			const response = await fetch("/api/schedule/employee", {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({
+					month: entryMonth,
+					employeeId: entryEmployeeId,
+					duties: entryDuties,
+					userId: user.id,
+					userAccessLevel: user.access_level,
+				}),
+			});
+
+			const result = await response.json();
+
+			if (result.success) {
+				toast.success(`${entryEmployeeId} 的手動班表已儲存`);
+				setShowEmployeeEntryModal(false);
+
+				const scheduleResponse = await fetch("/api/schedule/months");
+				const scheduleResult = await scheduleResponse.json();
+				if (scheduleResult.success) {
+					setAvailableScheduleMonths(scheduleResult.data);
+				}
+			} else {
+				toast.error("儲存失敗: " + result.error);
+			}
+		} catch (error) {
+			console.error("Error saving employee schedule:", error);
+			toast.error("儲存錯誤: " + error.message);
+		} finally {
+			setIsSavingEntry(false);
 		}
 	};
 
@@ -921,6 +1207,13 @@ const DatabaseManagement = () => {
 									上傳班表
 								</button>
 								<button
+									className={styles.manualEntryButton}
+									onClick={handleOpenEmployeeEntryModal}
+								>
+									<Edit size={18} />
+									新增單人班表
+								</button>
+								<button
 									className={styles.cleanupButton}
 									onClick={() => handleCleanup("schedule")}
 									disabled={isDeleting}
@@ -1201,6 +1494,430 @@ const DatabaseManagement = () => {
 										確認上傳
 									</>
 								)}
+							</button>
+						</div>
+					</div>
+				</div>
+			)}
+
+			{/* Manual-entry vs Excel Conflict Resolution Modal */}
+			{showConflictModal && (
+				<div
+					className={styles.modalOverlay}
+					onClick={() => setShowConflictModal(false)}
+				>
+					<div
+						className={styles.modalContent}
+						onClick={(e) => e.stopPropagation()}
+					>
+						<div className={styles.modalHeader}>
+							<h3>
+								資料衝突確認
+								<AlertTriangle size={20} />
+							</h3>
+							<button
+								className={styles.modalClose}
+								onClick={() => setShowConflictModal(false)}
+							>
+								<X size={20} />
+							</button>
+						</div>
+						<div className={styles.modalBody}>
+							<div className={styles.uploadInstructions}>
+								<h4>以下組員已有手動輸入的班表資料</h4>
+								<ul>
+									<li>請選擇要保留手動輸入資料，或改用Excel上傳的資料覆蓋</li>
+									<li>未上傳此次Excel的其他組員資料不受影響</li>
+								</ul>
+							</div>
+							<div className={styles.conflictList}>
+								{conflictEmployeeIds.map((employeeId) => (
+									<div key={employeeId} className={styles.conflictRow}>
+										<span className={styles.conflictEmployeeId}>
+											#{employeeId}
+										</span>
+										<div className={styles.conflictChoiceGroup}>
+											<label className={styles.conflictChoiceLabel}>
+												<input
+													type="radio"
+													name={`conflict-${employeeId}`}
+													checked={conflictChoices[employeeId] === "manual"}
+													onChange={() =>
+														setConflictChoices((prev) => ({
+															...prev,
+															[employeeId]: "manual",
+														}))
+													}
+												/>
+												手動輸入
+											</label>
+											<label className={styles.conflictChoiceLabel}>
+												<input
+													type="radio"
+													name={`conflict-${employeeId}`}
+													checked={conflictChoices[employeeId] === "excel"}
+													onChange={() =>
+														setConflictChoices((prev) => ({
+															...prev,
+															[employeeId]: "excel",
+														}))
+													}
+												/>
+												Excel
+											</label>
+										</div>
+									</div>
+								))}
+							</div>
+						</div>
+						<div className={styles.modalFooter}>
+							<button
+								className={styles.cancelButton}
+								onClick={() => setShowConflictModal(false)}
+								disabled={isUploading}
+							>
+								取消
+							</button>
+							<button
+								className={styles.confirmButton}
+								onClick={handleResolveConflicts}
+								disabled={isUploading}
+							>
+								{isUploading ? (
+									<>
+										<div className={styles.buttonSpinner}></div>
+										上傳中...
+									</>
+								) : (
+									<>
+										<CheckCircle size={18} />
+										確認並上傳
+									</>
+								)}
+							</button>
+						</div>
+					</div>
+				</div>
+			)}
+
+			{/* Per-employee Manual Schedule Entry Modal */}
+			{showEmployeeEntryModal && (
+				<div
+					className={styles.modalOverlay}
+					onClick={() => setShowEmployeeEntryModal(false)}
+				>
+					<div
+						className={`${styles.modalContent} ${styles.entryModalContent}`}
+						onClick={(e) => e.stopPropagation()}
+					>
+						<div className={styles.entryModalLayout}>
+							<div className={styles.entryModalMain}>
+								<div className={styles.modalHeader}>
+									<h3>
+										手動輸入班表
+										<Edit size={20} />
+									</h3>
+									<button
+										className={styles.modalClose}
+										onClick={() => setShowEmployeeEntryModal(false)}
+									>
+										<X size={20} />
+									</button>
+								</div>
+
+								<div className={styles.modalBody}>
+									<div className={styles.entrySearchRow}>
+										<div className={styles.entryFieldGroup}>
+											<label className={styles.entryFieldLabel}>年份</label>
+											<select
+												value={entryYear}
+												onChange={(e) => setEntryYear(e.target.value)}
+												className={styles.entryTextInput}
+												disabled={!!entryEmployeeInfo}
+											>
+												{Array.from({ length: 5 }, (_, i) => {
+													const y = new Date().getFullYear() - 1 + i;
+													return (
+														<option key={y} value={String(y)}>
+															{y}年
+														</option>
+													);
+												})}
+											</select>
+										</div>
+										<div className={styles.entryFieldGroup}>
+											<label className={styles.entryFieldLabel}>月份</label>
+											<select
+												value={entryMonthNum}
+												onChange={(e) => setEntryMonthNum(e.target.value)}
+												className={styles.entryTextInput}
+												disabled={!!entryEmployeeInfo}
+											>
+												{Array.from({ length: 12 }, (_, i) => {
+													const m = String(i + 1).padStart(2, "0");
+													return (
+														<option key={m} value={m}>
+															{m}月
+														</option>
+													);
+												})}
+											</select>
+										</div>
+										<div className={styles.entryFieldGroup}>
+											<label className={styles.entryFieldLabel}>員工編號</label>
+											<div className={styles.entryIdInputWrapper}>
+												<input
+													type="text"
+													value={entryEmployeeId}
+													onChange={(e) => setEntryEmployeeId(e.target.value)}
+													placeholder="51892"
+													className={styles.entryTextInput}
+													disabled={!!entryEmployeeInfo}
+												/>
+												{!entryEmployeeInfo && entryLookupStatus === "loading" && (
+													<div className={styles.entryIdStatusIcon}>
+														<div className={styles.buttonSpinner}></div>
+													</div>
+												)}
+												{!entryEmployeeInfo && entryLookupStatus === "not_found" && (
+													<div
+														className={`${styles.entryIdStatusIcon} ${styles.entryIdStatusError}`}
+													>
+														<X size={16} />
+													</div>
+												)}
+											</div>
+											{entryLookupStatus === "not_found" && (
+												<span className={styles.entryIdStatusText}>
+													員工編號不存在於名冊中
+												</span>
+											)}
+											{entryLookupStatus === "error" && (
+												<span className={styles.entryIdStatusText}>
+													查詢失敗，請稍後再試
+												</span>
+											)}
+										</div>
+										{entryEmployeeInfo && (
+											<button
+												className={styles.cancelButton}
+												onClick={() => {
+													setEntryEmployeeId("");
+													setEntryEmployeeInfo(null);
+													setEntryLookupStatus(null);
+													setEntryDuties([]);
+													setEntryReviewed([]);
+													setEntryImagePreview(null);
+												}}
+											>
+												重新選擇
+											</button>
+										)}
+									</div>
+
+									{entryEmployeeInfo && (
+										<div className={styles.entryConfirmedBanner}>
+											<CheckCircle size={14} />
+											{entryEmployeeId}　{entryEmployeeInfo.name}　
+											{entryEmployeeInfo.rank}　{entryEmployeeInfo.base}
+										</div>
+									)}
+
+									{entryEmployeeInfo && (
+										<>
+											<div
+												className={styles.entryPasteZone}
+												onPaste={handleEntryPaste}
+												tabIndex={0}
+											>
+												<div className={styles.entryPasteZoneContent}>
+													<span>
+														點此區域後按 Ctrl+V 貼上截圖（僅供核對參考，不會自動填入）
+													</span>
+													<label className={styles.entryUploadLink}>
+														或上傳圖片檔案
+														<input
+															type="file"
+															accept="image/*"
+															onChange={handleEntryFileChange}
+															className={styles.entryFileInput}
+														/>
+													</label>
+												</div>
+											</div>
+
+											<div className={styles.entryGridHeader}>
+												<span>
+													{entryMonth}　共{entryDuties.length}天　
+													<span className={styles.entryFormatHint}>
+														（多代碼用 \ 分隔，例如 OFC\SAG）
+													</span>
+												</span>
+												<span
+													className={
+														allCellsReviewed
+															? styles.entryReviewStatusDone
+															: styles.entryReviewStatusPending
+													}
+												>
+													{allCellsReviewed
+														? "已核對全部日期"
+														: `尚有 ${entryReviewed.filter((r) => !r).length} 格未核對`}
+												</span>
+											</div>
+
+											<div className={styles.entryGrid}>
+												{entryDuties.map((value, index) => (
+													<div
+														key={index}
+														className={styles.entryCellWrapper}
+													>
+														<span className={styles.entryCellDayLabel}>
+															{index + 1}
+														</span>
+														<button
+															type="button"
+															onClick={() => handleOpenCellEditor(index)}
+															className={`${styles.entryCell} ${
+																entryReviewed[index]
+																	? styles.entryCellReviewed
+																	: styles.entryCellUnreviewed
+															}`}
+														>
+															{value || "—"}
+														</button>
+													</div>
+												))}
+											</div>
+										</>
+									)}
+								</div>
+
+								<div className={styles.modalFooter}>
+									<button
+										className={styles.cancelButton}
+										onClick={() => setShowEmployeeEntryModal(false)}
+										disabled={isSavingEntry}
+									>
+										取消
+									</button>
+									<button
+										className={styles.confirmButton}
+										onClick={handleSaveEmployeeEntry}
+										disabled={
+											!entryEmployeeInfo || !allCellsReviewed || isSavingEntry
+										}
+									>
+										{isSavingEntry ? (
+											<>
+												<div className={styles.buttonSpinner}></div>
+												儲存中...
+											</>
+										) : (
+											<>
+												<CheckCircle size={18} />
+												儲存此員工班表
+											</>
+										)}
+									</button>
+								</div>
+							</div>
+
+							{entryImagePreview && (
+								<div className={styles.entrySidePanel}>
+									<div className={styles.entrySidePanelLabel}>
+										原始截圖（核對用）　
+										<button
+											type="button"
+											className={styles.entrySidePanelZoomBtn}
+											onClick={() => setIsImageZoomed(true)}
+										>
+											點擊放大
+										</button>
+									</div>
+									<div className={styles.entrySidePanelImageScroll}>
+										<img
+											src={entryImagePreview}
+											alt="原始截圖"
+											className={styles.entrySidePanelImage}
+											onClick={() => setIsImageZoomed(true)}
+										/>
+									</div>
+								</div>
+							)}
+						</div>
+					</div>
+				</div>
+			)}
+
+			{/* Full-size zoom lightbox for the reference screenshot */}
+			{isImageZoomed && entryImagePreview && (
+				<div
+					className={styles.imageZoomOverlay}
+					onClick={() => setIsImageZoomed(false)}
+				>
+					<img
+						src={entryImagePreview}
+						alt="原始截圖（放大）"
+						className={styles.imageZoomFull}
+					/>
+					<button
+						className={styles.imageZoomClose}
+						onClick={() => setIsImageZoomed(false)}
+					>
+						<X size={24} />
+					</button>
+				</div>
+			)}
+
+			{/* Per-cell editor sub-modal — opened by tapping a day cell.
+			    Confirm is the only action that commits the draft value and
+			    marks the cell reviewed; closing without confirming discards
+			    the draft and leaves the cell's reviewed state unchanged. */}
+			{editingCellIndex !== null && (
+				<div
+					className={styles.modalOverlay}
+					onClick={handleCloseCellEditor}
+				>
+					<div
+						className={`${styles.modalContent} ${styles.cellEditorContent}`}
+						onClick={(e) => e.stopPropagation()}
+					>
+						<div className={styles.modalHeader}>
+							<h3>{entryMonth}　第 {editingCellIndex + 1} 天</h3>
+							<button
+								className={styles.modalClose}
+								onClick={handleCloseCellEditor}
+							>
+								<X size={20} />
+							</button>
+						</div>
+						<div className={styles.modalBody}>
+							<div className={styles.cellEditorHint}>
+								每行一個代碼，儲存時自動以反斜線 \ 組合（例如分兩行輸入 OFC 和 SAG 會變成 OFC\SAG）
+							</div>
+							<textarea
+								value={editingCellDraft}
+								onChange={(e) => setEditingCellDraft(e.target.value)}
+								placeholder={"例如:\nOFC\nSAG"}
+								className={styles.cellEditorTextarea}
+								rows={4}
+								autoFocus
+							/>
+						</div>
+						<div className={styles.modalFooter}>
+							<button
+								className={styles.cancelButton}
+								onClick={handleCloseCellEditor}
+							>
+								取消
+							</button>
+							<button
+								className={styles.confirmButton}
+								onClick={handleConfirmCellEditor}
+							>
+								<CheckCircle size={18} />
+								確認
 							</button>
 						</div>
 					</div>

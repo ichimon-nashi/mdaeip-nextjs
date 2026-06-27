@@ -82,7 +82,15 @@ export const scheduleHelpers = {
 	},
 
 	// Upload/update schedule data
-	upsertMonthSchedule: async (month, scheduleData, userAccessLevel) => {
+	// Pass resolvedConflicts to proceed after the admin has chosen, per
+	// employee, whether to keep their manual entry or let Excel overwrite it.
+	// Shape: { [employeeId]: "manual" | "excel" }
+	upsertMonthSchedule: async (
+		month,
+		scheduleData,
+		userAccessLevel,
+		resolvedConflicts = null
+	) => {
 	try {
 		if (userAccessLevel !== 99) {
 			return { error: "Admin access required" };
@@ -104,31 +112,86 @@ export const scheduleHelpers = {
 
 		const monthId = monthData.id;
 
-		// Delete existing records for this month
-		const { error: deleteError } = await supabase
+		// Extract employee data from scheduleData
+		// Support both "employees" and "crew_schedules" keys
+		const employeeList = scheduleData.employees || scheduleData.crew_schedules;
+		const incomingIds = new Set(
+			(employeeList || [])
+				.filter((employee) => employee.employeeID && employee.duties)
+				.map((employee) => employee.employeeID)
+		);
+
+		// Find manually-entered employees that this Excel upload would
+		// otherwise overwrite. If the admin hasn't resolved conflicts yet,
+		// surface them instead of deleting anything.
+		const { data: manualRows, error: manualError } = await supabase
+			.from("mdaeip_schedules")
+			.select("employee_id")
+			.eq("month_id", monthId)
+			.eq("source", "manual");
+
+		if (manualError) {
+			console.error("Error checking manual entries:", manualError);
+			return { error: manualError.message };
+		}
+
+		const manualIds = (manualRows || []).map((r) => r.employee_id);
+		const conflictIds = manualIds.filter((id) => incomingIds.has(id));
+
+		if (conflictIds.length > 0 && !resolvedConflicts) {
+			// Don't delete or insert anything yet — let the frontend ask
+			// the admin which source wins, per employee.
+			return {
+				error: null,
+				conflicts: conflictIds,
+			};
+		}
+
+		// Employees whose manual entry should be kept (default to "manual"
+		// for any conflict the admin didn't explicitly resolve).
+		const keepManualIds = new Set(
+			conflictIds.filter(
+				(id) => (resolvedConflicts?.[id] || "manual") === "manual"
+			)
+		);
+
+		// Delete existing records for this month, except rows we're keeping.
+		let deleteQuery = supabase
 			.from("mdaeip_schedules")
 			.delete()
 			.eq("month_id", monthId);
+
+		if (keepManualIds.size > 0) {
+			deleteQuery = deleteQuery.not(
+				"employee_id",
+				"in",
+				`(${[...keepManualIds].join(",")})`
+			);
+		}
+
+		const { error: deleteError } = await deleteQuery;
 
 		if (deleteError) {
 			console.error("Error deleting old schedules:", deleteError);
 			return { error: deleteError.message };
 		}
 
-		// Prepare new records
+		// Prepare new records, skipping any employee whose manual entry
+		// is being kept (their row already survived the delete above).
 		const newRecords = [];
 
-		// Extract employee data from scheduleData
-		// Support both "employees" and "crew_schedules" keys
-		const employeeList = scheduleData.employees || scheduleData.crew_schedules;
-		
 		if (employeeList && Array.isArray(employeeList)) {
 			employeeList.forEach((employee) => {
-				if (employee.employeeID && employee.duties) {
+				if (
+					employee.employeeID &&
+					employee.duties &&
+					!keepManualIds.has(employee.employeeID)
+				) {
 					newRecords.push({
 						month_id: monthId,
 						employee_id: employee.employeeID,
 						duties: employee.duties,
+						source: "excel",
 					});
 				}
 			});
@@ -158,6 +221,70 @@ export const scheduleHelpers = {
 		return { error: error.message };
 	}
 },
+
+	// Upload/update a single employee's schedule for a month.
+	// Used by the manual/OCR entry flow. Marks the row source as "manual"
+	// so a later bulk Excel upload can detect and flag the conflict instead
+	// of silently overwriting it.
+	upsertEmployeeSchedule: async (
+		month,
+		employeeId,
+		duties,
+		userAccessLevel
+	) => {
+		try {
+			if (userAccessLevel !== 99) {
+				return { error: "Admin access required" };
+			}
+
+			if (!employeeId || !Array.isArray(duties)) {
+				return { error: "employeeId and duties are required" };
+			}
+
+			console.log(
+				`Upserting manual schedule for employee ${employeeId}, month ${month}`
+			);
+
+			// Ensure the month exists (same pattern as upsertMonthSchedule)
+			const { data: monthData, error: monthError } = await supabase
+				.from("mdaeip_schedule_months")
+				.upsert({ month }, { onConflict: "month" })
+				.select("id")
+				.single();
+
+			if (monthError) {
+				console.error("Error upserting month:", monthError);
+				return { error: monthError.message };
+			}
+
+			const monthId = monthData.id;
+
+			const { error: upsertError } = await supabase
+				.from("mdaeip_schedules")
+				.upsert(
+					{
+						month_id: monthId,
+						employee_id: employeeId,
+						duties: duties,
+						source: "manual",
+					},
+					{ onConflict: "month_id,employee_id" }
+				);
+
+			if (upsertError) {
+				console.error("Error upserting employee schedule:", upsertError);
+				return { error: upsertError.message };
+			}
+
+			console.log(
+				`Successfully upserted manual schedule for employee ${employeeId}`
+			);
+			return { error: null };
+		} catch (error) {
+			console.error("Error in upsertEmployeeSchedule:", error);
+			return { error: error.message };
+		}
+	},
 
 	// Delete schedule data for a specific month
 	deleteMonthSchedule: async (month, userAccessLevel) => {

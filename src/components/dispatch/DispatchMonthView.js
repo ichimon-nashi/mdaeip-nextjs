@@ -267,17 +267,26 @@ export default function DispatchMonthView({
 			// Always read current revision from DB to avoid stale local state
 			const { data: fresh, error: fetchErr } = await supabase
 				.from("pdx_months")
-				.select("revision")
+				.select("revision, published_at")
 				.eq("id", month.id)
 				.single();
 			if (fetchErr) {
 				toast.error("發布失敗");
 				return;
 			}
-			const newRevision = (fresh?.revision || 0) + 1;
+			// First publish ever (published_at still null) → revision stays 000.
+			// Any subsequent publish increments from the current value.
+			const isFirstEverPublish = !fresh?.published_at;
+			const newRevision = isFirstEverPublish
+				? 0
+				: (fresh?.revision || 0) + 1;
 			const { error } = await supabase
 				.from("pdx_months")
-				.update({ status: "published", revision: newRevision })
+				.update({
+					status: "published",
+					revision: newRevision,
+					published_at: new Date().toISOString(),
+				})
 				.eq("id", month.id);
 			if (error) {
 				toast.error("發布失敗");
