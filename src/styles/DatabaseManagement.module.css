@@ -1749,6 +1749,13 @@
 	flex-shrink: 0;
 }
 
+.conflictEmployeeName {
+	font-size: 0.8125rem;
+	font-weight: 400;
+	color: #64748b;
+	margin-left: 8px;
+}
+
 .conflictChoiceGroup {
 	display: flex;
 	gap: 16px;

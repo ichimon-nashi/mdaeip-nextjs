@@ -1564,43 +1564,53 @@ const DatabaseManagement = () => {
 								</ul>
 							</div>
 							<div className={styles.conflictList}>
-								{conflictEmployeeIds.map((employeeId) => (
-									<div key={employeeId} className={styles.conflictRow}>
-										<span className={styles.conflictEmployeeId}>
-											#{employeeId}
-										</span>
-										<div className={styles.conflictChoiceGroup}>
-											<label className={styles.conflictChoiceLabel}>
-												<input
-													type="radio"
-													name={`conflict-${employeeId}`}
-													checked={conflictChoices[employeeId] === "manual"}
-													onChange={() =>
-														setConflictChoices((prev) => ({
-															...prev,
-															[employeeId]: "manual",
-														}))
-													}
-												/>
-												手動輸入
-											</label>
-											<label className={styles.conflictChoiceLabel}>
-												<input
-													type="radio"
-													name={`conflict-${employeeId}`}
-													checked={conflictChoices[employeeId] === "excel"}
-													onChange={() =>
-														setConflictChoices((prev) => ({
-															...prev,
-															[employeeId]: "excel",
-														}))
-													}
-												/>
-												Excel
-											</label>
+								{conflictEmployeeIds.map((employeeId) => {
+									const matchedEmployee = employeeList.find(
+										(e) => e.id === employeeId
+									);
+									return (
+										<div key={employeeId} className={styles.conflictRow}>
+											<span className={styles.conflictEmployeeId}>
+												#{employeeId}
+												{matchedEmployee && (
+													<span className={styles.conflictEmployeeName}>
+														{matchedEmployee.name}
+													</span>
+												)}
+											</span>
+											<div className={styles.conflictChoiceGroup}>
+												<label className={styles.conflictChoiceLabel}>
+													<input
+														type="radio"
+														name={`conflict-${employeeId}`}
+														checked={conflictChoices[employeeId] === "manual"}
+														onChange={() =>
+															setConflictChoices((prev) => ({
+																...prev,
+																[employeeId]: "manual",
+															}))
+														}
+													/>
+													手動輸入
+												</label>
+												<label className={styles.conflictChoiceLabel}>
+													<input
+														type="radio"
+														name={`conflict-${employeeId}`}
+														checked={conflictChoices[employeeId] === "excel"}
+														onChange={() =>
+															setConflictChoices((prev) => ({
+																...prev,
+																[employeeId]: "excel",
+															}))
+														}
+													/>
+													Excel
+												</label>
+											</div>
 										</div>
-									</div>
-								))}
+									);
+								})}
 							</div>
 						</div>
 						<div className={styles.modalFooter}>
