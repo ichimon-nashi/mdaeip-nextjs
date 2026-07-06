@@ -47,14 +47,14 @@ const Layout = ({ children }) => {
     }
 
     return (
-        <div>
+        <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', overflow: 'hidden' }}>
             <Navbar onMenuClick={handleMenuClick} />
             <NavigationDrawer 
                 isOpen={isDrawerOpen} 
                 onClose={handleDrawerClose}
                 userDetails={user}
             />
-            <main>
+            <main style={{ flex: 1, minHeight: 0, overflow: 'hidden' }}>
                 {children}
             </main>
         </div>

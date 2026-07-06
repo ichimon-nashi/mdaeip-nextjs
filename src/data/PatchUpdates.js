@@ -214,4 +214,9 @@ export const patchUpdates = [
 		appName: "EIP系統",
 		updateInfo: ["增加手動輸入班表功能"],
 	},
+		{
+		date: "2026-07-05",
+		appName: "EIP系統",
+		updateInfo: ["更改儀表UI"],
+	},
 ];

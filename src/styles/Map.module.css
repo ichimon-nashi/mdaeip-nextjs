@@ -1,0 +1,689 @@
+/* Map.module.css
+   All styles for the gamified map dashboard.
+   Never imported by or merged into Dashboard.module.css.
+   ─────────────────────────────────────────────────────── */
+
+/* ── mapDashboardSection ────────────────────────────────
+   Mobile: HUD is position:relative (in flow), so no
+   padding-top needed — map sits naturally below HUD.
+   Desktop: HUD is position:absolute 52px tall, so
+   padding-top:52px pushes map image below it.             */
+.mapDashboardSection {
+	flex: 1;
+	min-height: 0;
+	overflow: hidden;
+	display: flex;
+	flex-direction: column;
+}
+
+@media (min-width: 1024px) {
+	.mapDashboardSection {
+		padding: 52px 1.5rem 1rem;
+	}
+}
+
+/* Landscape touch at ≥1024px would inherit the desktop padding above.
+   Override: HUD is absolute so no padding needed.                       */
+@media (min-width: 1024px) and (orientation: landscape) and (pointer: coarse) {
+	.mapDashboardSection {
+		padding: 0;
+	}
+}
+
+/* ── MapContainer ────────────────────────────────────── */
+/* flex:1 + min-height:0 propagates from mapDashboardSection
+   through desktopMapWrapper down to here so the image fills
+   remaining viewport height without overflow.               */
+.mapContainer {
+	position: relative;
+	width: 100%;
+	height: 100%;
+	user-select: none;
+	isolation: isolate;
+	display: flex;
+	flex-direction: column;
+}
+
+/* Layer 1 — grayscale base, always rendered.
+   object-fit:cover fills the viewport edge-to-edge.
+   Source image is 16:9 (1920×1080), viewport is ~16:9 —
+   cropping is negligible and center mass stays visible.
+   Both layers MUST use identical object-fit/position so
+   they remain pixel-aligned for clip-path to work.         */
+.mapImageGray {
+	width: 100%;
+	height: 100%;
+	object-fit: cover;
+	object-position: center center;
+	display: block;
+	pointer-events: none;
+	filter: grayscale(1) brightness(0.65);
+}
+
+/* Layer 2 — full color, clip-path controlled by JS.
+   Identical object-fit/position to mapImageGray — required
+   for pixel-alignment across all viewport sizes.           */
+.mapImageColor {
+	position: absolute;
+	inset: 0;
+	width: 100%;
+	height: 100%;
+	object-fit: cover;
+	object-position: center center;
+	pointer-events: none;
+	transition: clip-path 0.28s ease;
+}
+
+/* Hotspot layer — above both images */
+.mapHotspotLayer {
+	position: absolute;
+	inset: 0;
+	width: 100%;
+	height: 100%;
+	pointer-events: none;
+}
+
+/* SVG overlay — locked region darkening polygons.
+   preserveAspectRatio="none" + viewBox="0 0 100 100" means
+   SVG coordinates map directly to % of container.           */
+.mapSvgOverlay {
+	position: absolute;
+	inset: 0;
+	width: 100%;
+	height: 100%;
+	pointer-events: none;
+	z-index: 5;
+}
+
+/* ── MapHotspot ──────────────────────────────────────── */
+.hotspot {
+	position: absolute;
+	transform: translate(-50%, -50%);
+	pointer-events: all;
+	background: none;
+	border: none;
+	padding: 0;
+	cursor: pointer;
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: 3px;
+	/* 44×44 minimum touch target, centered on the pin */
+	min-width: 44px;
+	min-height: 44px;
+	justify-content: center;
+	/* z-index above image layers */
+	z-index: 10;
+}
+
+.hotspot:focus-visible {
+	outline: 2px solid rgba(255, 255, 255, 0.9);
+	outline-offset: 3px;
+	border-radius: 50%;
+}
+
+.hotspotPin {
+	width: 34px;
+	height: 34px;
+	border-radius: 50%;
+	border: 2.5px solid rgba(255, 255, 255, 0.92);
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	box-shadow:
+		0 2px 8px rgba(0, 0, 0, 0.5),
+		0 0 0 1px rgba(0, 0, 0, 0.15);
+	transition:
+		transform 0.15s ease,
+		box-shadow 0.15s ease;
+	position: relative;
+	flex-shrink: 0;
+}
+
+/* Accessible hotspot: scale pin on hover */
+@media (hover: hover) {
+	.hotspotAccessible:hover .hotspotPin {
+		transform: scale(1.3);
+		box-shadow:
+			0 4px 16px rgba(0, 0, 0, 0.6),
+			0 0 0 1px rgba(0, 0, 0, 0.2);
+	}
+}
+
+/* Larger hotspot pins on touch devices */
+@media (hover: none) {
+    .hotspotPin {
+        width: 40px;
+        height: 40px;
+    }
+    .hotspotLabel {
+        font-size: 10px;
+        padding: 3px 8px;
+    }
+}
+
+/* Locked hotspot */
+.hotspotLocked {
+	cursor: not-allowed;
+}
+
+.hotspotLocked .hotspotPin {
+	border-color: rgba(255, 255, 255, 0.35);
+	box-shadow: 0 1px 4px rgba(0, 0, 0, 0.3);
+}
+
+/* Lock badge — top-right of pin */
+.hotspotLockBadge {
+	position: absolute;
+	top: -6px;
+	right: -6px;
+	font-size: 11px;
+	line-height: 1;
+	pointer-events: none;
+	filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.6));
+}
+
+/* Label chip — hidden on desktop until hover, always shown on mobile */
+.hotspotLabel {
+	font-size: 10px;
+	font-weight: 700;
+	color: #ffffff;
+	text-shadow: 0 1px 3px rgba(0, 0, 0, 0.9);
+	white-space: nowrap;
+	background: rgba(0, 0, 0, 0.6);
+	padding: 2px 7px;
+	border-radius: 3px;
+	pointer-events: none;
+	opacity: 0;
+	transition: opacity 0.15s ease;
+	letter-spacing: 0.02em;
+}
+
+@media (hover: hover) {
+	.hotspot:hover .hotspotLabel {
+		opacity: 1;
+	}
+}
+
+@media (hover: none) {
+	.hotspotLabel {
+		opacity: 1;
+		font-size: 9px;
+	}
+}
+
+/* ── DesktopMap wrapper ──────────────────────────────── */
+/* flex:1 + min-height:0 continues the chain from
+   mapDashboardSection → here → mapContainer → images.
+   Without this, mapContainer collapses to 0 height.        */
+.desktopMapWrapper {
+	flex: 1;
+	min-height: 0;
+	display: flex;
+	flex-direction: column;
+	border-radius: 0.875rem;
+	overflow: hidden;
+	border: 1px solid rgba(255, 255, 255, 0.2);
+	box-shadow: 0 4px 24px rgba(0, 0, 0, 0.35);
+}
+
+/* ── MobileMap ─────────────────────────────────────────── */
+/* flex:1 + min-height:0 takes all space below HUD strip    */
+.mobileMapWrapper {
+	display: flex;
+	flex-direction: column;
+	flex: 1;
+	min-height: 0;
+}
+
+/* Embla viewport must fill mobileMapWrapper minus dots bar  */
+.mobileCarouselViewport {
+	overflow: hidden;
+	width: 100%;
+	flex: 1;
+	min-height: 0;
+}
+
+/* Embla container — same height as viewport                 */
+.mobileCarouselContainer {
+	display: flex;
+	height: 100%;
+}
+
+/* Each slide fills the full viewport height                 */
+.mobileCarouselSlide {
+	flex: 0 0 100%;
+	min-width: 0;
+	height: 100%;
+	position: relative;
+}
+
+.mobileRegionLabel {
+	position: absolute;
+	top: 10px;
+	left: 12px;
+	z-index: 10;
+	background: rgba(0, 0, 0, 0.6);
+	color: #ffffff;
+	font-size: 12px;
+	font-weight: 700;
+	padding: 4px 10px;
+	border-radius: 6px;
+	pointer-events: none;
+	letter-spacing: 0.03em;
+}
+
+.mobileLockedBanner {
+	position: absolute;
+	bottom: 0;
+	left: 0;
+	right: 0;
+	background: rgba(0, 0, 0, 0.65);
+	color: rgba(255, 255, 255, 0.85);
+	font-size: 12px;
+	font-weight: 600;
+	text-align: center;
+	padding: 8px;
+	letter-spacing: 0.02em;
+}
+
+.mobileDots {
+	display: flex;
+	justify-content: center;
+	align-items: center;
+	gap: 7px;
+	padding: 8px 0;
+	background: rgba(0, 0, 0, 0.55);
+	flex-shrink: 0;
+	height: 32px;
+}
+
+.mobileDot {
+	width: 7px;
+	height: 7px;
+	border-radius: 50%;
+	border: none;
+	background: rgba(255, 255, 255, 0.35);
+	cursor: pointer;
+	padding: 0;
+	transition:
+		background 0.2s ease,
+		transform 0.2s ease;
+	min-width: 24px;
+	min-height: 24px;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	background-clip: content-box;
+}
+
+.mobileDotActive {
+	background: rgba(255, 255, 255, 0.95);
+	transform: scale(1.2);
+}
+
+/* Wrapper gives position:relative context for HUD absolute positioning */
+.mapAndHudWrapper {
+	flex: 1;
+	min-height: 0;
+	position: relative;
+	display: flex;
+	flex-direction: column;
+}
+
+/* ── MapHUD ──────────────────────────────────────────────
+   Mobile: position:relative so the HUD participates in
+   normal flow — map image is pushed down by however tall
+   the HUD actually renders (crew wrapping = variable height).
+   Desktop: position:absolute, fixed 52px, overlays the map.
+   This eliminates the fragile padding-top guessing game.    */
+.hudStrip {
+	position: relative;
+	z-index: 20;
+	display: flex;
+	align-items: center;
+	flex-wrap: wrap;
+	background: rgba(0, 0, 0, 0.58);
+	border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+	padding: 0.4rem 0.75rem;
+	gap: 0.375rem;
+	pointer-events: none;
+}
+
+@media (min-width: 1024px) {
+	.hudStrip {
+		position: absolute;
+		top: 0;
+		left: 0;
+		right: 0;
+		height: 52px;
+		flex-wrap: nowrap;
+		padding: 0 1rem;
+		gap: 0;
+		align-items: center;
+	}
+}
+
+/* Landscape touch — HUD overlays map so image gets 100% viewport height.
+   Single compact row: no wrapping, reduced height, all items inline.     */
+@media (orientation: landscape) and (pointer: coarse) {
+	.hudStrip {
+		position: absolute;
+		top: 0;
+		left: 0;
+		right: 0;
+		height: 44px;
+		flex-wrap: nowrap;
+		padding: 0 0.75rem;
+		gap: 0.5rem;
+		align-items: center;
+	}
+}
+
+.hudStrip button,
+.hudStrip a {
+	pointer-events: all;
+}
+
+/* ── Left: avatar + greeting ── */
+/* On mobile: takes up available space in row 1 pushing time to the right */
+.hudLeft {
+	display: flex;
+	align-items: center;
+	gap: 0.5rem;
+	flex: 1;
+	min-width: 0;
+}
+
+@media (min-width: 1024px) {
+	.hudLeft {
+		flex: 0 0 auto;
+	}
+}
+
+@media (orientation: landscape) and (pointer: coarse) {
+	.hudLeft {
+		flex: 0 0 auto;
+	}
+}
+
+.hudAvatar {
+	height: 38px;
+	width: auto;
+	object-fit: contain;
+	flex-shrink: 0;
+}
+
+@media (orientation: landscape) and (pointer: coarse) {
+	.hudAvatar {
+		height: 30px;
+	}
+}
+
+.hudGreeting {
+	display: flex;
+	align-items: center;
+	gap: 0.375rem;
+	min-width: 0;
+}
+
+.hudGreetingIcon {
+	font-size: 1rem;
+	flex-shrink: 0;
+	color: white;
+}
+
+.hudGreetingText {
+	font-size: 0.8125rem;
+	font-weight: 700;
+	color: #ffffff;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	text-shadow: 0 1px 3px rgba(0, 0, 0, 0.6);
+}
+
+/* ── Center: today + tomorrow ── */
+/* Desktop: fills middle of the single row.
+   Mobile: becomes its own full-width second row.           */
+.hudCenter {
+	flex: 1;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	gap: 0.75rem;
+	min-width: 0;
+	overflow: hidden;
+}
+
+@media (max-width: 1023px) {
+	.hudCenter {
+		flex: 0 0 100%;
+		justify-content: center;
+		order: 3;
+		gap: 0.5rem;
+		overflow-x: auto;
+		-webkit-overflow-scrolling: touch;
+	}
+}
+
+@media (orientation: landscape) and (pointer: coarse) {
+	.hudCenter {
+		flex: 1;
+		flex-basis: auto;
+		order: 0;
+		justify-content: center;
+		overflow-x: auto;
+		gap: 0.5rem;
+	}
+}
+
+.hudLoadingText {
+	font-size: 0.75rem;
+	color: rgba(255, 255, 255, 0.45);
+}
+
+.hudDutyGroup {
+	display: flex;
+	align-items: center;
+	gap: 0.375rem;
+	flex-shrink: 0;
+}
+
+.hudDayBadge {
+	font-size: 0.625rem;
+	font-weight: 800;
+	color: #1e40af;
+	background: #ffffff;
+	padding: 0.15rem 0.4rem;
+	border-radius: 0.3rem;
+	flex-shrink: 0;
+	letter-spacing: 0.01em;
+}
+
+.hudDayBadgeTmr {
+	font-size: 0.625rem;
+	font-weight: 800;
+	color: rgba(255, 255, 255, 0.85);
+	background: rgba(255, 255, 255, 0.2);
+	padding: 0.15rem 0.4rem;
+	border-radius: 0.3rem;
+	flex-shrink: 0;
+}
+
+.hudDutyPill {
+	font-size: 0.8125rem;
+	font-weight: 800;
+	padding: 0.2rem 0.6rem;
+	border-radius: 0.4rem;
+	border: 1.5px solid transparent;
+	white-space: nowrap;
+	letter-spacing: -0.01em;
+}
+
+.hudDutyTime {
+	font-size: 0.6875rem;
+	font-weight: 600;
+	color: rgba(255, 255, 255, 0.65);
+	font-variant-numeric: tabular-nums;
+	flex-shrink: 0;
+}
+
+.hudDivider {
+	width: 1px;
+	height: 24px;
+	background: rgba(255, 255, 255, 0.15);
+	flex-shrink: 0;
+}
+
+/* ── Right: PDX button + time ── */
+/* On mobile: sits at end of row 1 alongside hudLeft.
+   order:2 keeps it between hudLeft and hudCenter rows.     */
+.hudRight {
+	display: flex;
+	align-items: center;
+	gap: 0.75rem;
+	flex: 0 0 auto;
+	order: 2;
+}
+
+@media (max-width: 1023px) {
+	.hudRight {
+		gap: 0.5rem;
+	}
+}
+
+.hudPdxBtn {
+	display: flex;
+	align-items: center;
+	gap: 0.3rem;
+	background: rgba(34, 197, 94, 0.2);
+	border: 1px solid rgba(34, 197, 94, 0.4);
+	border-radius: 0.4rem;
+	color: #bbf7d0;
+	font-size: 0.6875rem;
+	font-weight: 600;
+	padding: 0.3rem 0.625rem;
+	cursor: pointer;
+	pointer-events: all;
+	transition: background 0.15s;
+	white-space: nowrap;
+}
+
+.hudPdxBtn:hover:not(:disabled) {
+	background: rgba(34, 197, 94, 0.35);
+}
+
+.hudPdxBtn:disabled {
+	opacity: 0.6;
+	cursor: not-allowed;
+}
+
+.hudPdxLabel {
+	font-size: 0.6875rem;
+}
+
+.hudPdxSpinner {
+	width: 11px;
+	height: 11px;
+	border: 1.5px solid rgba(255, 255, 255, 0.3);
+	border-top-color: #bbf7d0;
+	border-radius: 50%;
+	animation: hudSpin 0.8s linear infinite;
+}
+
+@keyframes hudSpin {
+	to {
+		transform: rotate(360deg);
+	}
+}
+
+.hudTime {
+	font-size: 0.875rem;
+	font-weight: 600;
+	color: rgba(255, 255, 255, 0.8);
+	font-variant-numeric: tabular-nums;
+	flex-shrink: 0;
+}
+
+/* ── HUD crew badges ──────────────────────────────────── */
+.hudCrewRow {
+	display: flex;
+	align-items: center;
+	gap: 3px;
+	flex-shrink: 0;
+	/* Wrap on mobile so all names show without overflow */
+	flex-wrap: wrap;
+}
+
+/* Full-name pill — max-width clips long names with ellipsis */
+.hudCrewBadge {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	max-width: 52px;
+	height: 20px;
+	padding: 0 5px;
+	border-radius: 4px;
+	font-size: 0.6rem;
+	font-weight: 700;
+	flex-shrink: 0;
+	border: 1px solid rgba(255, 255, 255, 0.25);
+	line-height: 1;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+/* ── HUD today block — duty pill + crew on new line ────── */
+/* Flex column so crew row sits below the pill row          */
+.hudTodayBlock {
+	display: flex;
+	flex-direction: column;
+	gap: 3px;
+	flex-shrink: 0;
+}
+
+/* ── LandscapeMap ────────────────────────────────────────
+   Touch devices in landscape orientation.
+   object-fit:contain with ocean-colored background means
+   no landmarks are ever cropped regardless of device ratio.
+   The 2:1 source image leaves ~120px letterbox bands on
+   iPad landscape — ocean blue background makes them look
+   intentional rather than empty.                          */
+.landscapeMapWrapper {
+	flex: 1;
+	min-height: 0;
+	display: flex;
+	flex-direction: column;
+	overflow: hidden;
+	position: relative;
+	/* Dark fallback while pseudo-element loads */
+	background: #0a1628;
+}
+
+/* Blurred ambient background — same image scaled up and blurred.
+   Creates a "frosted glass" effect where the letterbox bands show
+   a soft blurred version of the map's edge colors rather than a
+   flat color. The image path must match LandscapeMap.js imageSrc. */
+.landscapeMapWrapper::before {
+	content: "";
+	position: absolute;
+	inset: -20px;
+	background-image: url("/assets/map/comibined_2-1_ratio.png");
+	background-size: cover;
+	background-position: center;
+	filter: blur(24px) brightness(0.45) saturate(0.8);
+	z-index: 0;
+}
+
+.landscapeMapImage {
+	width: 100%;
+	height: 100%;
+	object-fit: contain;
+	object-position: center center;
+	display: block;
+	pointer-events: none;
+	/* Sit above the blurred pseudo-element */
+	position: relative;
+	z-index: 1;
+}
