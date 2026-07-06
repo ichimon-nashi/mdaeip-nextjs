@@ -2,45 +2,49 @@
 
 // LandscapeMap
 // ─────────────────────────────────────────────────────────────────────────────
-// Used for touch devices in landscape orientation (phones + tablets rotated).
-// Uses the 2:1 ratio combined image (comibined_2-1_ratio.png) with
-// object-fit: contain so no landmarks are ever cropped regardless of
-// device aspect ratio. Ocean-colored background hides any letterbox bands.
+// Touch devices in landscape orientation (phones + tablets rotated).
+// 2:1 ratio combined image, object-fit:contain, blurred ambient background.
+// Full color always. Tap navigates. 我的班表 fires onScheduleOpen.
 //
-// Full color always — no grayscale, no clip-path reveal mechanic.
-// Tap navigates directly. 我的班表 fires onScheduleOpen instead of routing.
-// Locked hotspots show gray pin + lock badge + toast on tap.
+// Two coordinate sets per hotspot:
+//   left/top         — phone landscape (iPhone, ~932×430 or narrower)
+//   tabletLeft/Top   — tablet landscape (iPad ≥1024px wide)
 //
-// HOW TO CALIBRATE COORDINATES for this image:
-// 1. Rotate your browser to landscape or use devtools device emulation
-//    in landscape mode with the dashboard open.
-// 2. Run in console:
-//    const img = document.querySelector('[alt="豪神APP landscape map"]');
-//    const c = img.parentElement;
-//    c.style.cursor = 'crosshair';
-//    c.addEventListener('mousemove', e => {
-//      const r = c.getBoundingClientRect();
-//      const x = ((e.clientX - r.left) / r.width * 100).toFixed(2);
-//      const y = ((e.clientY - r.top) / r.height * 100).toFixed(2);
-//      document.title = `${x}% , ${y}%`;
-//    });
-// 3. Hover each building center, read tab title, update left/top below.
+// Why two sets: object-fit:contain on a 2:1 image in a 1.33:1 iPad container
+// leaves ~128px bands on each side. left:48% = 48% of the container, which
+// maps to a different pixel in the image on iPad vs iPhone. Tablet coords
+// are measured with the image as rendered on iPad, not container percentage.
 //
-// NOTE: Coordinates here are INDEPENDENT of DesktopMap.js — this is a
-// different source image at a different ratio. Do not copy coordinates
-// from DesktopMap.js; they will be wrong.
+// HOW TO CALIBRATE:
+// Phone:  devtools → iPhone landscape → run console mousemove script below
+// Tablet: devtools → iPad landscape   → run same script, update tabletLeft/Top
+//
+// Console script (run in devtools):
+//   const img = document.querySelector('[alt="豪神APP landscape map"]');
+//   const c = img.parentElement;
+//   c.style.cursor = 'crosshair';
+//   c.addEventListener('mousemove', e => {
+//     const r = c.getBoundingClientRect();
+//     const x = ((e.clientX - r.left) / r.width * 100).toFixed(2);
+//     const y = ((e.clientY - r.top) / r.height * 100).toFixed(2);
+//     document.title = `${x}% , ${y}%`;
+//   });
 // ─────────────────────────────────────────────────────────────────────────────
 
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
 import toast from "react-hot-toast";
 import { hasAppAccess } from "../../lib/permissionHelpers";
 import styles from "../../styles/Map.module.css";
 
+// iPad Mini landscape = 1024px. iPhone 14 Pro Max landscape = 932px.
+const TABLET_LANDSCAPE_BREAKPOINT = 1024;
+
 // ── Hotspot definitions ───────────────────────────────────────────────────────
-// All coordinates are % of the image container.
-// Measured against comibined_2-1_ratio.png (2160×1080).
-// TODO: replace placeholder left/top with real measured values.
+// left/top       = phone landscape coordinates (% of container)
+// tabletLeft/Top = tablet landscape coordinates (% of container)
+// All values are PLACEHOLDERS — calibrate both sets separately.
 const HOTSPOTS = [
 	// ── 空服 ──────────────────────────────────────────────────────────────────
 	{
@@ -51,8 +55,10 @@ const HOTSPOTS = [
 		path: null,
 		section: "roster",
 		isSchedule: true,
-		left: "48%",
+		left: "50%",
 		top: "28%",
+		tabletLeft: "50%",
+		tabletTop: "32%",
 	},
 	{
 		id: "schedule",
@@ -61,8 +67,10 @@ const HOTSPOTS = [
 		color: "#2563eb",
 		path: "/schedule",
 		section: "roster",
-		left: "38%",
-		top: "44%",
+		left: "41%",
+		top: "49%",
+		tabletLeft: "39%",
+		tabletTop: "46%",
 	},
 	{
 		id: "gday",
@@ -71,8 +79,10 @@ const HOTSPOTS = [
 		color: "#7c3aed",
 		path: "/gday",
 		section: "gday",
-		left: "54%",
-		top: "54%",
+		left: "55%",
+		top: "50%",
+		tabletLeft: "56%",
+		tabletTop: "51%",
 	},
 	{
 		id: "etr",
@@ -81,8 +91,10 @@ const HOTSPOTS = [
 		color: "#dc2626",
 		path: "/etr-generator",
 		section: "etr_generator",
-		left: "45%",
-		top: "52%",
+		left: "47%",
+		top: "55%",
+		tabletLeft: "46%",
+		tabletTop: "51%",
 	},
 	{
 		id: "turtle",
@@ -91,8 +103,10 @@ const HOTSPOTS = [
 		color: "#065f46",
 		path: "/turtle-ranking",
 		section: "turtle_ranking",
-		left: "51%",
-		top: "66%",
+		left: "52%",
+		top: "68%",
+		tabletLeft: "52.5%",
+		tabletTop: "62%",
 	},
 	// ── 空服OFC ───────────────────────────────────────────────────────────────
 	{
@@ -102,8 +116,10 @@ const HOTSPOTS = [
 		color: "#059669",
 		path: "/MRTChecker",
 		section: "mrt_checker",
-		left: "15%",
-		top: "25%",
+		left: "22%",
+		top: "27%",
+		tabletLeft: "14.5%",
+		tabletTop: "30%",
 	},
 	{
 		id: "duty-change-review",
@@ -112,8 +128,10 @@ const HOTSPOTS = [
 		color: "#be185d",
 		path: "/duty-change-review",
 		section: "duty_change_review",
-		left: "21%",
-		top: "30%",
+		left: "27%",
+		top: "34%",
+		tabletLeft: "20.5%",
+		tabletTop: "36.5%",
 	},
 	{
 		id: "dispatch",
@@ -122,8 +140,10 @@ const HOTSPOTS = [
 		color: "#0369a1",
 		path: "/dispatch",
 		section: "dispatch",
-		left: "27%",
-		top: "31%",
+		left: "33%",
+		top: "35%",
+		tabletLeft: "27.5%",
+		tabletTop: "35%",
 	},
 	// ── 地勤 ──────────────────────────────────────────────────────────────────
 	{
@@ -133,8 +153,10 @@ const HOTSPOTS = [
 		color: "#d97706",
 		path: "/ground-schedule",
 		section: "ground_schedule",
-		left: "74%",
-		top: "39%",
+		left: "70%",
+		top: "43%",
+		tabletLeft: "75.5%",
+		tabletTop: "42%",
 	},
 	{
 		id: "ground-roster",
@@ -143,8 +165,10 @@ const HOTSPOTS = [
 		color: "#ea580c",
 		path: "/ground-roster",
 		section: "ground_roster",
-		left: "81%",
-		top: "22%",
+		left: "75%",
+		top: "27%",
+		tabletLeft: "82%",
+		tabletTop: "31%",
 	},
 	// ── 系統 ──────────────────────────────────────────────────────────────────
 	{
@@ -154,8 +178,10 @@ const HOTSPOTS = [
 		color: "#f77f00",
 		path: "/database-management",
 		section: "database_management",
-		left: "60%",
+		left: "58%",
 		top: "80%",
+		tabletLeft: "61%",
+		tabletTop: "72%",
 	},
 	{
 		id: "patch-notes",
@@ -164,8 +190,10 @@ const HOTSPOTS = [
 		color: "#99582a",
 		path: "/patch-notes",
 		section: null,
-		left: "68%",
+		left: "66%",
 		top: "87%",
+		tabletLeft: "69%",
+		tabletTop: "78%",
 	},
 ];
 
@@ -184,10 +212,9 @@ const regionOf = (section) => {
 	return [];
 };
 
-// ── Single hotspot button ─────────────────────────────────────────────────────
-const LandscapeHotspot = ({ hotspot, user, onScheduleOpen }) => {
+// ── Single hotspot — receives pre-resolved left/top ───────────────────────────
+const LandscapeHotspot = ({ hotspot, left, top, user, onScheduleOpen }) => {
 	const router = useRouter();
-
 	const locked =
 		hotspot.section !== null && !hasAppAccess(user, hotspot.section);
 	const regionSections = regionOf(hotspot.section);
@@ -210,7 +237,7 @@ const LandscapeHotspot = ({ hotspot, user, onScheduleOpen }) => {
 	return (
 		<button
 			className={`${styles.hotspot} ${locked ? styles.hotspotLocked : styles.hotspotAccessible}`}
-			style={{ left: hotspot.left, top: hotspot.top }}
+			style={{ left, top }}
 			onClick={handleTap}
 			aria-label={locked ? `${hotspot.label} (需要權限)` : hotspot.label}
 		>
@@ -248,10 +275,29 @@ const LandscapeHotspot = ({ hotspot, user, onScheduleOpen }) => {
 
 // ── Main component ────────────────────────────────────────────────────────────
 const LandscapeMap = ({ user, onScheduleOpen }) => {
+	const [isTablet, setIsTablet] = useState(false);
+
+	useEffect(() => {
+		const check = () =>
+			setIsTablet(window.innerWidth >= TABLET_LANDSCAPE_BREAKPOINT);
+		check();
+		window.addEventListener("resize", check);
+		window.addEventListener("orientationchange", check);
+		return () => {
+			window.removeEventListener("resize", check);
+			window.removeEventListener("orientationchange", check);
+		};
+	}, []);
+
+	// Resolve coordinate set based on device width
+	const getCoords = (h) => ({
+		left: isTablet && h.tabletLeft ? h.tabletLeft : h.left,
+		top: isTablet && h.tabletTop ? h.tabletTop : h.top,
+	});
+
 	return (
 		<div className={styles.landscapeMapWrapper}>
 			<div className={styles.mapContainer}>
-				{/* Single full-color image — no dual-layer needed, no grayscale */}
 				{/* eslint-disable-next-line @next/next/no-img-element */}
 				<img
 					src="/assets/map/comibined_2-1_ratio.png"
@@ -259,17 +305,20 @@ const LandscapeMap = ({ user, onScheduleOpen }) => {
 					className={styles.landscapeMapImage}
 					draggable={false}
 				/>
-
-				{/* Hotspot layer */}
 				<div className={styles.mapHotspotLayer}>
-					{HOTSPOTS.map((h) => (
-						<LandscapeHotspot
-							key={h.id}
-							hotspot={h}
-							user={user}
-							onScheduleOpen={onScheduleOpen}
-						/>
-					))}
+					{HOTSPOTS.map((h) => {
+						const { left, top } = getCoords(h);
+						return (
+							<LandscapeHotspot
+								key={h.id}
+								hotspot={h}
+								left={left}
+								top={top}
+								user={user}
+								onScheduleOpen={onScheduleOpen}
+							/>
+						);
+					})}
 				</div>
 			</div>
 		</div>
