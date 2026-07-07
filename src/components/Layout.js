@@ -54,7 +54,7 @@ const Layout = ({ children }) => {
                 onClose={handleDrawerClose}
                 userDetails={user}
             />
-            <main style={{ flex: 1, minHeight: 0, overflow: 'hidden' }}>
+            <main style={{ flex: 1, minHeight: 0, overflow: 'auto' }}>
                 {children}
             </main>
         </div>

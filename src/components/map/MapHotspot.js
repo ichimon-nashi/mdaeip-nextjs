@@ -66,12 +66,11 @@ const MapHotspot = ({
 			aria-label={locked ? `${label} (需要權限)` : label}
 			title={label}
 		>
-			{/* Pin */}
+			{/* Pin — lock badge inside so it's absolute to pin, not flex sibling */}
 			<div
 				className={styles.hotspotPin}
 				style={{
 					backgroundColor: locked ? "#555" : color,
-					opacity: regionLocked ? 0.5 : 1,
 				}}
 			>
 				{iconSrc && (
@@ -88,14 +87,12 @@ const MapHotspot = ({
 						}}
 					/>
 				)}
+				{locked && (
+					<div className={styles.hotspotLockBadge} aria-hidden="true">
+						🔒
+					</div>
+				)}
 			</div>
-
-			{/* Lock badge */}
-			{locked && (
-				<div className={styles.hotspotLockBadge} aria-hidden="true">
-					🔒
-				</div>
-			)}
 
 			{/* Label */}
 			<span className={styles.hotspotLabel}>{label}</span>
