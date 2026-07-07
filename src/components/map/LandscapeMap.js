@@ -245,7 +245,6 @@ const LandscapeHotspot = ({ hotspot, left, top, user, onScheduleOpen }) => {
 				className={styles.hotspotPin}
 				style={{
 					backgroundColor: locked ? "#555" : hotspot.color,
-					opacity: regionLocked ? 0.5 : 1,
 				}}
 			>
 				{hotspot.icon && (
@@ -300,7 +299,7 @@ const LandscapeMap = ({ user, onScheduleOpen }) => {
 			<div className={styles.mapContainer}>
 				{/* eslint-disable-next-line @next/next/no-img-element */}
 				<img
-					src="/assets/map/comibined_2-1_ratio.png"
+					src="/assets/map/combined_2-1.webp"
 					alt="豪神APP landscape map"
 					className={styles.landscapeMapImage}
 					draggable={false}

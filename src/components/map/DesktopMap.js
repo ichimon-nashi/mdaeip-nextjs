@@ -42,32 +42,6 @@ import MapHotspot from "./MapHotspot";
 import { hasAppAccess } from "../../lib/permissionHelpers";
 import styles from "../../styles/Map.module.css";
 
-// ── Region polygons — for locked-zone SVG darkening overlay only ─────────────
-// Format: SVG points string "x1,y1 x2,y2 ..." with viewBox 0 0 100 100
-// so values are direct percentages. Replace with real traced boundaries.
-const REGION_POLYGONS = [
-	{
-		label: "空服",
-		points: "25,5 62,5 65,8 70,55 65,70 35,72 22,55 20,8",
-		sections: ["roster", "gday", "etr_generator", "turtle_ranking"],
-	},
-	{
-		label: "空服OFC",
-		points: "0,25 20,20 28,22 32,65 25,72 8,70 0,60 0,30",
-		sections: ["mrt_checker", "dispatch", "duty_change_review"],
-	},
-	{
-		label: "地勤",
-		points: "65,5 100,5 100,8 100,65 95,72 68,70 62,55 62,8",
-		sections: ["ground_schedule", "ground_roster"],
-	},
-	{
-		label: "系統",
-		points: "28,68 65,65 72,70 75,100 70,100 30,100 22,100 22,72",
-		sections: ["database_management"],
-	},
-];
-
 // ── Hotspot definitions ───────────────────────────────────────────────────────
 // clipPath: 10-point polygon tracing the building's footprint.
 // TODO: replace placeholder clipPaths with real measured values.
@@ -235,19 +209,6 @@ const DesktopMap = ({ user, onScheduleOpen }) => {
 		[user],
 	);
 
-	const isRegionLocked = useCallback(
-		(regionSections) => {
-			return regionSections.every((s) => !hasAppAccess(user, s));
-		},
-		[user],
-	);
-
-	// Build regionPolygons with computed locked state for MapContainer SVG overlay
-	const regionPolygons = REGION_POLYGONS.map((r) => ({
-		...r,
-		locked: isRegionLocked(r.sections),
-	}));
-
 	const handleHotspotEnter = useCallback((id) => {
 		const hotspot = HOTSPOTS.find((h) => h.id === id);
 		if (hotspot?.clipPath) setHoveredClipPath(hotspot.clipPath);
@@ -260,10 +221,10 @@ const DesktopMap = ({ user, onScheduleOpen }) => {
 	return (
 		<div className={styles.desktopMapWrapper}>
 			<MapContainer
-				imageSrc="/assets/map/combined.png"
+				imageSrc="/assets/map/combined.webp"
 				imageAlt="豪神APP navigation map"
 				hoveredClipPath={hoveredClipPath}
-				regionPolygons={regionPolygons}
+				regionPolygons={[]}
 			>
 				{HOTSPOTS.map((h) => (
 					<MapHotspot
@@ -275,10 +236,6 @@ const DesktopMap = ({ user, onScheduleOpen }) => {
 						iconSrc={h.icon}
 						color={h.color}
 						locked={isHotspotLocked(h)}
-						regionLocked={isRegionLocked(
-							REGION_POLYGONS.find((r) => r.label === h.region)
-								?.sections ?? [],
-						)}
 						path={h.id === "dashboard" ? null : h.path}
 						onOverride={h.id === "dashboard" ? onScheduleOpen : null}
 						onHotspotEnter={handleHotspotEnter}

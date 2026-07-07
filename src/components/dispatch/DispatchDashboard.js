@@ -16,6 +16,7 @@ import { supabase } from "../../lib/supabase";
 import { pdxMonthHelpers, monthLabel, daysInMonth } from "../../lib/pdxHelpers";
 import DispatchImport from "./DispatchImport";
 import styles from "../../styles/DispatchDashboard.module.css";
+import globalStyles from "../../styles/GlobalLoading.module.css"
 
 const currentYear = new Date().getFullYear();
 const YEARS = [currentYear - 1, currentYear, currentYear + 1, currentYear + 2];
@@ -271,9 +272,18 @@ export default function DispatchDashboard({ onSelectMonth }) {
 
 	if (loading) {
 		return (
-			<div className={styles.loadingWrap}>
-				<div className={styles.spinner} />
-				載入中...
+						<div className={globalStyles.globalLoadingScreen}>
+				<div className={globalStyles.globalLoadingContent}>
+					<img
+						src="/K-dogmatic.png"
+						alt=""
+						className={globalStyles.globalLoadingMascot}
+					/>
+					<div className={globalStyles.globalLoadingSpinner} />
+					<p className={globalStyles.globalLoadingText}>
+						載入中...
+					</p>
+				</div>
 			</div>
 		);
 	}

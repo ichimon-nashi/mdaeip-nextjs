@@ -7,6 +7,7 @@ import { supabase } from '../../lib/supabase';
 import { hasAppAccess } from '../../lib/permissionHelpers';
 import toast from 'react-hot-toast';
 import styles from '../../styles/DutyChangeReview.module.css';
+import globalStyles from "../../styles/GlobalLoading.module.css"
 import { clearScheduleCache } from '../../lib/DataRoster';
 
 const STATUS_LABELS = {
@@ -396,9 +397,18 @@ export default function DutyChangeReviewPage() {
 	// ── Loading / access ──────────────────────────────────────────────────────
 	if (loading || dataLoading) {
 		return (
-			<div className={styles.loadingScreen}>
-				<div className={styles.loadingSpinner} />
-				<p className={styles.loadingText}>載入審核資料中...</p>
+						<div className={globalStyles.globalLoadingScreen}>
+				<div className={globalStyles.globalLoadingContent}>
+					<img
+						src="/K-dogmatic.png"
+						alt=""
+						className={globalStyles.globalLoadingMascot}
+					/>
+					<div className={globalStyles.globalLoadingSpinner} />
+					<p className={globalStyles.globalLoadingText}>
+						載入審核資料中...
+					</p>
+				</div>
 			</div>
 		);
 	}

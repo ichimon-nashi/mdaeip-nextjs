@@ -383,7 +383,7 @@ const ETRGenerator = () => {
 			}
 		} catch (err) {
 			console.error("Failed to copy text: ", err);
-			toast.error("Failed to copy text");
+			toast.error("文字複製失敗");
 		}
 	};
 

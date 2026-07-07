@@ -28,7 +28,7 @@ const REGIONS = [
 	{
 		id: "cabin-crew",
 		label: "空服",
-		image: "/assets/map/keep.png",
+		image: "/assets/map/keep.webp",
 		hotspots: [
 			{
 				id: "dashboard",
@@ -98,7 +98,7 @@ const REGIONS = [
 	{
 		id: "cabin-crew-ofc",
 		label: "空服 OFC",
-		image: "/assets/map/yagura.png",
+		image: "/assets/map/yagura.webp",
 		hotspots: [
 			{
 				id: "mrt",
@@ -142,7 +142,7 @@ const REGIONS = [
 	{
 		id: "ground",
 		label: "地勤",
-		image: "/assets/map/village.png",
+		image: "/assets/map/village.webp",
 		hotspots: [
 			{
 				id: "ground-schedule",
@@ -174,7 +174,7 @@ const REGIONS = [
 	{
 		id: "system",
 		label: "系統",
-		image: "/assets/map/kura.png",
+		image: "/assets/map/kura.webp",
 		hotspots: [
 			{
 				id: "database",
