@@ -61,7 +61,7 @@ export default function HomePage() {
 	if (user) {
 		return (
 			<div className={styles.loadingContainer}>
-				Redirecting to schedule...
+				登入中...
 			</div>
 		);
 	}

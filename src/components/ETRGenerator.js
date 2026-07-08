@@ -391,7 +391,7 @@ const ETRGenerator = () => {
 		return (
 			<div className={styles.etrGeneratorContainer}>
 				<div className={styles.etrContent}>
-					<div style={{ textAlign: "center", padding: "50px" }}>
+					<div style={{ textAlign: "center", padding: "50px", color: "white"}}>
 						Loading data from database...
 					</div>
 				</div>

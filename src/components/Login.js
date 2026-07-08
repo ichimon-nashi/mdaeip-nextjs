@@ -36,7 +36,7 @@ const Login = () => {
 			}
 		} catch (error) {
 			console.error("Login error:", error);
-			toast.error("Login failed");
+			toast.error("登入失敗啦!");
 		} finally {
 			setIsLoading(false);
 		}

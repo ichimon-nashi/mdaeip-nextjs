@@ -206,7 +206,7 @@
 	}
 }
 
-@media (hover: none) {
+@media (hover: none), (pointer: coarse) {
 	.hotspotLabel {
 		opacity: 1;
 		font-size: 9px;
