@@ -10,6 +10,7 @@ import {
   updateFaqEntry,
   deleteFaqEntry,
   getFaqCounts,
+  cleanupTempImages,
 } from "../../lib/faqHelpers";
 import FaqEditor from "../../components/faq/FaqEditor";
 import toast from "react-hot-toast";
@@ -84,13 +85,35 @@ export default function PatchNotes() {
 
   const handleSave = async (payload) => {
     if (editorEntry?.id) {
-      await updateFaqEntry(editorEntry.id, payload);
+      const saved = await updateFaqEntry(editorEntry.id, payload);
       toast.success("已更新");
+      await loadFaq();
+      return saved;
     } else {
-      await createFaqEntry(payload);
+      const saved = await createFaqEntry(payload);
       toast.success("已新增");
+      await loadFaq();
+      return saved; // returns { id, ... } so FaqEditor can upload images to real UUID
     }
+  };
+
+  const handleUpdateSections = async (id, sections) => {
+    await updateFaqEntry(id, { sections });
     await loadFaq();
+  };
+
+  const [cleanupRunning, setCleanupRunning] = useState(false);
+  const handleCleanup = async () => {
+    if (!window.confirm("清除所有臨時圖片檔案？此操作不可復原。")) return;
+    setCleanupRunning(true);
+    try {
+      const { deleted } = await cleanupTempImages();
+      toast.success(`已清除 ${deleted} 個臨時資料夾`);
+    } catch {
+      toast.error("清除失敗，請重試");
+    } finally {
+      setCleanupRunning(false);
+    }
   };
 
   const handleDelete = async (id) => {
@@ -248,7 +271,15 @@ export default function PatchNotes() {
 
           {/* Admin entry list */}
           <main className={styles.timeline}>
-            <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 12 }}>
+            <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginBottom: 12 }}>
+              <button
+                className={styles.appFilterBtn}
+                style={{ width: "auto", padding: "6px 14px", fontSize: "0.8125rem", color: cleanupRunning ? "rgba(255,255,255,0.4)" : "#f87171", borderColor: "rgba(239,68,68,0.3)", opacity: cleanupRunning ? 0.6 : 1 }}
+                onClick={handleCleanup}
+                disabled={cleanupRunning}
+              >
+                {cleanupRunning ? "清除中..." : "🗑 清除臨時檔案"}
+              </button>
               <button
                 className={styles.appFilterBtn}
                 style={{ background: "var(--bg-accent)", color: "var(--text-accent)", border: "0.5px solid var(--border-accent)", width: "auto", padding: "6px 14px" }}
@@ -318,6 +349,7 @@ export default function PatchNotes() {
           featureName={ALL_HOTSPOTS.find((h) => h.id === adminFilter)?.label ?? adminFilter}
           allHotspots={ALL_HOTSPOTS}
           onSave={handleSave}
+          onUpdateSections={handleUpdateSections}
           onClose={() => setEditorEntry(undefined)}
         />
       )}

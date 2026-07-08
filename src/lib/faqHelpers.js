@@ -102,3 +102,33 @@ export async function deleteFaqImage(publicUrl) {
 	const { error } = await supabase.storage.from("faq-images").remove([path]);
 	if (error) console.error("deleteFaqImage error:", error);
 }
+
+// ── Cleanup: delete orphaned temp- folders (admin only) ──────────────────────
+// Call this from an admin-triggered action to purge temp folders that
+// have no corresponding entry in mdaeip_faq_entries.
+// Safe to run multiple times — only deletes folders starting with "temp-".
+export async function cleanupTempImages() {
+	// List all files in faq-images bucket
+	const { data: files, error } = await supabase.storage
+		.from("faq-images")
+		.list("", { limit: 1000 });
+	if (error) throw error;
+
+	// Filter to temp- folders only
+	const tempFolders = (files || []).filter((f) => f.name.startsWith("temp-"));
+	if (tempFolders.length === 0) return { deleted: 0 };
+
+	// For each temp folder, list and delete its contents then the folder
+	let deleted = 0;
+	for (const folder of tempFolders) {
+		const { data: contents } = await supabase.storage
+			.from("faq-images")
+			.list(folder.name);
+		if (contents?.length) {
+			const paths = contents.map((f) => `${folder.name}/${f.name}`);
+			await supabase.storage.from("faq-images").remove(paths);
+		}
+		deleted++;
+	}
+	return { deleted };
+}

@@ -26,7 +26,8 @@ const FaqEditor = ({
 	hotspotId, // pre-filled when opened from hotspot context
 	featureName, // pre-filled display name
 	allHotspots, // [{ id, label }] — for the feature dropdown
-	onSave, // async (payload) => void
+	onSave, // async (payload) => savedEntry — must return saved row
+	onUpdateSections, // async (id, sections) => void
 	onClose, // () => void
 }) => {
 	const isEdit = !!entry;
@@ -87,33 +88,49 @@ const FaqEditor = ({
 
 		setSaving(true);
 		try {
-			// Upload any pending images
-			const resolvedSections = await Promise.all(
-				sections.map(async (s, i) => {
-					let imageUrl = s.image_url;
-					if (s._file) {
-						// Use a temp entry ID for new entries, or real ID for edits
-						const folder = isEdit ? entry.id : `temp-${Date.now()}`;
-						imageUrl = await uploadFaqImage(s._file, folder);
-					}
-					return {
-						content: s.content,
-						image_url: imageUrl?.startsWith("blob:")
-							? null
-							: imageUrl,
-						sort_order: i,
-					};
-				}),
-			);
-
-			await onSave({
+			const payload = {
 				hotspot_id: hid,
 				feature_name: fname || hid,
 				title: title.trim(),
 				type,
-				sections: resolvedSections,
 				sort_order: entry?.sort_order ?? 0,
-			});
+				// Sections without images first — we'll update with real URLs after upload
+				sections: sections.map((s, i) => ({
+					content: s.content,
+					image_url: s._file
+						? null
+						: s.image_url?.startsWith("blob:")
+							? null
+							: s.image_url,
+					sort_order: i,
+				})),
+			};
+
+			// Save entry first to get a real UUID (avoids temp- folders in storage)
+			const saved = await onSave(payload);
+			const entryId = saved?.id ?? entry?.id;
+
+			// Upload any pending images now that we have a real entry ID
+			const hasPendingImages = sections.some((s) => s._file);
+			if (hasPendingImages && entryId) {
+				const resolvedSections = await Promise.all(
+					sections.map(async (s, i) => {
+						let imageUrl = s.image_url;
+						if (s._file) {
+							imageUrl = await uploadFaqImage(s._file, entryId);
+						}
+						return {
+							content: s.content,
+							image_url: imageUrl?.startsWith("blob:")
+								? null
+								: imageUrl,
+							sort_order: i,
+						};
+					}),
+				);
+				// Update entry with final image URLs
+				await onUpdateSections(entryId, resolvedSections);
+			}
 
 			onClose();
 		} catch (err) {
