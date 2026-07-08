@@ -1,0 +1,188 @@
+/* HotspotPopover.module.css */
+
+/* ── Mobile bottom sheet ── */
+.sheetBackdrop {
+	position: fixed;
+	inset: 0;
+	z-index: 60;
+	background: rgba(0, 0, 0, 0.55);
+	display: flex;
+	align-items: flex-end;
+}
+
+.sheet {
+	width: 100%;
+	background: var(--surface-2, #1e1e2e);
+	border-radius: 18px 18px 0 0;
+	padding: 0 1.25rem 2rem;
+	border-top: 0.5px solid rgba(255, 255, 255, 0.1);
+}
+
+.sheetHandle {
+	width: 40px;
+	height: 4px;
+	border-radius: 2px;
+	background: rgba(255, 255, 255, 0.25);
+	margin: 12px auto 18px;
+}
+
+.sheetIconWrap {
+	width: 52px;
+	height: 52px;
+	border-radius: 14px;
+	background: rgba(255, 255, 255, 0.1);
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	margin: 0 auto 10px;
+	overflow: hidden;
+}
+
+.sheetIcon {
+	width: 36px;
+	height: 36px;
+	object-fit: contain;
+}
+
+.sheetName {
+	font-size: 1rem;
+	font-weight: 700;
+	color: #ffffff;
+	text-align: center;
+	margin-bottom: 4px;
+}
+
+.sheetDesc {
+	font-size: 0.8125rem;
+	color: rgba(255, 255, 255, 0.55);
+	text-align: center;
+	margin-bottom: 20px;
+	line-height: 1.4;
+}
+
+.sheetBtns {
+	display: flex;
+	flex-direction: column;
+	gap: 10px;
+}
+
+/* Shared button base */
+.btnGo,
+.btnFaq {
+	width: 100%;
+	padding: 13px 16px;
+	border-radius: 12px;
+	font-size: 0.9375rem;
+	font-weight: 700;
+	cursor: pointer;
+	border: none;
+	white-space: nowrap;
+	letter-spacing: 0.01em;
+}
+
+.btnGo {
+	background: #2563eb;
+	color: #ffffff;
+}
+
+.btnFaq {
+	background: rgba(255, 255, 255, 0.1);
+	color: rgba(255, 255, 255, 0.85);
+	border: 0.5px solid rgba(255, 255, 255, 0.15);
+}
+
+/* ── Desktop popover ── */
+.popover {
+	background: var(--surface-2, #1e1e2e);
+	border: 0.5px solid rgba(255, 255, 255, 0.15);
+	border-radius: 12px;
+	overflow: hidden;
+	box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+}
+
+/* Arrow pointing left (popover is to the right of pin) */
+.popArrowLeft {
+	position: absolute;
+	left: -6px;
+	top: 28px;
+	width: 10px;
+	height: 10px;
+	background: var(--surface-2, #1e1e2e);
+	border-left: 0.5px solid rgba(255, 255, 255, 0.15);
+	border-bottom: 0.5px solid rgba(255, 255, 255, 0.15);
+	transform: rotate(45deg);
+}
+
+/* Arrow pointing right (popover is to the left of pin) */
+.popArrowRight {
+	position: absolute;
+	right: -6px;
+	top: 28px;
+	width: 10px;
+	height: 10px;
+	background: var(--surface-2, #1e1e2e);
+	border-right: 0.5px solid rgba(255, 255, 255, 0.15);
+	border-top: 0.5px solid rgba(255, 255, 255, 0.15);
+	transform: rotate(45deg);
+}
+
+.popHeader {
+	padding: 12px 14px 10px;
+	border-bottom: 0.5px solid rgba(255, 255, 255, 0.08);
+}
+
+.popTitle {
+	font-size: 0.875rem;
+	font-weight: 700;
+	color: #ffffff;
+	margin-bottom: 2px;
+}
+
+.popDesc {
+	font-size: 0.75rem;
+	color: rgba(255, 255, 255, 0.5);
+	line-height: 1.4;
+}
+
+.popActions {
+	display: flex;
+	gap: 6px;
+	padding: 10px 12px;
+}
+
+.popBtn {
+	flex: 1;
+	padding: 8px 10px;
+	border-radius: 8px;
+	font-size: 0.8125rem;
+	font-weight: 700;
+	cursor: pointer;
+	border: none;
+	white-space: nowrap;
+	text-align: center;
+}
+
+/* Full width when no FAQ button */
+.popBtnFull {
+	flex: 1 1 100%;
+}
+
+.popBtnGo {
+	background: #2563eb;
+	color: #ffffff;
+}
+
+.popBtnFaq {
+	background: rgba(255, 255, 255, 0.08);
+	color: rgba(255, 255, 255, 0.8);
+	border: 0.5px solid rgba(255, 255, 255, 0.15);
+}
+
+/* Locked state */
+.lockedMsg {
+	font-size: 0.8125rem;
+	color: rgba(255, 255, 255, 0.5);
+	text-align: center;
+	padding: 6px 0;
+	width: 100%;
+}

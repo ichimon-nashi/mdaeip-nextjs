@@ -1,20 +1,13 @@
 "use client";
 
-// MapHotspot — per-landmark clip-path reveal
+// MapHotspot
 // ─────────────────────────────────────────────────────────────────────────────
-// onHotspotEnter passes this hotspot's id up to DesktopMap.
-// DesktopMap looks up the corresponding clipPath and passes it to MapContainer.
-// This way each landmark reveals only its own building polygon on hover.
-//
-// Locked behaviour:
-//   locked=true (no permission): gray pin + lock badge + toast on click
-//   regionLocked=true (whole region inaccessible): suppresses color reveal
-//   entirely — no point showing a color flash over a fully locked zone.
+// Renders the pin + label. Navigation and FAQ are handled by the parent
+// (DesktopMap/MobileMap/LandscapeMap) via onHotspotClick callback.
+// This keeps Supabase queries out of individual hotspot renders.
 // ─────────────────────────────────────────────────────────────────────────────
 
-import { useRouter } from "next/navigation";
 import Image from "next/image";
-import toast from "react-hot-toast";
 import styles from "../../styles/Map.module.css";
 
 const MapHotspot = ({
@@ -26,30 +19,18 @@ const MapHotspot = ({
 	color = "#6b7280",
 	locked = false,
 	regionLocked = false,
-	path,
-	onOverride, // optional: fires instead of router.push when set
-	onHotspotEnter,
-	onHotspotLeave,
+	onHotspotClick,   // (id, anchorRect) => void — parent handles nav + FAQ
+	onHotspotEnter,   // (id) => void — desktop clip-path reveal
+	onHotspotLeave,   // () => void
 }) => {
-	const router = useRouter();
-
-	const handleClick = () => {
-		if (locked) {
-			toast.error(`${label}：權限不足`, { duration: 2000 });
-			return;
+	const handleClick = (e) => {
+		if (onHotspotClick) {
+			onHotspotClick(id, e.currentTarget.getBoundingClientRect());
 		}
-		if (onOverride) {
-			onOverride();
-			return;
-		}
-		router.push(path);
 	};
 
 	const handleMouseEnter = () => {
-		// Suppress reveal for fully locked regions — no useful signal to the user
-		if (!regionLocked && onHotspotEnter) {
-			onHotspotEnter(id);
-		}
+		if (!regionLocked && onHotspotEnter) onHotspotEnter(id);
 	};
 
 	const handleMouseLeave = () => {
@@ -66,12 +47,9 @@ const MapHotspot = ({
 			aria-label={locked ? `${label} (需要權限)` : label}
 			title={label}
 		>
-			{/* Pin — lock badge inside so it's absolute to pin, not flex sibling */}
 			<div
 				className={styles.hotspotPin}
-				style={{
-					backgroundColor: locked ? "#555" : color,
-				}}
+				style={{ backgroundColor: locked ? "#555" : color }}
 			>
 				{iconSrc && (
 					<Image
@@ -81,9 +59,7 @@ const MapHotspot = ({
 						height={20}
 						style={{
 							objectFit: "contain",
-							filter: locked
-								? "grayscale(1) brightness(0.7)"
-								: "none",
+							filter: locked ? "grayscale(1) brightness(0.7)" : "none",
 						}}
 					/>
 				)}
@@ -93,8 +69,6 @@ const MapHotspot = ({
 					</div>
 				)}
 			</div>
-
-			{/* Label */}
 			<span className={styles.hotspotLabel}>{label}</span>
 		</button>
 	);

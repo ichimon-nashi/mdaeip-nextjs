@@ -1,23 +1,15 @@
 "use client";
 
-// DesktopMap — per-landmark clip-path color-reveal
-// ─────────────────────────────────────────────────────────────────────────────
-// Each hotspot uses circle() clip-path: circle(radius at left top).
-// On hover, that hotspot's clipPath is passed to MapContainer which applies
-// it to the color image layer — only that building lights up.
-//
-// REGION_POLYGONS are separate — used only for SVG locked-zone darkening.
-// They use "x,y" space-separated SVG points format with viewBox="0 0 100 100"
-// so percentages map directly (e.g. "25,5" = 25% from left, 5% from top).
-//
-// HOW TO CALIBRATE:
-// 1. Run this in devtools console:
-//    const img = document.querySelector('[alt="豪神APP navigation map"]');
-//    const c = img.parentElement;
-//    c.style.cursor = 'crosshair';
-//    c.addEventListener('mousemove', e => {
-//      const r = c.getBoundingClientRect();
-//      const x = ((e.clientX - r.left) / r.width * 100).toFixed(2);
+import { useState, useCallback } from "react";
+import { useRouter } from "next/navigation";
+import toast from "react-hot-toast";
+import MapContainer from "./MapContainer";
+import MapHotspot from "./MapHotspot";
+import HotspotPopover from "../faq/HotspotPopover";
+import FaqViewer from "../faq/FaqViewer";
+import { hasAppAccess } from "../../lib/permissionHelpers";
+import { getFaqByHotspot } from "../../lib/faqHelpers";
+import styles from "../../styles/Map.module.css";
 //      const y = ((e.clientY - r.top) / r.height * 100).toFixed(2);
 //      document.title = `${x}% , ${y}%`;
 //    });
@@ -36,12 +28,6 @@
 // 5. Reset test: ci.style.clipPath = 'polygon(0%0%,0%0%,0%0%,0%0%,0%0%,0%0%,0%0%,0%0%,0%0%,0%0%)';
 // ─────────────────────────────────────────────────────────────────────────────
 
-import { useState, useCallback } from "react";
-import MapContainer from "./MapContainer";
-import MapHotspot from "./MapHotspot";
-import { hasAppAccess } from "../../lib/permissionHelpers";
-import styles from "../../styles/Map.module.css";
-
 // ── Hotspot definitions ───────────────────────────────────────────────────────
 // clipPath: 10-point polygon tracing the building's footprint.
 // TODO: replace placeholder clipPaths with real measured values.
@@ -57,6 +43,7 @@ const HOTSPOTS = [
 		path: "/dashboard",
 		section: "roster",
 		region: "空服",
+		isSchedule: true,
 		left: "47.69%",
 		top: "24%",
 		clipPath: "circle(13% at 47.69% 24%)",
@@ -200,6 +187,9 @@ const HOTSPOTS = [
 
 const DesktopMap = ({ user, onScheduleOpen }) => {
 	const [hoveredClipPath, setHoveredClipPath] = useState(null);
+	const [popover,   setPopover]   = useState(null); // { hotspot, hasFaq, faqEntries, anchorX, anchorY }
+	const [faqViewer, setFaqViewer] = useState(null); // { featureName, entries }
+	const router = useRouter();
 
 	const isHotspotLocked = useCallback(
 		(hotspot) => {
@@ -215,8 +205,51 @@ const DesktopMap = ({ user, onScheduleOpen }) => {
 	}, []);
 
 	const handleHotspotLeave = useCallback(() => {
-		setHoveredClipPath(null);
-	}, []);
+		// Don't clear clip-path if popover is showing — keeps the
+		// active hotspot highlighted while the user reads the popover
+		if (!popover) setHoveredClipPath(null);
+	}, [popover]);
+
+	const handleHotspotClick = useCallback(async (id, rect) => {
+		const hotspot = HOTSPOTS.find((h) => h.id === id);
+		if (!hotspot) return;
+
+		const locked = hotspot.section !== null && !hasAppAccess(user, hotspot.section);
+
+		if (locked) {
+			toast.error(`${hotspot.label}：權限不足`, { duration: 2000 });
+			return;
+		}
+
+		// Fetch FAQ entries for this hotspot
+		const faqEntries = await getFaqByHotspot(id);
+		const hasFaq = faqEntries.length > 0;
+
+		if (!hasFaq) {
+			// No FAQ — navigate directly
+			if (hotspot.isSchedule) { onScheduleOpen?.(); return; }
+			router.push(hotspot.path);
+			return;
+		}
+
+		// Show popover with choice
+		setPopover({
+			hotspot: { ...hotspot, iconSrc: hotspot.icon, locked },
+			hasFaq:  true,
+			faqEntries,
+			anchorX: rect.left + rect.width / 2,
+			anchorY: rect.top  + rect.height / 2,
+		});
+	}, [user, router, onScheduleOpen]);
+
+	const handleOpenFaq = useCallback(() => {
+		if (!popover) return;
+		setFaqViewer({
+			featureName: popover.hotspot.label,
+			entries:     popover.faqEntries,
+		});
+		setPopover(null);
+	}, [popover]);
 
 	return (
 		<div className={styles.desktopMapWrapper}>
@@ -236,13 +269,35 @@ const DesktopMap = ({ user, onScheduleOpen }) => {
 						iconSrc={h.icon}
 						color={h.color}
 						locked={isHotspotLocked(h)}
-						path={h.id === "dashboard" ? null : h.path}
-						onOverride={h.id === "dashboard" ? onScheduleOpen : null}
+						onHotspotClick={handleHotspotClick}
 						onHotspotEnter={handleHotspotEnter}
 						onHotspotLeave={handleHotspotLeave}
 					/>
 				))}
 			</MapContainer>
+
+			{/* Desktop popover */}
+			{popover && (
+				<HotspotPopover
+					hotspot={popover.hotspot}
+					hasFaq={popover.hasFaq}
+					anchorX={popover.anchorX}
+					anchorY={popover.anchorY}
+					isMobile={false}
+					onClose={() => { setPopover(null); setHoveredClipPath(null); }}
+					onOpenFaq={handleOpenFaq}
+					onSchedule={onScheduleOpen}
+				/>
+			)}
+
+			{/* FAQ viewer */}
+			{faqViewer && (
+				<FaqViewer
+					featureName={faqViewer.featureName}
+					entries={faqViewer.entries}
+					onClose={() => setFaqViewer(null)}
+				/>
+			)}
 		</div>
 	);
 };

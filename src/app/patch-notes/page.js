@@ -1,79 +1,111 @@
 "use client";
 
-import { useState, useMemo } from "react";
-import { patchUpdates } from "../../data/PatchUpdates";
+import { useState, useEffect, useCallback } from "react";
 import styles from "../../styles/patch-notes.module.css";
+import { useAuth } from "../../contexts/AuthContext";
+import { isSpecialAdmin } from "../../lib/permissionHelpers";
+import {
+  getAllFaqEntries,
+  createFaqEntry,
+  updateFaqEntry,
+  deleteFaqEntry,
+  getFaqCounts,
+} from "../../lib/faqHelpers";
+import FaqEditor from "../../components/faq/FaqEditor";
+import toast from "react-hot-toast";
 
-// ── Deterministic color from app name (no hardcoded map) ─────────────────
-// Returns one of 10 distinct hues based on a simple hash so new apps
-// automatically get a consistent color without any code changes.
-function appColor(name) {
-  const PALETTE = [
-    { bg: "#dbeafe", text: "#1d4ed8" }, // blue
-    { bg: "#d1fae5", text: "#065f46" }, // green
-    { bg: "#ede9fe", text: "#6d28d9" }, // purple
-    { bg: "#fee2e2", text: "#991b1b" }, // red
-    { bg: "#fef3c7", text: "#92400e" }, // amber
-    { bg: "#fce7f3", text: "#9d174d" }, // pink
-    { bg: "#e0f2fe", text: "#0369a1" }, // sky
-    { bg: "#f0fdf4", text: "#166534" }, // lime
-    { bg: "#fdf4ff", text: "#7e22ce" }, // fuchsia
-    { bg: "#fff7ed", text: "#9a3412" }, // orange
-  ];
-  let hash = 0;
-  for (let i = 0; i < name.length; i++) hash = (hash * 31 + name.charCodeAt(i)) & 0xffff;
-  return PALETTE[hash % PALETTE.length];
-}
-
-// ── Group entries by date, newest first ──────────────────────────────────
-function groupByDate(updates) {
-  const map = {};
-  for (const u of updates) {
-    if (!map[u.date]) map[u.date] = [];
-    map[u.date].push(u);
-  }
-  return Object.entries(map).sort(([a], [b]) => b.localeCompare(a));
-}
-
-// ── Format date nicely ────────────────────────────────────────────────────
-function formatDate(iso) {
-  const [y, m, d] = iso.split("-");
-  return `${y}年${parseInt(m)}月${parseInt(d)}日`;
-}
-
-// ── App summary: unique apps with total update counts ────────────────────
-function buildAppSummary(updates) {
-  const map = {};
-  for (const u of updates) {
-    if (!map[u.appName]) map[u.appName] = 0;
-    map[u.appName] += u.updateInfo.length;
-  }
-  return Object.entries(map).sort(([, a], [, b]) => b - a);
-}
+// ── All hotspots — used for the feature selector in FaqEditor ────────────────
+// Keep in sync with DesktopMap.js / MobileMap.js HOTSPOTS arrays.
+const ALL_HOTSPOTS = [
+  { id: "dashboard",          label: "我的班表"   },
+  { id: "schedule",           label: "換班系統"   },
+  { id: "gday",               label: "GDay劃假"  },
+  { id: "etr",                label: "eTR產生器" },
+  { id: "turtle",             label: "Turtle"    },
+  { id: "mrt",                label: "疲勞管理"   },
+  { id: "dispatch",           label: "派遣表"    },
+  { id: "duty-change-review", label: "換班審核"   },
+  { id: "ground-schedule",    label: "地勤班表"   },
+  { id: "ground-roster",      label: "地勤排班"   },
+  { id: "database",           label: "資料庫管理" },
+  { id: "patch-notes",        label: "Patch內容" },
+];
 
 export default function PatchNotes() {
-  const [filterApp,    setFilterApp]    = useState("ALL");
-  const [expandedDates, setExpandedDates] = useState({});
+  const { user } = useAuth();
+  const isAdmin = isSpecialAdmin(user);
 
-  const appSummary = useMemo(() => buildAppSummary(patchUpdates), []);
+  // ── Tab state ───────────────────────────────────────────────────────────────
+  const [tab, setTab] = useState("faq"); // "faq" | "admin"
 
-  const filtered = useMemo(() =>
-    filterApp === "ALL"
-      ? patchUpdates
-      : patchUpdates.filter((u) => u.appName === filterApp),
-    [filterApp]
-  );
+  // ── FAQ state ───────────────────────────────────────────────────────────────
+  const [faqEntries,   setFaqEntries]   = useState([]);
+  const [faqCounts,    setFaqCounts]    = useState({});
+  const [faqFilter,    setFaqFilter]    = useState("ALL");
+  const [faqExpanded,  setFaqExpanded]  = useState(null);
+  const [faqLoading,   setFaqLoading]   = useState(false);
 
-  const grouped = useMemo(() => groupByDate(filtered), [filtered]);
+  // ── Admin state ─────────────────────────────────────────────────────────────
+  const [adminFilter,  setAdminFilter]  = useState(ALL_HOTSPOTS[0].id);
+  const [editorEntry,  setEditorEntry]  = useState(undefined); // undefined=closed, null=new, obj=edit
+  const [deleting,     setDeleting]     = useState(null);
 
-  const toggleDate = (date) =>
-    setExpandedDates((prev) => ({ ...prev, [date]: !prev[date] }));
+  // ── Load FAQ data when FAQ or admin tab opens ───────────────────────────────
+  const loadFaq = useCallback(async () => {
+    setFaqLoading(true);
+    const [entries, counts] = await Promise.all([
+      getAllFaqEntries(),
+      getFaqCounts(),
+    ]);
+    setFaqEntries(entries);
+    setFaqCounts(counts);
+    if (entries.length > 0) setFaqExpanded(entries[0].id);
+    setFaqLoading(false);
+  }, []);
 
-  // Default: expand the most recent date only
-  const isExpanded = (date, idx) =>
-    expandedDates[date] !== undefined ? expandedDates[date] : idx === 0;
+  useEffect(() => {
+    if (tab === "faq" || tab === "admin") loadFaq();
+  }, [tab, loadFaq]);
 
-  const totalUpdates = patchUpdates.reduce((n, u) => n + u.updateInfo.length, 0);
+  // ── Patch notes helpers (unchanged) ────────────────────────────────────────
+
+  // ── FAQ helpers ─────────────────────────────────────────────────────────────
+  const faqFiltered = faqFilter === "ALL"
+    ? faqEntries
+    : faqEntries.filter((e) => e.hotspot_id === faqFilter);
+
+  const faqFeatures = [
+    { id: "ALL", label: "全部" },
+    ...ALL_HOTSPOTS.filter((h) => faqEntries.some((e) => e.hotspot_id === h.id)),
+  ];
+
+  // ── Admin helpers ───────────────────────────────────────────────────────────
+  const adminEntries = faqEntries.filter((e) => e.hotspot_id === adminFilter);
+
+  const handleSave = async (payload) => {
+    if (editorEntry?.id) {
+      await updateFaqEntry(editorEntry.id, payload);
+      toast.success("已更新");
+    } else {
+      await createFaqEntry(payload);
+      toast.success("已新增");
+    }
+    await loadFaq();
+  };
+
+  const handleDelete = async (id) => {
+    if (!window.confirm("確定刪除此條目？")) return;
+    setDeleting(id);
+    try {
+      await deleteFaqEntry(id);
+      toast.success("已刪除");
+      await loadFaq();
+    } catch {
+      toast.error("刪除失敗");
+    } finally {
+      setDeleting(null);
+    }
+  };
 
   return (
     <div className={styles.page}>
@@ -82,127 +114,214 @@ export default function PatchNotes() {
       <div className={styles.header}>
         <div>
           <h1 className={styles.title}>Patch Notes</h1>
-          <p className={styles.subtitle}>更新紀錄 — {totalUpdates} 項更新 · {appSummary.length} 個應用程式</p>
+          <p className={styles.subtitle}>說明文件 · 功能FAQ</p>
         </div>
       </div>
 
-      <div className={styles.layout}>
+      {/* ── Tab bar ── */}
+      <div className={styles.tabBar}>
+        <button
+          className={`${styles.tabBtn} ${tab === "faq" ? styles.tabActive : ""}`}
+          onClick={() => setTab("faq")}
+        >
+          說明 FAQ
+        </button>
+        {isAdmin && (
+          <button
+            className={`${styles.tabBtn} ${styles.tabAdminVisible} ${tab === "admin" ? styles.tabActive : ""}`}
+            onClick={() => setTab("admin")}
+          >
+            ⚙ 管理
+          </button>
+        )}
+      </div>
 
-        {/* ── Sidebar: app filter ── */}
-        <aside className={styles.sidebar}>
-          <div className={styles.sidebarCard}>
-            <div className={styles.sidebarTitle}>應用程式</div>
-
-            <button
-              className={`${styles.appFilterBtn} ${filterApp === "ALL" ? styles.appFilterActive : ""}`}
-              onClick={() => setFilterApp("ALL")}
-            >
-              <span className={styles.appFilterName}>全部</span>
-              <span className={styles.appFilterCount}>{totalUpdates}</span>
-            </button>
-
-            {appSummary.map(([name, count]) => {
-              const col = appColor(name);
-              const active = filterApp === name;
-              return (
+      {/* ── FAQ TAB ── */}
+      {tab === "faq" && (
+        <div className={styles.layout}>
+          {/* Sidebar: feature filter */}
+          <aside className={styles.sidebar}>
+            <div className={styles.sidebarCard}>
+              <div className={styles.sidebarTitle}>功能頁面</div>
+              {faqFeatures.map((f) => (
                 <button
-                  key={name}
-                  className={`${styles.appFilterBtn} ${active ? styles.appFilterActive : ""}`}
-                  style={active ? { background: col.bg, borderColor: col.text + "66" } : {}}
-                  onClick={() => setFilterApp(name)}
+                  key={f.id}
+                  className={`${styles.appFilterBtn} ${faqFilter === f.id ? styles.appFilterActive : ""}`}
+                  onClick={() => setFaqFilter(f.id)}
                 >
-                  <span
-                    className={styles.appDot}
-                    style={{ background: col.text }}
-                  />
-                  <span className={styles.appFilterName}>{name}</span>
-                  <span
-                    className={styles.appFilterCount}
-                    style={active ? { background: col.text, color: "#fff" } : {}}
-                  >
-                    {count}
-                  </span>
+                  <span className={styles.appFilterName}>{f.label}</span>
+                  {f.id !== "ALL" && (
+                    <span className={styles.appFilterCount}>{faqCounts[f.id] || 0}</span>
+                  )}
                 </button>
-              );
-            })}
-          </div>
-        </aside>
+              ))}
+            </div>
+          </aside>
 
-        {/* ── Timeline ── */}
-        <main className={styles.timeline}>
-          {grouped.length === 0 ? (
-            <div className={styles.empty}>沒有符合的更新記錄</div>
-          ) : (
-            grouped.map(([date, entries], idx) => {
-              const open = isExpanded(date, idx);
-              // collect all unique apps for this date group
-              const appsOnDate = [...new Set(entries.map((e) => e.appName))];
+          {/* FAQ entries */}
+          <main className={styles.timeline}>
+            {faqLoading ? (
+              <div className={styles.empty}>載入中...</div>
+            ) : faqFiltered.length === 0 ? (
+              <div className={styles.empty}>暫無說明內容</div>
+            ) : (
+              faqFiltered.map((entry) => {
+                const TYPE_COLORS = {
+                  "說明": { bg: "#d1fae5", text: "#065f46" },
+                  "更新": { bg: "#dbeafe", text: "#1d4ed8" },
+                };
+                const col  = TYPE_COLORS[entry.type] || TYPE_COLORS["說明"];
+                const open = faqExpanded === entry.id;
+                const sections = Array.isArray(entry.sections) ? entry.sections : [];
+                return (
+                  <div key={entry.id} className={styles.dateGroup}>
+                    <button
+                      className={styles.dateHeader}
+                      onClick={() => setFaqExpanded(open ? null : entry.id)}
+                    >
+                      <div className={styles.dateHeaderLeft}>
+                        <span className={styles.dateDot} style={{ background: col.text }} />
+                        <span
+                          className={styles.dateTag}
+                          style={{ background: col.bg, color: col.text, marginRight: 6 }}
+                        >
+                          {entry.type}
+                        </span>
+                        <span className={styles.dateText}>{entry.title}</span>
+                      </div>
+                      <span className={styles.dateChevron}>{open ? "▲" : "▼"}</span>
+                    </button>
+                    {open && (
+                      <div className={styles.dateEntries}>
+                        {sections
+                          .sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0))
+                          .map((sec, i) => (
+                            <div key={i} style={{ marginBottom: 12 }}>
+                              {sec.content && (
+                                <p style={{ fontSize: "0.875rem", color: "var(--text-secondary)", lineHeight: 1.65 }}>
+                                  {sec.content}
+                                </p>
+                              )}
+                              {sec.image_url && (
+                                // eslint-disable-next-line @next/next/no-img-element
+                                <img
+                                  src={sec.image_url}
+                                  alt={`截圖 ${i + 1}`}
+                                  style={{ maxWidth: "700px", width: "100%", display: "block", borderRadius: 8, marginTop: 8, border: "0.5px solid rgba(255,255,255,0.1)" }}
+                                />
+                              )}
+                            </div>
+                          ))}
+                        {sections.length === 0 && (
+                          <p style={{ fontSize: "0.875rem", color: "var(--text-muted)" }}>尚無內容</p>
+                        )}
+                      </div>
+                    )}
+                    <div className={styles.timelineLine} />
+                  </div>
+                );
+              })
+            )}
+          </main>
+        </div>
+      )}
 
-              return (
-                <div key={date} className={styles.dateGroup}>
+      {/* ── ADMIN TAB ── */}
+      {tab === "admin" && isAdmin && (
+        <div className={styles.layout}>
+          {/* Sidebar: feature selector */}
+          <aside className={styles.sidebar}>
+            <div className={styles.sidebarCard}>
+              <div className={styles.sidebarTitle}>功能頁面</div>
+              {ALL_HOTSPOTS.map((h) => (
+                <button
+                  key={h.id}
+                  className={`${styles.appFilterBtn} ${adminFilter === h.id ? styles.appFilterActive : ""}`}
+                  onClick={() => setAdminFilter(h.id)}
+                >
+                  <span className={styles.appFilterName}>{h.label}</span>
+                  <span className={styles.appFilterCount}>{faqCounts[h.id] || 0}</span>
+                </button>
+              ))}
+            </div>
+          </aside>
 
-                  {/* Date header — always visible, click to toggle */}
-                  <button
-                    className={styles.dateHeader}
-                    onClick={() => toggleDate(date)}
-                  >
-                    <div className={styles.dateHeaderLeft}>
-                      <span className={styles.dateDot} />
-                      <span className={styles.dateText}>{formatDate(date)}</span>
-                      <div className={styles.dateTags}>
-                        {appsOnDate.map((a) => {
-                          const col = appColor(a);
-                          return (
-                            <span
-                              key={a}
-                              className={styles.dateTag}
-                              style={{ background: col.bg, color: col.text }}
-                            >
-                              {a}
-                            </span>
-                          );
-                        })}
+          {/* Admin entry list */}
+          <main className={styles.timeline}>
+            <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 12 }}>
+              <button
+                className={styles.appFilterBtn}
+                style={{ background: "var(--bg-accent)", color: "var(--text-accent)", border: "0.5px solid var(--border-accent)", width: "auto", padding: "6px 14px" }}
+                onClick={() => setEditorEntry(null)}
+              >
+                + 新增
+              </button>
+            </div>
+
+            {faqLoading ? (
+              <div className={styles.empty}>載入中...</div>
+            ) : adminEntries.length === 0 ? (
+              <div className={styles.empty}>尚無說明條目 — 點擊新增</div>
+            ) : (
+              adminEntries.map((entry) => {
+                const TYPE_COLORS = {
+                  "說明": { bg: "#d1fae5", text: "#065f46" },
+                  "更新": { bg: "#dbeafe", text: "#1d4ed8" },
+                };
+                const col = TYPE_COLORS[entry.type] || TYPE_COLORS["說明"];
+                return (
+                  <div key={entry.id} className={styles.entryCard} style={{ display: "flex", alignItems: "flex-start", gap: 10 }}>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <span
+                        className={styles.entryAppBadge}
+                        style={{ background: col.bg, color: col.text, marginBottom: 4 }}
+                      >
+                        {entry.type}
+                      </span>
+                      <div style={{ fontSize: "0.875rem", fontWeight: 500, marginBottom: 2 }}>
+                        {entry.title}
+                      </div>
+                      <div style={{ fontSize: "0.75rem", color: "var(--text-muted)" }}>
+                        {entry.sections?.length || 0} 個段落 · {new Date(entry.updated_at).toLocaleDateString("zh-TW")}
                       </div>
                     </div>
-                    <span className={styles.dateChevron}>{open ? "▲" : "▼"}</span>
-                  </button>
-
-                  {/* Entries — hidden when collapsed */}
-                  {open && (
-                    <div className={styles.dateEntries}>
-                      {entries.map((entry, ei) => {
-                        const col = appColor(entry.appName);
-                        return (
-                          <div key={ei} className={styles.entryCard}>
-                            <span
-                              className={styles.entryAppBadge}
-                              style={{ background: col.bg, color: col.text }}
-                            >
-                              {entry.appName}
-                            </span>
-                            <ul className={styles.entryList}>
-                              {entry.updateInfo.map((info, ii) => (
-                                <li key={ii} className={styles.entryItem}>
-                                  <span className={styles.entryBullet} style={{ background: col.text }} />
-                                  {info}
-                                </li>
-                              ))}
-                            </ul>
-                          </div>
-                        );
-                      })}
+                    <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
+                      <button
+                        className={styles.appFilterBtn}
+                        style={{ width: "auto", padding: "4px 10px", fontSize: "0.75rem" }}
+                        onClick={() => setEditorEntry(entry)}
+                      >
+                        編輯
+                      </button>
+                      <button
+                        className={styles.appFilterBtn}
+                        style={{ width: "auto", padding: "4px 10px", fontSize: "0.75rem", color: "var(--text-danger)", borderColor: "var(--border-danger)", opacity: deleting === entry.id ? 0.5 : 1 }}
+                        onClick={() => handleDelete(entry.id)}
+                        disabled={deleting === entry.id}
+                      >
+                        刪除
+                      </button>
                     </div>
-                  )}
+                  </div>
+                );
+              })
+            )}
+          </main>
+        </div>
+      )}
 
-                  {/* Timeline connector line */}
-                  <div className={styles.timelineLine} />
-                </div>
-              );
-            })
-          )}
-        </main>
+      {/* ── FAQ Editor modal (admin only) ── */}
+      {editorEntry !== undefined && (
+        <FaqEditor
+          entry={editorEntry}
+          hotspotId={adminFilter}
+          featureName={ALL_HOTSPOTS.find((h) => h.id === adminFilter)?.label ?? adminFilter}
+          allHotspots={ALL_HOTSPOTS}
+          onSave={handleSave}
+          onClose={() => setEditorEntry(undefined)}
+        />
+      )}
 
-      </div>
     </div>
   );
 }

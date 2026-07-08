@@ -13,10 +13,15 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { useEffect, useCallback, useState } from "react";
+import { useRouter } from "next/navigation";
+import toast from "react-hot-toast";
 import useEmblaCarousel from "embla-carousel-react";
 import MapContainer from "./MapContainer";
 import MapHotspot from "./MapHotspot";
+import HotspotPopover from "../faq/HotspotPopover";
+import FaqViewer from "../faq/FaqViewer";
 import { hasAppAccess } from "../../lib/permissionHelpers";
+import { getFaqByHotspot } from "../../lib/faqHelpers";
 import styles from "../../styles/Map.module.css";
 
 // TABLET_BREAKPOINT: viewport width at which tablet coordinates are used.
@@ -113,7 +118,7 @@ const REGIONS = [
 				tabletTop: "32%",
 			},
 			{
-				id: "review",
+				id: "duty-change-review",
 				label: "換班審核",
 				icon: "/assets/approved.png",
 				color: "#be185d",
@@ -123,7 +128,7 @@ const REGIONS = [
 				top: "45%",
 				tabletLeft: "47%",
 				tabletTop: "45%",
-			},			
+			},
 			{
 				id: "dispatch",
 				label: "派遣表",
@@ -206,12 +211,12 @@ const REGIONS = [
 ];
 
 const MobileMap = ({ user, onScheduleOpen }) => {
-	const [emblaRef, emblaApi] = useEmblaCarousel({
-		loop: true,
-		dragFree: false,
-	});
+	const [emblaRef, emblaApi] = useEmblaCarousel({ loop: true, dragFree: false });
 	const [selectedIndex, setSelectedIndex] = useState(0);
-	const [isTablet, setIsTablet] = useState(false);
+	const [isTablet,      setIsTablet]      = useState(false);
+	const [sheet,         setSheet]         = useState(null); // { hotspot, hasFaq, faqEntries }
+	const [faqViewer,     setFaqViewer]     = useState(null); // { featureName, entries }
+	const router = useRouter();
 
 	const onSelect = useCallback(() => {
 		if (!emblaApi) return;
@@ -247,8 +252,46 @@ const MobileMap = ({ user, onScheduleOpen }) => {
 	// Pick coordinate set based on detected device width
 	const getCoords = (h) => ({
 		left: isTablet && h.tabletLeft ? h.tabletLeft : h.left || "50%",
-		top: isTablet && h.tabletTop ? h.tabletTop : h.top || "50%",
+		top:  isTablet && h.tabletTop  ? h.tabletTop  : h.top  || "50%",
 	});
+
+	const handleHotspotClick = useCallback(async (id) => {
+		// Find hotspot across all regions
+		let found = null;
+		for (const region of REGIONS) {
+			const h = region.hotspots.find((h) => h.id === id);
+			if (h) { found = h; break; }
+		}
+		if (!found) return;
+
+		const locked = found.section !== null && !hasAppAccess(user, found.section);
+
+		if (locked) {
+			toast.error(`${found.label}：權限不足`, { duration: 2000 });
+			return;
+		}
+
+		const faqEntries = await getFaqByHotspot(id);
+		const hasFaq = faqEntries.length > 0;
+
+		if (!hasFaq) {
+			if (found.isSchedule) { onScheduleOpen?.(); return; }
+			router.push(found.path);
+			return;
+		}
+
+		setSheet({
+			hotspot: { ...found, iconSrc: found.icon, locked },
+			hasFaq,
+			faqEntries,
+		});
+	}, [user, router, onScheduleOpen]);
+
+	const handleOpenFaq = useCallback(() => {
+		if (!sheet) return;
+		setFaqViewer({ featureName: sheet.hotspot.label, entries: sheet.faqEntries });
+		setSheet(null);
+	}, [sheet]);
 
 	return (
 		<div className={styles.mobileMapWrapper}>
@@ -284,12 +327,7 @@ const MobileMap = ({ user, onScheduleOpen }) => {
 												color={h.color}
 												locked={isHotspotLocked(h)}
 												regionLocked={regionLocked}
-												path={h.path}
-												onOverride={
-													h.isSchedule
-														? onScheduleOpen
-														: null
-												}
+												onHotspotClick={handleHotspotClick}
 											/>
 										);
 									})}
@@ -314,6 +352,23 @@ const MobileMap = ({ user, onScheduleOpen }) => {
 						aria-current={i === selectedIndex ? "true" : undefined}
 					/>
 				))}
+			{sheet && (
+				<HotspotPopover
+					hotspot={sheet.hotspot}
+					hasFaq={sheet.hasFaq}
+					isMobile={true}
+					onClose={() => setSheet(null)}
+					onOpenFaq={handleOpenFaq}
+					onSchedule={onScheduleOpen}
+				/>
+			)}
+			{faqViewer && (
+				<FaqViewer
+					featureName={faqViewer.featureName}
+					entries={faqViewer.entries}
+					onClose={() => setFaqViewer(null)}
+				/>
+			)}
 			</div>
 		</div>
 	);

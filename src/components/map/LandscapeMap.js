@@ -36,6 +36,9 @@ import { useRouter } from "next/navigation";
 import Image from "next/image";
 import toast from "react-hot-toast";
 import { hasAppAccess } from "../../lib/permissionHelpers";
+import { getFaqByHotspot } from "../../lib/faqHelpers";
+import HotspotPopover from "../faq/HotspotPopover";
+import FaqViewer from "../faq/FaqViewer";
 import styles from "../../styles/Map.module.css";
 
 // iPad Mini landscape = 1024px. iPhone 14 Pro Max landscape = 932px.
@@ -197,84 +200,44 @@ const HOTSPOTS = [
 	},
 ];
 
-// ── Per-region section keys for locked-region check ──────────────────────────
-const REGION_SECTIONS = {
-	roster: ["roster", "gday", "etr_generator", "turtle_ranking"],
-	mrt_checker: ["mrt_checker", "dispatch", "duty_change_review"],
-	ground_schedule: ["ground_schedule", "ground_roster"],
-	database_management: ["database_management"],
-};
-
-const regionOf = (section) => {
-	for (const [, sections] of Object.entries(REGION_SECTIONS)) {
-		if (sections.includes(section)) return sections;
-	}
-	return [];
-};
-
-// ── Single hotspot — receives pre-resolved left/top ───────────────────────────
-const LandscapeHotspot = ({ hotspot, left, top, user, onScheduleOpen }) => {
-	const router = useRouter();
-	const locked =
-		hotspot.section !== null && !hasAppAccess(user, hotspot.section);
-	const regionSections = regionOf(hotspot.section);
-	const regionLocked =
-		regionSections.length > 0 &&
-		regionSections.every((s) => !hasAppAccess(user, s));
-
-	const handleTap = () => {
-		if (locked) {
-			toast.error(`${hotspot.label}：權限不足`, { duration: 2000 });
-			return;
-		}
-		if (hotspot.isSchedule) {
-			onScheduleOpen?.();
-			return;
-		}
-		router.push(hotspot.path);
-	};
-
-	return (
-		<button
-			className={`${styles.hotspot} ${locked ? styles.hotspotLocked : styles.hotspotAccessible}`}
-			style={{ left, top }}
-			onClick={handleTap}
-			aria-label={locked ? `${hotspot.label} (需要權限)` : hotspot.label}
+// ── Single hotspot — fires onTap(id) to parent ───────────────────────────────
+const LandscapeHotspot = ({ hotspot, left, top, locked, onTap }) => (
+	<button
+		className={`${styles.hotspot} ${locked ? styles.hotspotLocked : styles.hotspotAccessible}`}
+		style={{ left, top }}
+		onClick={() => onTap(hotspot.id)}
+		aria-label={locked ? `${hotspot.label} (需要權限)` : hotspot.label}
+	>
+		<div
+			className={styles.hotspotPin}
+			style={{ backgroundColor: locked ? "#555" : hotspot.color }}
 		>
-			<div
-				className={styles.hotspotPin}
-				style={{
-					backgroundColor: locked ? "#555" : hotspot.color,
-				}}
-			>
-				{hotspot.icon && (
-					<Image
-						src={hotspot.icon}
-						alt={hotspot.label}
-						width={20}
-						height={20}
-						style={{
-							objectFit: "contain",
-							filter: locked
-								? "grayscale(1) brightness(0.7)"
-								: "none",
-						}}
-					/>
-				)}
-			</div>
-			{locked && (
-				<div className={styles.hotspotLockBadge} aria-hidden="true">
-					🔒
-				</div>
+			{hotspot.icon && (
+				<Image
+					src={hotspot.icon}
+					alt={hotspot.label}
+					width={20}
+					height={20}
+					style={{
+						objectFit: "contain",
+						filter: locked ? "grayscale(1) brightness(0.7)" : "none",
+					}}
+				/>
 			)}
-			<span className={styles.hotspotLabel}>{hotspot.label}</span>
-		</button>
-	);
-};
+		</div>
+		{locked && (
+			<div className={styles.hotspotLockBadge} aria-hidden="true">🔒</div>
+		)}
+		<span className={styles.hotspotLabel}>{hotspot.label}</span>
+	</button>
+);
 
 // ── Main component ────────────────────────────────────────────────────────────
 const LandscapeMap = ({ user, onScheduleOpen }) => {
 	const [isTablet, setIsTablet] = useState(false);
+	const [sheet,    setSheet]    = useState(null); // { hotspot, hasFaq, faqEntries }
+	const [faqViewer,setFaqViewer]= useState(null); // { featureName, entries }
+	const router = useRouter();
 
 	useEffect(() => {
 		const check = () =>
@@ -288,11 +251,46 @@ const LandscapeMap = ({ user, onScheduleOpen }) => {
 		};
 	}, []);
 
-	// Resolve coordinate set based on device width
 	const getCoords = (h) => ({
 		left: isTablet && h.tabletLeft ? h.tabletLeft : h.left,
-		top: isTablet && h.tabletTop ? h.tabletTop : h.top,
+		top:  isTablet && h.tabletTop  ? h.tabletTop  : h.top,
 	});
+
+	const isLocked = (h) =>
+		h.section !== null && !hasAppAccess(user, h.section);
+
+	const handleTap = async (id) => {
+		const hotspot = HOTSPOTS.find((h) => h.id === id);
+		if (!hotspot) return;
+
+		const locked = isLocked(hotspot);
+
+		if (locked) {
+			toast.error(`${hotspot.label}：權限不足`, { duration: 2000 });
+			return;
+		}
+
+		const faqEntries = await getFaqByHotspot(id);
+		const hasFaq = faqEntries.length > 0;
+
+		if (!hasFaq) {
+			if (hotspot.isSchedule) { onScheduleOpen?.(); return; }
+			router.push(hotspot.path);
+			return;
+		}
+
+		setSheet({
+			hotspot: { ...hotspot, iconSrc: hotspot.icon, locked },
+			hasFaq,
+			faqEntries,
+		});
+	};
+
+	const handleOpenFaq = () => {
+		if (!sheet) return;
+		setFaqViewer({ featureName: sheet.hotspot.label, entries: sheet.faqEntries });
+		setSheet(null);
+	};
 
 	return (
 		<div className={styles.landscapeMapWrapper}>
@@ -313,13 +311,34 @@ const LandscapeMap = ({ user, onScheduleOpen }) => {
 								hotspot={h}
 								left={left}
 								top={top}
-								user={user}
-								onScheduleOpen={onScheduleOpen}
+								locked={isLocked(h)}
+								onTap={handleTap}
 							/>
 						);
 					})}
 				</div>
 			</div>
+
+			{/* Bottom sheet */}
+			{sheet && (
+				<HotspotPopover
+					hotspot={sheet.hotspot}
+					hasFaq={sheet.hasFaq}
+					isMobile={true}
+					onClose={() => setSheet(null)}
+					onOpenFaq={handleOpenFaq}
+					onSchedule={onScheduleOpen}
+				/>
+			)}
+
+			{/* FAQ viewer */}
+			{faqViewer && (
+				<FaqViewer
+					featureName={faqViewer.featureName}
+					entries={faqViewer.entries}
+					onClose={() => setFaqViewer(null)}
+				/>
+			)}
 		</div>
 	);
 };
