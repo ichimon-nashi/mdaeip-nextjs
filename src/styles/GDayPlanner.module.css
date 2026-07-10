@@ -560,24 +560,29 @@
 
 /* Ghost cells — adjacent month, visually de-emphasized */
 .calendarCell.ghostCell {
-    background: rgba(255,255,255,0.015);
-    border-color: rgba(255,255,255,0.03);
+    background: rgba(0, 0, 0, 0.25);
+    border: 1px dashed rgba(255,255,255,0.08);
+    pointer-events: auto; /* still interactive */
 }
 
 .calendarCell.ghostPrev .calendarDayNumber,
 .calendarCell.ghostNext .calendarDayNumber {
-    color: rgba(255,255,255,0.18);
+    color: rgba(255,255,255,0.2);
+    font-style: italic;
+    font-weight: 400;
 }
 
-/* Chips on ghost cells get grayscale + opacity */
+/* Chips on ghost cells: heavily faded, desaturated */
 .calendarCell.ghostCell .droppedLeave {
-    filter: grayscale(80%) brightness(0.65);
-    opacity: 0.6;
+    filter: grayscale(100%) brightness(0.5);
+    opacity: 0.45;
+    cursor: default;
 }
 
 .calendarCell.ghostCell:hover {
-    background: rgba(255,255,255,0.04);
-    border-color: rgba(255,255,255,0.1);
+    background: rgba(255,255,255,0.03);
+    border-color: rgba(255,255,255,0.14);
+    border-style: dashed;
 }
 
 /* Drop target highlight */
