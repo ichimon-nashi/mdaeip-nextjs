@@ -41,19 +41,21 @@ const getUserGroup = (userData) => {
 
 const GIF_KEYS = {
 	M: [
-		"m_archer","m_bard","m_blackmage","m_calculator","m_chemist",
-		"m_darkknight","m_engineer","m_geomancer","m_hellknight","m_holyknight",
-		"m_hunter","m_knight","m_lancer","m_mediator","m_mimic","m_monk",
-		"m_monster","m_ninja","m_onionknight","m_oracle","m_pirate",
-		"m_ramza1","m_ramza2","m_ramza3","m_robot","m_samurai","m_soldier",
-		"m_squire","m_summoner","m_templeknight","m_thief","m_timemage","m_whitemage",
+		"m_ahriman","m_archer","m_bard","m_blackmage","m_bomb","m_calculator","m_chemist",
+		"m_chocobo","m_darkknight","m_dark_behemoth","m_engineer","m_geomancer","m_ghoul",
+		"m_goblin","m_hellknight","m_holyknight","m_hunter","m_juravis","m_knight","m_lancer",
+		"m_mediator","m_mimic","m_monk","m_monster","m_morbol","m_ninja","m_onionknight",
+		"m_oracle","m_pirate","m_pisco_demon","m_ramza1","m_ramza2","m_ramza3","m_red_panther",
+		"m_robot","m_samurai","m_skeleton","m_soldier","m_squire","m_summoner","m_templeknight",
+		"m_thief","m_tiamat","m_timemage","m_whitemage","m_wildbow","m_woodman",
 	],
 	F: [
-		"f_archer","f_blackmage","f_calculator","f_chemist","f_dancer",
-		"f_darkknight","f_dragon","f_dragoner","f_geomancer","f_hellknight",
-		"f_holyknight","f_knight","f_lancer","f_mediator","f_mimic","f_monk",
-		"f_ninja","f_onionknight","f_oracle","f_samurai","f_squire","f_summoner",
-		"f_templeknight","f_thief","f_timemage","f_whitemage",
+		"f_ahriman","f_archer","f_blackmage","f_bomb","f_calculator","f_chemist","f_chocobo",
+		"f_dancer","f_darkknight","f_dark_behemoth","f_dragon","f_dragoner","f_geomancer",
+		"f_ghoul","f_goblin","f_hellknight","f_holyknight","f_juravis","f_knight","f_lancer",
+		"f_mediator","f_mimic","f_monk","f_monster","f_morbol","f_ninja","f_onionknight",
+		"f_oracle","f_red_panther","f_samurai","f_skeleton","f_squire","f_summoner",
+		"f_templeknight","f_thief","f_tiamat","f_timemage","f_whitemage","f_wildbow","f_woodman",
 	],
 };
 
