@@ -36,7 +36,7 @@ const getUserGroup = (userData) => {
 	if (userData.id === 'admin' || userData.id === '51892') return 'admin';
 	if (GROUND_RANKS.includes(userData.rank)) return 'ground';
 	if (userData.rank === 'OTHER') return 'other';
-	return 'cabin';
+	return 'cabin'; 
 };
 
 const GIF_KEYS = {
