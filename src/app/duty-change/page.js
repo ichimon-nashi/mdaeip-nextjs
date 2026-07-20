@@ -484,42 +484,19 @@ function DutyChangeContent() {
 	// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [formData.selectedMonth, formData.allDuties, formData.selectedDates, userSchedule]);
 
-	// ── Check submission quota for current user this month ───────────────────
-	const checkSubmissionQuota = async (personAId, personBId, month) => {
-		// Count active requests for submission_number tracking (no hard limit enforced)
-		const [{ data: aData, error: aError }, { data: bData, error: bError }] = await Promise.all([
-			supabase
-				.from("duty_change_requests")
-				.select("id")
-				.eq("person_a_id", personAId)
-				.eq("month", month)
-				.in("status", ["pending", "approved"]),
-			supabase
-				.from("duty_change_requests")
-				.select("id")
-				.eq("person_b_id", personBId)
-				.eq("month", month)
-				.in("status", ["pending", "approved"]),
-		]);
-
-		if (aError || bError) throw new Error("無法確認申請次數，請稍後再試");
-
-		const aUsed = aData?.length ?? 0;
-		const bUsed = bData?.length ?? 0;
-
-		// Warn when reaching or exceeding 3 (non-blocking — PDF still generated)
-		if (aUsed >= 3) {
-			toast("⚠️ 注意：您本月換班申請已達3次，請確認是否繼續", { duration: 6000, icon: "⚠️" });
-		}
-		if (bUsed >= 3) {
-			toast("⚠️ 注意：乙方本月換班申請已達3次，請確認是否繼續", { duration: 6000, icon: "⚠️" });
-		}
-
-		return {
-			personASubmissionNumber: aUsed + 1,
-			personBSubmissionNumber: bUsed + 1,
-		};
-	};
+	// ── Check submission quota for current user this month ── DISABLED ───────
+	// const checkSubmissionQuota = async (personAId, personBId, month) => {
+	// 	const [{ data: aData, error: aError }, { data: bData, error: bError }] = await Promise.all([
+	// 		supabase.from("duty_change_requests").select("id").eq("person_a_id", personAId).eq("month", month).in("status", ["pending", "approved"]),
+	// 		supabase.from("duty_change_requests").select("id").eq("person_b_id", personBId).eq("month", month).in("status", ["pending", "approved"]),
+	// 	]);
+	// 	if (aError || bError) throw new Error("無法確認申請次數，請稍後再試");
+	// 	const aUsed = aData?.length ?? 0;
+	// 	const bUsed = bData?.length ?? 0;
+	// 	if (aUsed >= 3) toast("⚠️ 注意：您本月換班申請已達3次，請確認是否繼續", { duration: 6000, icon: "⚠️" });
+	// 	if (bUsed >= 3) toast("⚠️ 注意：乙方本月換班申請已達3次，請確認是否繼續", { duration: 6000, icon: "⚠️" });
+	// 	return { personASubmissionNumber: aUsed + 1, personBSubmissionNumber: bUsed + 1 };
+	// };
 
 	// ── Check for overlapping pending/approved requests on same dates ────────
 	const checkDuplicateDates = async (personAId, personBId, month, selectedDates, allDuties) => {
@@ -579,8 +556,8 @@ function DutyChangeContent() {
 
 	// ── Insert request record into DB ─────────────────────────────────────────
 	const insertDutyChangeRequest = async ({
-		personASubmissionNumber,
-		personBSubmissionNumber,
+		// personASubmissionNumber, // DISABLED
+		// personBSubmissionNumber, // DISABLED
 		pdfStoragePath,
 		personADuties,
 		ftPersonA,
@@ -603,10 +580,10 @@ function DutyChangeContent() {
 				// Person B's duties (date + duty code, from selection)
 				all_duties:               formData.allDuties,
 				status:                   "pending",
-				// Separate submission counters for each party
-				submission_number:        personASubmissionNumber, // kept for backwards compat
-				person_a_submission_number: personASubmissionNumber,
-				person_b_submission_number: personBSubmissionNumber,
+				// Separate submission counters for each party — DISABLED
+				// submission_number:        personASubmissionNumber,
+				// person_a_submission_number: personASubmissionNumber,
+				// person_b_submission_number: personBSubmissionNumber,
 				// FT data in minutes
 				ft_person_a:              ftPersonA ?? null,
 				ft_person_b:              ftPersonB ?? null,
@@ -630,20 +607,18 @@ function DutyChangeContent() {
 			console.log("formData:", formData);
 			console.log("userSchedule:", userSchedule);
 
-			// ── Quota check (separate counters for A and B) ─────────────
-			let personASubmissionNumber, personBSubmissionNumber;
-			try {
-				const quota = await checkSubmissionQuota(
-					formData.firstID,
-					formData.secondID,
-					formData.selectedMonth
-				);
-				personASubmissionNumber = quota.personASubmissionNumber;
-				personBSubmissionNumber = quota.personBSubmissionNumber;
-			} catch (quotaErr) {
-				toast.error(quotaErr.message, { duration: 5000 });
-				return;
-			}
+			// ── Quota check disabled ─────────────────────────────────────
+			// let personASubmissionNumber, personBSubmissionNumber;
+			// try {
+			// 	const quota = await checkSubmissionQuota(formData.firstID, formData.secondID, formData.selectedMonth);
+			// 	personASubmissionNumber = quota.personASubmissionNumber;
+			// 	personBSubmissionNumber = quota.personBSubmissionNumber;
+			// } catch (quotaErr) {
+			// 	toast.error(quotaErr.message, { duration: 5000 });
+			// 	return;
+			// }
+			const personASubmissionNumber = 1;
+			const personBSubmissionNumber = 1;
 
 			// ── Duplicate date check ─────────────────────────────────────
 			const duplicateWarning = await checkDuplicateDates(
@@ -1154,8 +1129,8 @@ function DutyChangeContent() {
 				const ftDeltaB = eitherHasFt ? ((ftA ?? 0) - (ftB ?? 0)) : null;
 
 				await insertDutyChangeRequest({
-					personASubmissionNumber,
-					personBSubmissionNumber,
+					// personASubmissionNumber, // DISABLED
+					// personBSubmissionNumber, // DISABLED
 					pdfStoragePath,
 					personADuties,
 					ftPersonA: ftA,
@@ -1163,7 +1138,7 @@ function DutyChangeContent() {
 					ftDeltaA,
 					ftDeltaB,
 				});
-				console.log("Duty change request saved. A#", personASubmissionNumber, "B#", personBSubmissionNumber);
+				console.log("Duty change request saved.");
 			} catch (dbErr) {
 				console.error("Error saving request record:", dbErr);
 				// Non-fatal: email already sent, just warn
