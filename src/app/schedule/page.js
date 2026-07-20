@@ -550,6 +550,9 @@ export default function SchedulePage() {
 		pmCount: 0,
 		duties4: 0, // duties with sector_count <= 4
 		duties6: 0, // duties with sector_count <= 6 (but > 4)
+		leaveCount: 0, // 例
+		restCount: 0,  // 休
+		offCount: 0,   // 空 (empty string in DB)
 		x: 0,
 		y: 0,
 		above: false,
@@ -733,14 +736,23 @@ export default function SchedulePage() {
 				amCount = 0,
 				pmCount = 0,
 				duties4 = 0,
-				duties6 = 0;
+				duties6 = 0,
+				leaveCount = 0,
+				restCount = 0,
+				offCount = 0;
 
 			Object.entries(schedule.days || {}).forEach(([date, dutyRaw]) => {
-				if (!dutyRaw) return;
+				// Empty string = DO (空)
+				if (!dutyRaw) { offCount++; return; }
 				const code = dutyRaw
 					.toString()
 					.split(/[\\\n]/)[0]
 					.trim();
+
+				// Count 例 / 休 before NON_FLIGHT skips them
+				if (code === '例') { leaveCount++; return; }
+				if (code === '休') { restCount++;  return; }
+
 				if (NON_FLIGHT.has(code)) return;
 				// Skip anything that doesn't start with a letter (guard against date strings etc.)
 				if (!/^[A-Za-z]/.test(code)) return;
@@ -785,6 +797,9 @@ export default function SchedulePage() {
 				pmCount,
 				duties4,
 				duties6,
+				leaveCount,
+				restCount,
+				offCount,
 				x,
 				y,
 				above,
@@ -1701,6 +1716,12 @@ export default function SchedulePage() {
 								無PDX飛行資料
 							</div>
 						)}
+						<div className={styles.empTooltipRow}>
+							<span className={styles.empTooltipLabel}>例/休/空</span>
+							<span className={styles.empTooltipValue}>
+								{empTooltipData.leaveCount}例 · {empTooltipData.restCount}休 · {empTooltipData.offCount}空
+							</span>
+						</div>
 						{empTooltipData.calPicker ? (
 							<div className={styles.empTooltipCalPicker}>
 								<label className={styles.empTooltipCalLabel}>
