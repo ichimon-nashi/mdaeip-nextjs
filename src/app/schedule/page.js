@@ -548,11 +548,12 @@ export default function SchedulePage() {
 		totalFt: 0,
 		amCount: 0,
 		pmCount: 0,
-		duties4: 0, // duties with sector_count <= 4
-		duties6: 0, // duties with sector_count <= 6 (but > 4)
-		leaveCount: 0, // 例
-		restCount: 0,  // 休
-		offCount: 0,   // 空 (empty string in DB)
+		duties4: 0,    // duties with sector_count <= 4
+		duties6: 0,    // duties with sector_count <= 6 (but > 4)
+		leaveCount: 0, // 例 + G\例
+		restCount: 0,  // 休 + G\休
+		offCount: 0,   // 空 + G + empty string
+		welfareCount: 0, // 福補
 		x: 0,
 		y: 0,
 		above: false,
@@ -739,20 +740,22 @@ export default function SchedulePage() {
 				duties6 = 0,
 				leaveCount = 0,
 				restCount = 0,
-				offCount = 0;
+				offCount = 0,
+				welfareCount = 0;
 
 			Object.entries(schedule.days || {}).forEach(([date, dutyRaw]) => {
 				// Empty string = DO (空)
 				if (!dutyRaw) { offCount++; return; }
-				const code = dutyRaw
-					.toString()
-					.split(/[\\\n]/)[0]
-					.trim();
 
-				// Count 例 / 休 before NON_FLIGHT skips them
-				if (code === '例') { leaveCount++; return; }
-				if (code === '休') { restCount++;  return; }
+				const raw = dutyRaw.toString().trim();
 
+				// Check full raw string first for compound codes
+				if (raw === 'G' || raw === '空')      { offCount++;    return; }
+				if (raw === 'G\\例' || raw === '例')   { leaveCount++;  return; }
+				if (raw === 'G\\休' || raw === '休')   { restCount++;   return; }
+				if (raw === '福補')                    { welfareCount++; return; }
+
+				const code = raw.split(/[\\\n]/)[0].trim();
 				if (NON_FLIGHT.has(code)) return;
 				// Skip anything that doesn't start with a letter (guard against date strings etc.)
 				if (!/^[A-Za-z]/.test(code)) return;
@@ -800,6 +803,7 @@ export default function SchedulePage() {
 				leaveCount,
 				restCount,
 				offCount,
+				welfareCount,
 				x,
 				y,
 				above,
@@ -1722,6 +1726,14 @@ export default function SchedulePage() {
 								{empTooltipData.leaveCount}例 · {empTooltipData.restCount}休 · {empTooltipData.offCount}空
 							</span>
 						</div>
+						{empTooltipData.welfareCount > 0 && (
+							<div className={styles.empTooltipRow}>
+								<span className={styles.empTooltipLabel}>福補</span>
+								<span className={styles.empTooltipValue}>
+									{empTooltipData.welfareCount} 天
+								</span>
+							</div>
+						)}
 						{empTooltipData.calPicker ? (
 							<div className={styles.empTooltipCalPicker}>
 								<label className={styles.empTooltipCalLabel}>
