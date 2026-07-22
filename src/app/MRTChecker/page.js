@@ -1445,6 +1445,49 @@ const MRTChecker = () => {
 			const { clearScheduleCache } = await import("../../lib/DataRoster");
 			clearScheduleCache(monthStr);
 
+			// ── Write override rows for plain duty code changes ───────────────
+			// daysNeedingOverride only covers days with extra sectors/tasks.
+			// Any other day where the duty code changed vs the original snapshot
+			// also needs an override row so the schedule page can show a red border.
+			if (originalDroppedItems !== null) {
+				const plainChangedDays = [];
+				for (let day = 1; day <= totalDays; day++) {
+					const dateKey = `${currentYear}-${currentMonth}-${day}`;
+					const newCode = duties[day - 1] || "";
+					const origDuty = originalDroppedItems[dateKey];
+					const origCode = origDuty && !origDuty.isAutoPopulated
+						? (origDuty.code || "")
+						: "";
+					// Skip days already handled by daysNeedingOverride
+					if (daysNeedingOverride.includes(dateKey)) continue;
+					if (newCode !== origCode) {
+						plainChangedDays.push({ day, dateKey, newCode });
+					}
+				}
+
+				if (plainChangedDays.length > 0) {
+					await Promise.all(
+						plainChangedDays.map(({ day, newCode }) =>
+							supabase.from("schedule_day_overrides").upsert(
+								{
+									employee_id: targetUserId,
+									month_id: monthRow.id,
+									day,
+									duty_code: newCode,
+									start_time: "00:00",
+									end_time: "00:00",
+									is_special: false,
+									extra_sectors: [],
+									additional_tasks: [],
+									created_by: user?.name || user?.id || null,
+								},
+								{ onConflict: "employee_id,month_id,day" },
+							)
+						)
+					);
+				}
+			}
+
 			setOriginalDroppedItems(null);
 			toast.success("班表已儲存");
 		} catch (err) {
