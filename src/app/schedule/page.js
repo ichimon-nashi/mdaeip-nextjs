@@ -1173,11 +1173,11 @@ export default function SchedulePage() {
 	}, []);
 
 	const getDutyBackgroundColor = useCallback((duty) => {
-		if (duty === "休" || duty === "例" || duty === "G")
-			return styles.dutyOff;
+		if (duty === "休" || duty === "例") return styles.dutyOff;
+		if (duty === "G\\例" || duty === "G\\休") return styles.dutyOff;
+		if (duty === "G" || duty === "空" || duty === "") return styles.dutyEmpty;
 		if (duty === "A/L") return styles.dutyLeave;
 		if (duty === "福補") return styles.dutyWelfare;
-		if (duty === "空" || duty === "") return styles.dutyEmpty;
 		if (duty === "SH1" || duty === "SH2") return styles.dutyHomestandby;
 		if (
 			duty === "課" ||
@@ -1441,16 +1441,23 @@ export default function SchedulePage() {
 						const isSwapPending = swapStatus === "pending";
 						const isSwapApproved = swapStatus === "approved";
 
-						// For approved swaps: display the received duty instead of the original.
-						// Fall back to original if swappedDuty is null (e.g. old records without person_a_duties).
-						// Keep original `duty` for click handler so PDX tooltip still works correctly.
+						// For approved swaps: mdaeip_schedules already has the correct
+						// post-swap duty written by swapScheduleDuties() on approval.
+						// Trust `duty` directly — swappedDuty is stale if dispatch later
+						// alters the schedule. Green border (dutyCellApproved) still shows
+						// the swap happened. Only pending swaps need no override.
 						// For overridden duties: show base code + * to avoid messy encoded string display
-						const rawDisplayDuty =
-							isSwapApproved && swapEntry?.swappedDuty != null
-								? swapEntry.swappedDuty
-								: duty || "空";
 						const hasOverrideStar =
 							!!overrideMap[`${schedule.employeeID}|${date}`];
+
+						// Detect dispatch alteration: approved swap where current duty
+						// no longer matches what was originally swapped in
+						const isDispatchAltered =
+							isSwapApproved &&
+							swapEntry?.swappedDuty != null &&
+							(duty || "") !== swapEntry.swappedDuty;
+
+						const rawDisplayDuty = duty || "空";
 						const displayedDuty = hasOverrideStar
 							? (rawDisplayDuty.split(/[\\\n]/)[0].trim() ||
 									rawDisplayDuty) + "*"
@@ -1461,10 +1468,7 @@ export default function SchedulePage() {
 						const displayFontSizeClass =
 							getDutyFontSize(displayedDuty);
 						// Background color follows the displayed duty so colours stay meaningful
-						const displayBgClass =
-							isSwapApproved && swapEntry?.swappedDuty != null
-								? getDutyBackgroundColor(swapEntry.swappedDuty)
-								: bgColorClass;
+						const displayBgClass = bgColorClass;
 
 						let className = styles.dutyCell;
 						if (!isUserSchedule)
@@ -1473,7 +1477,9 @@ export default function SchedulePage() {
 						if (isSelected) className += " " + styles.selected;
 						if (hasOverrideStar)
 							className += " " + styles.dutyCellOverride;
-						if (isSwapApproved)
+						if (isDispatchAltered)
+							className += " " + styles.dutyCellAltered;
+						else if (isSwapApproved)
 							className += " " + styles.dutyCellApproved;
 						else if (isSwapPending)
 							className += " " + styles.dutyCellPending;

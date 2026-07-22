@@ -2173,6 +2173,12 @@
 	box-shadow: inset 0 0 0 2px rgba(34, 197, 94, 0.15);
 }
 
+/* ── Approved swap + dispatch altered — red border ─────── */
+.dutyCellAltered {
+	border: 2px solid #ef4444 !important;
+	box-shadow: inset 0 0 0 2px rgba(239, 68, 68, 0.15);
+}
+
 /* ── Swap status legend (shown above the submit button) ──── */
 .swapLegend {
 	display: flex;
