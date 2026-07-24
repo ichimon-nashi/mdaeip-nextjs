@@ -821,11 +821,13 @@ const MRTChecker = () => {
 										merged[dateKey] = {
 											...existing,
 											startTime:
-												ov.start_time?.slice(0, 5) ??
-												existing.startTime,
+												(ov.start_time?.slice(0, 5) || null) === "00:00" || !ov.start_time
+													? existing.startTime
+													: ov.start_time.slice(0, 5),
 											endTime:
-												ov.end_time?.slice(0, 5) ??
-												existing.endTime,
+												(ov.end_time?.slice(0, 5) || null) === "00:00" || !ov.end_time
+													? existing.endTime
+													: ov.end_time.slice(0, 5),
 											extra_sectors:
 												ov.extra_sectors ?? [],
 											additional_tasks:
@@ -835,15 +837,14 @@ const MRTChecker = () => {
 										};
 									} else {
 										// New duty added by dispatch on previously empty/ground cell
+										const ovStart = ov.start_time?.slice(0, 5);
+										const ovEnd = ov.end_time?.slice(0, 5);
 										merged[dateKey] = {
 											id: `override_${ov.duty_code}_${ov.day}`,
 											code: ov.duty_code,
 											name: ov.duty_code,
-											startTime:
-												ov.start_time?.slice(0, 5) ??
-												"",
-											endTime:
-												ov.end_time?.slice(0, 5) ?? "",
+											startTime: (ovStart && ovStart !== "00:00") ? ovStart : "",
+											endTime: (ovEnd && ovEnd !== "00:00") ? ovEnd : "",
 											color: getBaseColor(null, "custom"),
 											isDuty: true,
 											isRest: false,
@@ -1447,8 +1448,8 @@ const MRTChecker = () => {
 
 			// ── Write override rows for plain duty code changes ───────────────
 			// daysNeedingOverride only covers days with extra sectors/tasks.
-			// Any other day where the duty code changed vs the original snapshot
-			// also needs an override row so the schedule page can show a red border.
+			// Plain code changes also need override rows for the red border on
+			// the schedule page. Store null times — 00:00 causes display issues.
 			if (originalDroppedItems !== null) {
 				const plainChangedDays = [];
 				for (let day = 1; day <= totalDays; day++) {
@@ -1458,13 +1459,11 @@ const MRTChecker = () => {
 					const origCode = origDuty && !origDuty.isAutoPopulated
 						? (origDuty.code || "")
 						: "";
-					// Skip days already handled by daysNeedingOverride
 					if (daysNeedingOverride.includes(dateKey)) continue;
 					if (newCode !== origCode) {
-						plainChangedDays.push({ day, dateKey, newCode });
+						plainChangedDays.push({ day, newCode });
 					}
 				}
-
 				if (plainChangedDays.length > 0) {
 					await Promise.all(
 						plainChangedDays.map(({ day, newCode }) =>
@@ -1474,8 +1473,8 @@ const MRTChecker = () => {
 									month_id: monthRow.id,
 									day,
 									duty_code: newCode,
-									start_time: "00:00",
-									end_time: "00:00",
+									start_time: null,
+									end_time: null,
 									is_special: false,
 									extra_sectors: [],
 									additional_tasks: [],
