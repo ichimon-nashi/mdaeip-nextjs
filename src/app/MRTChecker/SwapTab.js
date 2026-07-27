@@ -885,14 +885,14 @@ export default function SwapTab() {
 										onClick={handleApproveImported}
 										disabled={reviewLoading}
 									>
-										{reviewLoading ? "處理中…" : "✅ 核准"}
+										{reviewLoading ? "處理中…" : "核准"}
 									</button>
 									<button
 										className={`${styles.denyBtn} ${reviewLoading ? styles.swapBtnDisabled : ""}`}
 										onClick={handleDenyImported}
 										disabled={reviewLoading}
 									>
-										{reviewLoading ? "處理中…" : "❌ 拒絕"}
+										{reviewLoading ? "處理中…" : "拒絕"}
 									</button>
 								</div>
 							) : (
