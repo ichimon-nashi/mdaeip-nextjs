@@ -818,16 +818,12 @@ const MRTChecker = () => {
 									// If existing entry is a flight duty, only update times + mark override.
 									// This preserves sectors_data, isFlightDuty, PDX metadata.
 									if (existing?.isFlightDuty) {
+										const ovStart = ov.start_time?.slice(0, 5);
+										const ovEnd   = ov.end_time?.slice(0, 5);
 										merged[dateKey] = {
 											...existing,
-											startTime:
-												(ov.start_time?.slice(0, 5) || null) === "00:00" || !ov.start_time
-													? existing.startTime
-													: ov.start_time.slice(0, 5),
-											endTime:
-												(ov.end_time?.slice(0, 5) || null) === "00:00" || !ov.end_time
-													? existing.endTime
-													: ov.end_time.slice(0, 5),
+											startTime: (ovStart && ovStart !== "00:00") ? ovStart : existing.startTime,
+											endTime:   (ovEnd   && ovEnd   !== "00:00") ? ovEnd   : existing.endTime,
 											extra_sectors:
 												ov.extra_sectors ?? [],
 											additional_tasks:
@@ -836,15 +832,19 @@ const MRTChecker = () => {
 											isSpecial: ov.is_special,
 										};
 									} else {
-										// New duty added by dispatch on previously empty/ground cell
+										// New duty added by dispatch on previously empty/ground cell.
+										// If stored times are 00:00 (stale), fall back to presetDuties definition.
 										const ovStart = ov.start_time?.slice(0, 5);
-										const ovEnd = ov.end_time?.slice(0, 5);
+										const ovEnd   = ov.end_time?.slice(0, 5);
+										const hasValidStart = ovStart && ovStart !== "00:00";
+										const hasValidEnd   = ovEnd   && ovEnd   !== "00:00";
+										const knownDuty = presetDuties.find(d => d.code === ov.duty_code);
 										merged[dateKey] = {
 											id: `override_${ov.duty_code}_${ov.day}`,
 											code: ov.duty_code,
 											name: ov.duty_code,
-											startTime: (ovStart && ovStart !== "00:00") ? ovStart : "",
-											endTime: (ovEnd && ovEnd !== "00:00") ? ovEnd : "",
+											startTime: hasValidStart ? ovStart : (knownDuty?.startTime || ""),
+											endTime:   hasValidEnd   ? ovEnd   : (knownDuty?.endTime   || ""),
 											color: getBaseColor(null, "custom"),
 											isDuty: true,
 											isRest: false,
@@ -1352,6 +1352,15 @@ const MRTChecker = () => {
 				return;
 			}
 
+			// Fetch original duties BEFORE overwriting — used later for override detection
+			const { data: preUpsertRow } = await supabase
+				.from("mdaeip_schedules")
+				.select("duties")
+				.eq("month_id", monthRow.id)
+				.eq("employee_id", targetUserId)
+				.maybeSingle();
+			const originalDuties = preUpsertRow?.duties || [];
+
 			// Upsert the schedule row
 			const { error: upsertErr } = await supabase
 				.from("mdaeip_schedules")
@@ -1447,44 +1456,51 @@ const MRTChecker = () => {
 			clearScheduleCache(monthStr);
 
 			// ── Write override rows for plain duty code changes ───────────────
-			// daysNeedingOverride only covers days with extra sectors/tasks.
-			// Plain code changes also need override rows for the red border on
-			// the schedule page. Store null times — 00:00 causes display issues.
-			if (originalDroppedItems !== null) {
+			// Compare new duties[] against originalDuties[] fetched before the upsert.
+			try {
 				const plainChangedDays = [];
 				for (let day = 1; day <= totalDays; day++) {
-					const dateKey = `${currentYear}-${currentMonth}-${day}`;
 					const newCode = duties[day - 1] || "";
-					const origDuty = originalDroppedItems[dateKey];
-					const origCode = origDuty && !origDuty.isAutoPopulated
-						? (origDuty.code || "")
-						: "";
-					if (daysNeedingOverride.includes(dateKey)) continue;
+					const origCode = originalDuties[day - 1] || "";
+					if (daysNeedingOverride.includes(
+						`${currentYear}-${currentMonth}-${day}`
+					)) continue;
 					if (newCode !== origCode) {
 						plainChangedDays.push({ day, newCode });
 					}
 				}
 				if (plainChangedDays.length > 0) {
 					await Promise.all(
-						plainChangedDays.map(({ day, newCode }) =>
-							supabase.from("schedule_day_overrides").upsert(
+						plainChangedDays.map(({ day, newCode }) => {
+							const preset = presetDuties.find(d => d.code === newCode);
+							const dateKey = `${currentYear}-${currentMonth}-${day}`;
+							const dropped = droppedItems[dateKey];
+							const st = (dropped?.startTime && dropped.startTime !== "00:00")
+								? dropped.startTime
+								: (preset?.startTime || null);
+							const et = (dropped?.endTime && dropped.endTime !== "00:00")
+								? dropped.endTime
+								: (preset?.endTime || null);
+							return supabase.from("schedule_day_overrides").upsert(
 								{
-									employee_id: targetUserId,
-									month_id: monthRow.id,
+									employee_id:      targetUserId,
+									month_id:         monthRow.id,
 									day,
-									duty_code: newCode,
-									start_time: null,
-									end_time: null,
-									is_special: false,
-									extra_sectors: [],
+									duty_code:        newCode,
+									start_time:       st || null,
+									end_time:         et || null,
+									is_special:       false,
+									extra_sectors:    [],
 									additional_tasks: [],
-									created_by: user?.name || user?.id || null,
+									created_by:       user?.name || user?.id || null,
 								},
 								{ onConflict: "employee_id,month_id,day" },
-							)
-						)
+							);
+						})
 					);
 				}
+			} catch (ovErr) {
+				console.error("Override write error:", ovErr);
 			}
 
 			setOriginalDroppedItems(null);

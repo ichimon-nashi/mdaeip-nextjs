@@ -64,10 +64,17 @@ const ScheduleModal = ({
 		return () => document.removeEventListener("keydown", h);
 	}, [isOpen, onClose]);
 
-	// Scroll today into view when modal opens or month changes
+	// Scroll to top on month change, then scroll today into view only if current month
 	useEffect(() => {
 		if (!isOpen) return;
-		// Small delay lets the DOM paint first
+		// Immediately reset scroll to top when month changes
+		if (listRef.current) listRef.current.scrollTop = 0;
+		// Then scroll today into view — but only if this is the current month
+		const today = new Date();
+		const isCurrent =
+			calendarMonth.year === today.getFullYear() &&
+			calendarMonth.month === today.getMonth();
+		if (!isCurrent) return;
 		const t = setTimeout(() => {
 			todayRowRef.current?.scrollIntoView({
 				behavior: "smooth",
