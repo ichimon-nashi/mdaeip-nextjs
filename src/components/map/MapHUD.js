@@ -31,6 +31,8 @@ const MapHUD = ({
   downloadingPdf,
   onDownloadPdf,
   isLoading,
+  onTodayClick,     // () => void — opens duty detail modal for today
+  onTomorrowClick,  // () => void — opens duty detail modal for tomorrow
 }) => {
   const showPdx = hasPublished && !isGroundStaff(user);
 
@@ -63,15 +65,17 @@ const MapHUD = ({
             {/* Today */}
             <div className={styles.hudDutyGroup}>
               <span className={styles.hudDayBadge}>今天</span>
-              <div
+              <button
                 className={styles.hudDutyPill}
                 style={todayColors
                   ? { backgroundColor: todayColors.bg, color: todayColors.text, borderColor: todayColors.border }
                   : { backgroundColor: 'rgba(255,255,255,0.12)', color: 'rgba(255,255,255,0.5)', borderColor: 'transparent' }
                 }
+                onClick={onTodayClick}
+                title="查看詳細班務"
               >
                 {todayItem ? formatDutyCardText(todayItem) : '無資料'}
-              </div>
+              </button>
             </div>
 
             {/* Divider */}
@@ -80,15 +84,17 @@ const MapHUD = ({
             {/* Tomorrow */}
             <div className={styles.hudDutyGroup}>
               <span className={styles.hudDayBadgeTmr}>明天</span>
-              <div
+              <button
                 className={styles.hudDutyPill}
                 style={tomorrowColors
                   ? { backgroundColor: tomorrowColors.bg, color: tomorrowColors.text, borderColor: tomorrowColors.border }
                   : { backgroundColor: 'rgba(255,255,255,0.12)', color: 'rgba(255,255,255,0.5)', borderColor: 'transparent' }
                 }
+                onClick={onTomorrowClick}
+                title="查看詳細班務"
               >
                 {tomorrowItem ? formatDutyCardText(tomorrowItem) : '無資料'}
-              </div>
+              </button>
             </div>
           </>
         )}

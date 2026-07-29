@@ -24,6 +24,7 @@ import mapStyles from "../../styles/Map.module.css";
 import MapDashboard from "../../components/map/MapDashboard";
 import MapHUD from "../../components/map/MapHUD";
 import ScheduleModal from "../../components/map/ScheduleModal";
+import DutyModal from "../../components/map/DutyModal";
 import {
 	getEmployeeSchedule,
 	getAllSchedulesForMonth,
@@ -100,6 +101,7 @@ export default function DashboardPage() {
 	const [pdxMonthsByLabel, setPdxMonthsByLabel] = useState({}); // label → { id, year, month, revision }
 	const [downloadingPdf, setDownloadingPdf] = useState(false);
 	const [scheduleModalOpen, setScheduleModalOpen] = useState(false);
+	const [dutyModal, setDutyModal] = useState(null); // { item, dateStr, label }
 	const [calendarMonth, setCalendarMonth] = useState(() => {
 		const now = new Date();
 		return { year: now.getFullYear(), month: now.getMonth() };
@@ -643,17 +645,17 @@ export default function DashboardPage() {
 						endTime = overrideData.end_time.slice(0, 5);
 				}
 
-				// ── Crewmates: roster prefix matching (unchanged) ────────────
+				// ── Crewmates: roster prefix matching ────────────────────────
 				const monthSchedules =
 					allSchedulesByMonth[dateMonthString] || [];
 				const isEmptyDuty = dutyCode === "空";
 				const dutyPrefix = dutyStr.split("\\")[0];
-				// Exclude crewmates for: day off, no data, leave/vacation
-				// (reportingTime === "N/A" covers A/L, 例, 休, 福補, 年假 etc.)
+				// Only exclude crewmates for true day off (no duty code) or missing data.
+				// Leave/vacation codes (例, 休, 福補, A/L etc.) still have a matchable
+				// prefix — show crew on same leave type in DutyModal.
 				const isNonWorkDuty =
 					isDutyOff ||
-					dutyCode === "N/A" ||
-					reportingTime === "N/A";
+					dutyCode === "N/A";
 				const crewmates =
 					isNonWorkDuty
 						? []
@@ -1524,6 +1526,17 @@ export default function DashboardPage() {
 					downloadingPdf={downloadingPdf}
 					onDownloadPdf={handleDownloadPdf}
 					isLoading={isLoading}
+					onTodayClick={() => {
+						const d = new Date();
+						const ds = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+						setDutyModal({ item: todayItem, dateStr: ds, label: '今天' });
+					}}
+					onTomorrowClick={() => {
+						const d = new Date();
+						d.setDate(d.getDate() + 1);
+						const ds = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+						setDutyModal({ item: tomorrowItem, dateStr: ds, label: '明天' });
+					}}
 				/>
 				<MapDashboard
 					user={user}
@@ -1553,6 +1566,18 @@ export default function DashboardPage() {
 					})
 				}
 			/>
+
+			{/* ── Duty Detail Modal (HUD pill click) ── */}
+			{dutyModal && (
+				<DutyModal
+					item={dutyModal.item}
+					dateStr={dutyModal.dateStr}
+					label={dutyModal.label}
+					getDutyColors={getDutyColors}
+					getBaseColor={getBaseColor}
+					onClose={() => setDutyModal(null)}
+				/>
+			)}
 		</div>
 	);
 }

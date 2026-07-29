@@ -206,7 +206,7 @@
 	}
 }
 
-@media (hover: none), (pointer: coarse) {
+@media (hover: none) {
 	.hotspotLabel {
 		opacity: 1;
 		font-size: 9px;
@@ -520,6 +520,19 @@
 	border: 1.5px solid transparent;
 	white-space: nowrap;
 	letter-spacing: -0.01em;
+	cursor: pointer;
+	transition:
+		filter 0.12s ease,
+		transform 0.12s ease;
+	pointer-events: all;
+}
+
+.hudDutyPill:hover {
+	filter: brightness(1.15);
+}
+
+.hudDutyPill:active {
+	transform: scale(0.96);
 }
 
 .hudDutyTime {
