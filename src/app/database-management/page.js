@@ -1,6 +1,7 @@
-// TARGET PATH: app/dashboard/database-management/page.js (or wherever your
-// existing DatabaseManagement page.js currently lives — same path you
-// uploaded this from). This REPLACES that file.
+// TARGET PATH: src/app/database-management/page.js — this REPLACES that
+// file. Only two additions vs. what you uploaded: a "clb_generator" key in
+// the default app_permissions state, and a "CLB產生器" checkbox in the
+// 空服 permissions grid — both marked with comments below.
 "use client";
 
 import React, { useState, useEffect, useRef } from "react";
@@ -123,6 +124,7 @@ const DatabaseManagement = () => {
 			dispatch: { access: false },
 			database_management: { access: false },
 			turtle_ranking: { access: false },
+			clb_generator: { access: false }, // NEW — CLB產生器
 		},
 	});
 	const [isLookingUp, setIsLookingUp] = useState(false);
@@ -2256,6 +2258,7 @@ const DatabaseManagement = () => {
 										{[
 											{ key: "roster", label: "換班系統" },
 											{ key: "gday", label: "GDay劃假" },
+											{ key: "clb_generator", label: "CLB產生器" },
 											{ key: "etr_generator", label: "eTR產生器" },
 											{ key: "turtle_ranking", label: "烏龜排行榜 🐢" },
 										].map(({ key, label }) => (

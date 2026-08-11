@@ -86,6 +86,19 @@ const REGIONS = [
 				tabletTop: "55%",
 			},
 			{
+				id: "clb",
+				label: "CLB產生器",
+				icon: "/assets/CLB.png",
+				color: "#0891b2",
+				path: "/clb-generator",
+				section: "clb_generator",
+				// TODO: calibrate on phone + tablet — placeholder position
+				left: "74.5%",
+				top: "16.5%",
+				tabletLeft: "70%",
+				tabletTop: "9%",
+			},
+			{
 				id: "turtle",
 				label: "Turtle",
 				icon: "/assets/turtle.png",
@@ -98,7 +111,7 @@ const REGIONS = [
 				tabletTop: "75%",
 			},
 		],
-		sections: ["roster", "gday", "etr_generator", "turtle_ranking"],
+		sections: ["roster", "gday", "etr_generator", "turtle_ranking", "clb_generator"],
 	},
 	{
 		id: "cabin-crew-ofc",

@@ -1,0 +1,440 @@
+/* TARGET PATH: src/styles/CLB.module.css */
+
+.page {
+	min-height: 100vh;
+	padding: 20px 16px 48px;
+	/* no background — inherits the app's default background */
+}
+
+.header {
+	margin-bottom: 18px;
+	text-align: center;
+}
+
+.headerTitle {
+	font-size: 2rem;
+	font-weight: 800;
+	color: #ffffff;
+	letter-spacing: 0.04em;
+	text-shadow:
+		0 0 8px rgba(34, 211, 238, 0.85),
+		0 0 20px rgba(34, 211, 238, 0.55),
+		0 0 42px rgba(8, 145, 178, 0.45);
+}
+
+/* ── Glassmorphism shared surface ──────────────────────────────── */
+
+.glass {
+	background: rgba(255, 255, 255, 0.82);
+	backdrop-filter: blur(14px);
+	-webkit-backdrop-filter: blur(14px);
+	border: 1px solid rgba(255, 255, 255, 0.6);
+	border-radius: 16px;
+	box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+}
+
+/* ── Live preview ───────────────────────────────────────────── */
+
+.previewCard {
+	composes: glass;
+	padding: 14px 20px 16px 20px;
+	margin-bottom: 14px;
+	min-height: 64px;
+	display: flex;
+	flex-direction: column;
+	justify-content: center;
+	gap: 5px;
+	border-left: 4px solid #0891b2;
+	border-radius: 10px;
+}
+
+.previewLabel {
+	font-size: 0.68rem;
+	font-weight: 700;
+	letter-spacing: 0.1em;
+	text-transform: uppercase;
+	color: #0891b2;
+}
+
+.previewText {
+	font-size: 1.2rem;
+	font-weight: 600;
+	letter-spacing: 0.02em;
+	color: #111827;
+	word-break: break-word;
+}
+
+.previewEmpty {
+	font-size: 1rem;
+	font-weight: 500;
+	color: #6b7280;
+}
+
+.previewPlaceholder {
+	color: #0e7490;
+	font-weight: 700;
+}
+
+.previewActions {
+	display: flex;
+	gap: 8px;
+	margin-bottom: 20px;
+}
+
+.zoomButton {
+	flex: 1;
+	background: linear-gradient(135deg, #0891b2 0%, #0e7490 100%);
+	color: #ffffff;
+	border: none;
+	border-radius: 12px;
+	padding: 14px 16px;
+	font-size: 1.05rem;
+	font-weight: 600;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	gap: 8px;
+	cursor: pointer;
+	box-shadow: 0 4px 14px rgba(8, 145, 178, 0.35);
+}
+
+.zoomButton:disabled {
+	background: #d1d5db;
+	box-shadow: none;
+	cursor: not-allowed;
+}
+
+.resetButton {
+	width: 50px;
+	height: 50px;
+	flex-shrink: 0;
+	background: #fee2e2;
+	border: 1px solid #fca5a5;
+	border-radius: 12px;
+	color: #dc2626;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	cursor: pointer;
+}
+
+.resetButton:active {
+	background: #fecaca;
+}
+
+/* ── Form panel wrapping all steps ─────────────────────────────── */
+
+.formPanel {
+	composes: glass;
+	padding: 14px;
+}
+
+.step {
+	margin-bottom: 10px;
+}
+
+.step:last-child {
+	margin-bottom: 0;
+}
+
+/* ── Section-header style accordion trigger ────────────────────── */
+
+.stepHeader {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	width: 100%;
+	background: rgba(8, 145, 178, 0.07);
+	border: 1px solid rgba(8, 145, 178, 0.12);
+	border-radius: 12px;
+	padding: 13px 14px;
+	cursor: pointer;
+	gap: 10px;
+	text-align: left;
+}
+
+.stepHeaderLeft {
+	display: flex;
+	align-items: center;
+	gap: 9px;
+	flex-wrap: wrap;
+	min-width: 0;
+}
+
+.stepNumberBadge {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 23px;
+	height: 23px;
+	border-radius: 50%;
+	background: #0891b2;
+	color: #ffffff;
+	font-size: 0.75rem;
+	font-weight: 700;
+	flex-shrink: 0;
+}
+
+.stepLabel {
+	font-size: 1rem;
+	font-weight: 700;
+	color: #164e63;
+	white-space: nowrap;
+}
+
+.stepHint {
+	font-size: 0.78rem;
+	font-weight: 500;
+	color: #6b7280;
+}
+
+.stepSummary {
+	font-size: 0.9rem;
+	font-weight: 600;
+	color: #0e7490;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.stepChevron {
+	flex-shrink: 0;
+	color: #0891b2;
+	transition: transform 0.15s ease;
+}
+
+.stepChevronOpen {
+	transform: rotate(180deg);
+}
+
+.stepContent {
+	padding: 14px 4px 6px;
+	animation: stepOpen 0.15s ease;
+}
+
+@keyframes stepOpen {
+	from {
+		opacity: 0;
+		transform: translateY(-4px);
+	}
+	to {
+		opacity: 1;
+		transform: translateY(0);
+	}
+}
+
+.searchWrapper {
+	position: relative;
+	margin-bottom: 12px;
+}
+
+.searchIcon {
+	position: absolute;
+	left: 13px;
+	top: 50%;
+	transform: translateY(-50%);
+	color: #9ca3af;
+	pointer-events: none;
+}
+
+.searchInput {
+	width: 100%;
+	box-sizing: border-box;
+	border: none;
+	border-radius: 10px;
+	padding: 11px 14px 11px 38px;
+	font-size: 1.02rem;
+	background: #eef1f4;
+	color: #111827;
+}
+
+.searchInput::placeholder {
+	color: #9ca3af;
+}
+
+.searchInput:focus {
+	outline: none;
+	background: #e5e9ed;
+	box-shadow: inset 0 0 0 1.5px #0891b2;
+}
+
+/* ── Item groups (step 2) ──────────────────────────────────────── */
+
+.itemGroup {
+	margin-bottom: 16px;
+}
+
+.itemGroup:last-child {
+	margin-bottom: 0;
+}
+
+.groupLabel {
+	font-size: 0.8rem;
+	font-weight: 700;
+	color: #0e7490;
+	text-transform: uppercase;
+	letter-spacing: 0.04em;
+	margin-bottom: 8px;
+}
+
+/* ── Chips — fixed column grid so rows line up regardless of text length ── */
+
+.chipGrid {
+	display: grid;
+	grid-template-columns: repeat(2, 1fr);
+	gap: 9px;
+}
+
+@media (min-width: 480px) {
+	.chipGrid {
+		grid-template-columns: repeat(3, 1fr);
+	}
+}
+
+@media (min-width: 768px) {
+	.chipGrid {
+		grid-template-columns: repeat(4, 1fr);
+	}
+}
+
+@media (min-width: 1100px) {
+	.chipGrid {
+		grid-template-columns: repeat(5, 1fr);
+	}
+}
+
+.chip {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	text-align: center;
+	min-height: 46px;
+	padding: 10px 12px;
+	border-radius: 12px;
+	border: 1px solid rgba(0, 0, 0, 0.1);
+	background: rgba(255, 255, 255, 0.85);
+	color: #111827;
+	font-size: 0.95rem;
+	line-height: 1.3;
+	cursor: pointer;
+	white-space: normal;
+	word-break: break-word;
+	-webkit-tap-highlight-color: transparent;
+}
+
+.chip:active {
+	transform: scale(0.97);
+}
+
+.chipActive {
+	border-color: #0891b2;
+	border-width: 1.5px;
+	background: #ecfeff;
+	color: #0e7490;
+	font-weight: 700;
+}
+
+/* Needs a hand-filled value in the final entry — location placeholders,
+   "PSI BELOW", "DURING ___" */
+.chipNeedsInput {
+	border-style: dashed;
+	border-color: #0891b2;
+	background: #f2fdff;
+	color: #0e7490;
+}
+
+.chipNeedsInput.chipActive {
+	background: #ecfeff;
+}
+
+.chipSkip {
+	border-style: dashed;
+	border-color: #fbbf24;
+	background: #fffbeb;
+	color: #b45309;
+}
+
+.chipSkipActive {
+	border-color: #d97706;
+	background: #f59e0b;
+	color: #ffffff;
+	font-weight: 700;
+}
+
+.noMatches {
+	font-size: 0.9rem;
+	color: #6b7280;
+	padding: 8px 0;
+	grid-column: 1 / -1;
+}
+
+/* ── Zoom modal ─────────────────────────────────────────────────── */
+
+.zoomBackdrop {
+	position: fixed;
+	inset: 0;
+	background: rgba(15, 23, 42, 0.55);
+	backdrop-filter: blur(2px);
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	padding: 24px;
+	z-index: 200;
+}
+
+.zoomModal {
+	background: #ffffff;
+	border-radius: 20px;
+	padding: 36px 26px;
+	max-width: 520px;
+	width: 100%;
+	position: relative;
+	box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+}
+
+.zoomCloseBtn {
+	position: absolute;
+	top: 14px;
+	right: 14px;
+	background: #f3f4f6;
+	border: none;
+	border-radius: 50%;
+	width: 32px;
+	height: 32px;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	color: #374151;
+	cursor: pointer;
+}
+
+.zoomText {
+	font-size: 2.15rem;
+	font-weight: 700;
+	line-height: 1.45;
+	color: #111827;
+	letter-spacing: 0.02em;
+	text-align: center;
+	word-break: break-word;
+	margin: 14px 0 26px;
+}
+
+.zoomTextPlaceholder {
+	color: #0e7490;
+}
+
+.zoomCopyBtn {
+	width: 100%;
+	background: #f0fdfa;
+	border: 1px solid #99f6e4;
+	color: #0e7490;
+	border-radius: 10px;
+	padding: 11px;
+	font-size: 0.9rem;
+	font-weight: 500;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	gap: 6px;
+	cursor: pointer;
+}

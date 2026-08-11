@@ -85,6 +85,19 @@ const HOTSPOTS = [
 		clipPath: "circle(6.3% at 45.58% 51.57%)",
 	},
 	{
+		id: "clb",
+		label: "CLB產生器",
+		icon: "/assets/CLB.png",
+		color: "#0891b2",
+		path: "/clb-generator",
+		section: "clb_generator",
+		region: "空服",
+		// TODO: calibrate — placeholder position, not measured against the map image
+		left: "56%",
+		top: "12%",
+		clipPath: "circle(6.3% at 56.5% 10%)",
+	},
+	{
 		id: "turtle",
 		label: "Turtle",
 		icon: "/assets/turtle.png",

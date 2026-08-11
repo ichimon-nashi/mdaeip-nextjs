@@ -100,6 +100,19 @@ const HOTSPOTS = [
 		tabletTop: "51%",
 	},
 	{
+		id: "clb",
+		label: "CLB產生器",
+		icon: "/assets/CLB.png",
+		color: "#0891b2",
+		path: "/clb-generator",
+		section: "clb_generator",
+		// PLACEHOLDER — calibrate both sets separately, same as the rest of this file
+		left: "57%",
+		top: "20%",
+		tabletLeft: "58%",
+		tabletTop: "25.5%",
+	},
+	{
 		id: "turtle",
 		label: "Turtle",
 		icon: "/assets/turtle.png",

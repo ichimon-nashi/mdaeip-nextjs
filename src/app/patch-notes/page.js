@@ -21,6 +21,7 @@ const ALL_HOTSPOTS = [
   { id: "dashboard",          label: "我的班表"   },
   { id: "schedule",           label: "換班系統"   },
   { id: "gday",               label: "GDay劃假"  },
+  { id: "clb",                label: "CLB產生器" },
   { id: "etr",                label: "eTR產生器" },
   { id: "turtle",             label: "Turtle"    },
   { id: "mrt",                label: "疲勞管理"   },
