@@ -75,7 +75,7 @@ export const CLB_LOCATIONS = [
 		placeholder: true,
 	},
 	{
-		zh: "裝載",
+		zh: "裝載/增補",
 		en: "UPLOAD (數量)",
 		placeholder: true,
 	},
@@ -509,6 +509,10 @@ export const CLB_TIMES = [
 	{
 		zh: "滑行",
 		en: "DURING TAXI",
+	},
+		{
+		zh: "起飛",
+		en: "DURING TAKEOFF",
 	},
 	{
 		zh: "航程中",

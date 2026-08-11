@@ -274,7 +274,7 @@ const CLBGenerator = () => {
 			<div className={styles.formPanel}>
 				{/* Step 1: location (optional) */}
 				<div className={styles.step}>
-					<StepHeader stepKey="loc" number={1} label="位置 location" hint="選填" summary={locSummary} />
+					<StepHeader stepKey="loc" number={1} label="位置 / 動作 location/action" hint="選填" summary={locSummary} />
 					{openStep === "loc" && (
 						<div className={styles.stepContent}>
 							<div className={styles.chipGrid}>
@@ -305,7 +305,7 @@ const CLBGenerator = () => {
 				{/* Step 2: item, grouped */}
 				{locTouched && (
 					<div className={styles.step}>
-						<StepHeader stepKey="item" number={2} label="物品 item" hint="選填" summary={itemSummary} />
+						<StepHeader stepKey="item" number={2} label="品項 item" hint="選填" summary={itemSummary} />
 						{openStep === "item" && (
 							<div className={styles.stepContent}>
 								<div className={styles.searchWrapper}>

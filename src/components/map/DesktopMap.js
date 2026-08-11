@@ -88,7 +88,7 @@ const HOTSPOTS = [
 		id: "clb",
 		label: "CLB產生器",
 		icon: "/assets/CLB.png",
-		color: "#0891b2",
+		color: "#ffcad4",
 		path: "/clb-generator",
 		section: "clb_generator",
 		region: "空服",
