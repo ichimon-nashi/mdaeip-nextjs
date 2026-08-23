@@ -416,7 +416,7 @@ const NavigationDrawer = ({ isOpen, onClose, userDetails }) => {
 
 				{/* Footer */}
 				<div className={styles.drawerFooter}>
-					<div className={styles.appVersion}>豪神APP v4.4.2</div>
+					<div className={styles.appVersion}>豪神APP v4.4.5</div>
 				</div>
 			</div>
 		</>

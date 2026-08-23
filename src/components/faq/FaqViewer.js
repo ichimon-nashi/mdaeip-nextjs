@@ -22,7 +22,7 @@ const FaqViewer = ({
 	entries, // array of mdaeip_faq_entries rows
 	onClose, // () => void
 }) => {
-	const [expanded, setExpanded] = useState(entries[0]?.id ?? null);
+	const [expanded, setExpanded] = useState(null);
 	const [filter, setFilter] = useState("全部");
 
 	useEffect(() => {
