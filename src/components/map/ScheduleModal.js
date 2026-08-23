@@ -8,8 +8,8 @@
 // Duty text is readable at any screen size.
 // ─────────────────────────────────────────────────────────────────────────────
 
-import { useEffect, useRef } from "react";
-import { X, ChevronLeft, ChevronRight } from "lucide-react";
+import { Fragment, useEffect, useRef, useState } from "react";
+import { X, ChevronLeft, ChevronRight, Clock, Plane } from "lucide-react";
 import styles from "../../styles/ScheduleModal.module.css";
 
 const WEEKDAY_ZH = ["日", "一", "二", "三", "四", "五", "六"];
@@ -53,6 +53,7 @@ const ScheduleModal = ({
 }) => {
 	const todayRowRef = useRef(null);
 	const listRef = useRef(null);
+	const [expandedDate, setExpandedDate] = useState(null);
 
 	// Escape to close
 	useEffect(() => {
@@ -69,6 +70,7 @@ const ScheduleModal = ({
 		if (!isOpen) return;
 		// Immediately reset scroll to top when month changes
 		if (listRef.current) listRef.current.scrollTop = 0;
+		setExpandedDate(null);
 		// Then scroll today into view — but only if this is the current month
 		const today = new Date();
 		const isCurrent =
@@ -147,16 +149,52 @@ const ScheduleModal = ({
 						const isWeekend = dow === 0 || dow === 6;
 						const dutyText = item ? formatDutyCardText(item) : null;
 
+						const isClickable = !!item;
+						const isExpanded = expandedDate === dateStr;
+
+						// Detail fields for the accordion panel — sourced directly
+						// from the schedule item (same fields page.js attaches for
+						// today/tomorrow's DutyModal), not duplicated crew data.
+						const pdx = item?.pdxDutyRow || null;
+						const sectors = Array.isArray(item?.pdxSectors)
+							? item.pdxSectors
+							: [];
+						const aircraftType = item?.dutyType || pdx?.aircraft_type || "";
+						const simpleMessage = !item
+							? null
+							: !item.hasData
+								? "暫無班表資料"
+								: item.isDutyOff
+									? "休假日"
+									: item.isResv
+										? "待命備用 (RESV)"
+										: item.dutyCode === "空"
+											? "空班"
+											: null;
+						const hasTimeInfo =
+							item?.reportingTime &&
+							item.reportingTime !== "N/A" &&
+							item.reportingTime !== "無";
+
 						return (
+							<Fragment key={dateStr}>
 							<div
-								key={dateStr}
 								ref={isToday ? todayRowRef : null}
 								className={[
 									styles.row,
 									isToday ? styles.rowToday : "",
 									isPast ? styles.rowPast : "",
 									isWeekend ? styles.rowWeekend : "",
+									isClickable ? styles.rowClickable : "",
 								].join(" ")}
+								onClick={
+									isClickable
+										? () =>
+												setExpandedDate((d) =>
+													d === dateStr ? null : dateStr,
+												)
+										: undefined
+								}
 							>
 								{/* Left: weekday + date */}
 								<div className={styles.dateCol}>
@@ -225,6 +263,75 @@ const ScheduleModal = ({
 									/>
 								)}
 							</div>
+
+							{/* ── Accordion detail panel ── */}
+							{isExpanded && item && (
+								<div className={styles.detailPanel}>
+									{simpleMessage ? (
+										<div className={styles.detailEmpty}>
+											{simpleMessage}
+										</div>
+									) : (
+										<>
+											{hasTimeInfo && (
+												<div className={styles.detailRow}>
+													<Clock size={13} className={styles.detailIcon} />
+													<span className={styles.detailLabel}>時間</span>
+													<span className={styles.detailValue}>
+														{item.reportingTime || "—"} → {item.endTime || "—"}
+													</span>
+												</div>
+											)}
+											{aircraftType && (
+												<div className={styles.detailRow}>
+													<Plane size={13} className={styles.detailIcon} />
+													<span className={styles.detailLabel}>機型</span>
+													<span className={styles.detailValue}>
+														{aircraftType}
+													</span>
+												</div>
+											)}
+											{sectors.length > 0 && (
+												<div className={styles.sectorList}>
+													{sectors.map((s, i) => (
+														<div
+															key={i}
+															className={styles.sectorRow}
+														>
+															<span className={styles.sectorTime}>
+																{s.dep_time?.slice(0, 5)}
+															</span>
+															<span className={styles.sectorAirport}>
+																{s.dep_airport}
+															</span>
+															<span className={styles.sectorArrow}>→</span>
+															<span className={styles.sectorAirport}>
+																{s.arr_airport}
+															</span>
+															<span className={styles.sectorTime}>
+																{s.arr_time?.slice(0, 5)}
+															</span>
+															{s.flight_number && (
+																<span className={styles.sectorFlightNo}>
+																	{s.flight_number}
+																</span>
+															)}
+														</div>
+													))}
+												</div>
+											)}
+											{!hasTimeInfo &&
+												!aircraftType &&
+												sectors.length === 0 && (
+													<div className={styles.detailEmpty}>
+														暫無詳細資料
+													</div>
+												)}
+										</>
+									)}
+								</div>
+							)}
+							</Fragment>
 						);
 					})}
 				</div>

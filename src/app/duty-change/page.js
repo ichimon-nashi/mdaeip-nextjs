@@ -989,11 +989,11 @@ function DutyChangeContent() {
 					renderTextOnCanvas(minutesToDisplay(firstFt), c.x, c.y, FT_COORDS.fontSize, "left", "#1d4ed8");
 				}
 				// Person A — 互換後時數 (delta): green = gain, red = loss
-				{
-					const c = convertToCanvasCoords(FT_COORDS.firstDelta.x, FT_COORDS.firstDelta.y);
-					const deltaColor = firstDelta >= 0 ? "#15803d" : "#dc2626";
-					renderTextOnCanvas(formatDelta(firstDelta), c.x, c.y, FT_COORDS.fontSize, "left", deltaColor);
-				}
+				// {
+				// 	const c = convertToCanvasCoords(FT_COORDS.firstDelta.x, FT_COORDS.firstDelta.y);
+				// 	const deltaColor = firstDelta >= 0 ? "#15803d" : "#dc2626";
+				// 	renderTextOnCanvas(formatDelta(firstDelta), c.x, c.y, FT_COORDS.fontSize, "left", deltaColor);
+				// }
 
 				// Person B — 原班表時數
 				if (ftData.secondFt !== null) {
@@ -1001,11 +1001,11 @@ function DutyChangeContent() {
 					renderTextOnCanvas(minutesToDisplay(secondFt), c.x, c.y, FT_COORDS.fontSize, "left", "#1d4ed8");
 				}
 				// Person B — 互換後時數 (delta): green = gain, red = loss
-				{
-					const c = convertToCanvasCoords(FT_COORDS.secondDelta.x, FT_COORDS.secondDelta.y);
-					const deltaColor = secondDelta >= 0 ? "#15803d" : "#dc2626";
-					renderTextOnCanvas(formatDelta(secondDelta), c.x, c.y, FT_COORDS.fontSize, "left", deltaColor);
-				}
+				// {
+				// 	const c = convertToCanvasCoords(FT_COORDS.secondDelta.x, FT_COORDS.secondDelta.y);
+				// 	const deltaColor = secondDelta >= 0 ? "#15803d" : "#dc2626";
+				// 	renderTextOnCanvas(formatDelta(secondDelta), c.x, c.y, FT_COORDS.fontSize, "left", deltaColor);
+				// }
 			}
 
 			// Application date — stored as YYYY/MM/DD, render directly

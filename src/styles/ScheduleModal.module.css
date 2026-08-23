@@ -127,6 +127,92 @@
 	opacity: 0.42;
 }
 
+/* Clickable rows — opens rich duty detail modal */
+.rowClickable {
+	cursor: pointer;
+}
+.rowClickable:hover {
+	background: rgba(255, 255, 255, 0.05);
+}
+.rowClickable:active {
+	background: rgba(255, 255, 255, 0.09);
+}
+
+/* ── Accordion detail panel ────────────────────────────── */
+.detailPanel {
+	padding: 0.6rem 1rem 0.75rem calc(32px + 0.875rem + 1rem);
+	background: rgba(255, 255, 255, 0.03);
+	border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+	display: flex;
+	flex-direction: column;
+	gap: 0.4rem;
+}
+
+.detailEmpty {
+	font-size: 0.8125rem;
+	color: rgba(255, 255, 255, 0.35);
+	padding: 0.25rem 0;
+}
+
+.detailRow {
+	display: flex;
+	align-items: center;
+	gap: 0.4rem;
+	font-size: 0.8125rem;
+}
+
+.detailIcon {
+	color: rgba(255, 255, 255, 0.4);
+	flex-shrink: 0;
+}
+
+.detailLabel {
+	color: rgba(255, 255, 255, 0.45);
+	font-weight: 600;
+	flex-shrink: 0;
+}
+
+.detailValue {
+	color: rgba(255, 255, 255, 0.85);
+	font-weight: 600;
+}
+
+.sectorList {
+	display: flex;
+	flex-direction: column;
+	gap: 0.3rem;
+	margin-top: 0.15rem;
+}
+
+.sectorRow {
+	display: flex;
+	align-items: center;
+	gap: 0.4rem;
+	font-size: 0.75rem;
+	color: rgba(255, 255, 255, 0.75);
+}
+
+.sectorTime {
+	font-weight: 700;
+	color: rgba(255, 255, 255, 0.85);
+	min-width: 2.75rem;
+}
+
+.sectorAirport {
+	font-weight: 700;
+	color: rgba(165, 180, 252, 0.9);
+}
+
+.sectorArrow {
+	color: rgba(255, 255, 255, 0.3);
+}
+
+.sectorFlightNo {
+	margin-left: auto;
+	color: rgba(255, 255, 255, 0.4);
+	font-size: 0.6875rem;
+}
+
 /* ── Date column ── */
 .dateCol {
 	display: flex;
