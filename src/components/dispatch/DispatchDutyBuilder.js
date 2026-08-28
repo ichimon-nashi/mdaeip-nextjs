@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useCallback, useRef } from "react";
-import { ChevronLeft, Plus, GripVertical, Save } from "lucide-react";
+import { ChevronLeft, Plus, GripVertical, Save, Calendar } from "lucide-react";
 import toast from "react-hot-toast";
 import {
 	pdxDutyHelpers,
@@ -240,7 +240,7 @@ const DEFAULT_SECTOR = {
 	aircraft_type: null,
 };
 
-export default function DispatchDutyBuilder({ month, duty, onBack, onSaved }) {
+export default function DispatchDutyBuilder({ month, duty, onBack, onSaved, onGoToCalendar }) {
 	const isEdit = !!duty;
 
 	// Form state
@@ -289,7 +289,12 @@ export default function DispatchDutyBuilder({ month, duty, onBack, onSaved }) {
 	// Track if user manually edited the label this session — start false always
 	const labelManualRef = useRef(false);
 
-	// Auto-generate label from specific dates when not manually edited
+	// Auto-generate label from specific dates when not manually edited.
+	// Weekday patterns (e.g. every Tuesday + Thursday this month) are detected
+	// first and rendered compactly as "每週二、四" — otherwise a bulk weekday
+	// toggle from the calendar tab produces a long, unreadable date list here.
+	// Whatever doesn't fit a full weekday pattern falls back to the previous
+	// contiguous-date-run grouping.
 	useEffect(() => {
 		if (labelManualRef.current) return;
 		const total = daysInMonthFn(month.year, month.month);
@@ -300,27 +305,72 @@ export default function DispatchDutyBuilder({ month, duty, onBack, onSaved }) {
 		const sorted = [...specificDates].sort();
 		const fmt = (d) =>
 			`${parseInt(d.slice(5, 7))}/${parseInt(d.slice(8, 10))}`;
-		// Group into contiguous runs
-		const runs = [];
-		let runStart = sorted[0];
-		let runEnd = sorted[0];
-		for (let i = 1; i < sorted.length; i++) {
-			const prev = new Date(sorted[i - 1]);
-			const curr = new Date(sorted[i]);
-			const diff = (curr - prev) / 86400000;
-			if (diff === 1) {
-				runEnd = sorted[i];
-			} else {
-				runs.push([runStart, runEnd]);
-				runStart = sorted[i];
-				runEnd = sorted[i];
+
+		function isoWeekdayOf(dateStr) {
+			const [y, m, d] = dateStr.split("-").map(Number);
+			const day = new Date(y, m - 1, d).getDay();
+			return day === 0 ? 7 : day;
+		}
+
+		const allDatesInMonth = Array.from({ length: total }, (_, i) =>
+			localDateStr(month.year, month.month, i + 1),
+		);
+		const byWeekday = {};
+		for (let w = 1; w <= 7; w++) {
+			byWeekday[w] = allDatesInMonth.filter(
+				(d) => isoWeekdayOf(d) === w,
+			);
+		}
+
+		const selectedSet = new Set(sorted);
+		const fullyCoveredWeekdays = [];
+		const usedDates = new Set();
+		for (let w = 1; w <= 7; w++) {
+			const weekdayDates = byWeekday[w];
+			if (
+				weekdayDates.length > 0 &&
+				weekdayDates.every((d) => selectedSet.has(d))
+			) {
+				fullyCoveredWeekdays.push(w);
+				weekdayDates.forEach((d) => usedDates.add(d));
 			}
 		}
-		runs.push([runStart, runEnd]);
-		const parts = runs.map(([s, e]) =>
-			s === e ? fmt(s) : `${fmt(s)} - ${fmt(e)}`,
-		);
-		setLabel(parts.join("、"));
+
+		const remaining = sorted.filter((d) => !usedDates.has(d));
+		const parts = [];
+
+		if (fullyCoveredWeekdays.length > 0) {
+			const names = fullyCoveredWeekdays.map(
+				(w) => DAY_NAMES_SHORT[w - 1],
+			);
+			parts.push(`每週${names.join("、")}`);
+		}
+
+		if (remaining.length > 0) {
+			// Group leftover (non-pattern) dates into contiguous runs
+			const runs = [];
+			let runStart = remaining[0];
+			let runEnd = remaining[0];
+			for (let i = 1; i < remaining.length; i++) {
+				const prev = new Date(remaining[i - 1]);
+				const curr = new Date(remaining[i]);
+				const diff = (curr - prev) / 86400000;
+				if (diff === 1) {
+					runEnd = remaining[i];
+				} else {
+					runs.push([runStart, runEnd]);
+					runStart = remaining[i];
+					runEnd = remaining[i];
+				}
+			}
+			runs.push([runStart, runEnd]);
+			const runParts = runs.map(([s, e]) =>
+				s === e ? fmt(s) : `${fmt(s)} - ${fmt(e)}`,
+			);
+			parts.push(runParts.join("、"));
+		}
+
+		setLabel(parts.join("　+"));
 	}, [specificDates]);
 
 	// Sectors
@@ -526,31 +576,36 @@ export default function DispatchDutyBuilder({ month, duty, onBack, onSaved }) {
 
 	const stats = computedStats();
 
-	async function handleSave() {
+	// Runs all existing validation and the create/update + sectors write.
+	// Returns the saved duty id on success, or null on any validation/write
+	// failure (toasts already fired inside). Both the plain save button and
+	// the save-and-go-to-calendar button call this — the only difference is
+	// what happens after a successful save.
+	async function saveDutyRecord() {
 		if (!dutyCode.trim()) {
 			toast.error("請輸入班型代碼");
-			return;
+			return null;
 		}
 		if (!base) {
 			toast.error("請選擇基地");
-			return;
+			return null;
 		}
 		if (!aircraft) {
 			toast.error("請選擇機型");
-			return;
+			return null;
 		}
 		if (!reportingTime) {
 			toast.error("請輸入報到時間");
-			return;
+			return null;
 		}
 		if (!dutyEndTime) {
 			toast.error("請輸入值勤結束時間");
-			return;
+			return null;
 		}
 
 		if (specificDates.length === 0) {
 			toast.error("請至少選擇一個適用日期");
-			return;
+			return null;
 		}
 
 		setSaveAttempted(true);
@@ -559,7 +614,7 @@ export default function DispatchDutyBuilder({ month, duty, onBack, onSaved }) {
 		);
 		if (hasEmptyFields) {
 			toast.error("請填寫所有航段必填欄位");
-			return;
+			return null;
 		}
 		const validSectors = sectors.filter(
 			(s) =>
@@ -571,7 +626,7 @@ export default function DispatchDutyBuilder({ month, duty, onBack, onSaved }) {
 		);
 		if (validSectors.length === 0) {
 			toast.error("請至少填寫一個完整航段");
-			return;
+			return null;
 		}
 
 		const finalSectors = validSectors.map((s) => ({
@@ -610,7 +665,7 @@ export default function DispatchDutyBuilder({ month, duty, onBack, onSaved }) {
 			if (error) {
 				toast.error("更新失敗: " + error);
 				setSaving(false);
-				return;
+				return null;
 			}
 			savedDutyId = duty.id;
 		} else {
@@ -618,7 +673,7 @@ export default function DispatchDutyBuilder({ month, duty, onBack, onSaved }) {
 			if (error) {
 				toast.error("建立失敗: " + error);
 				setSaving(false);
-				return;
+				return null;
 			}
 			savedDutyId = data.id;
 		}
@@ -631,12 +686,26 @@ export default function DispatchDutyBuilder({ month, duty, onBack, onSaved }) {
 		if (sectorError) {
 			toast.error("航段儲存失敗: " + sectorError);
 			setSaving(false);
-			return;
+			return null;
 		}
 
 		toast.success(isEdit ? `${dutyCode} 已更新` : `${dutyCode} 建立成功`);
 		setSaving(false);
-		onSaved();
+		return savedDutyId;
+	}
+
+	async function handleSave() {
+		const savedDutyId = await saveDutyRecord();
+		if (savedDutyId) onSaved(savedDutyId, isEdit);
+	}
+
+	// Save current form state (create or update) then jump straight to the
+	// calendar tab armed on this duty, in one click — covers both a brand new
+	// duty and unsaved edits to an existing one, so there's no separate
+	// "save, then navigate" step.
+	async function handleSaveAndGoToCalendar() {
+		const savedDutyId = await saveDutyRecord();
+		if (savedDutyId) onGoToCalendar({ id: savedDutyId }, month);
 	}
 
 	const monthStr = monthLabel(month.year, month.month);
@@ -655,6 +724,18 @@ export default function DispatchDutyBuilder({ month, duty, onBack, onSaved }) {
 					</span>
 				</div>
 				<div className={styles.topBarRight}>
+					{onGoToCalendar && (
+						<button
+							className={styles.btnSecondary}
+							onClick={handleSaveAndGoToCalendar}
+							disabled={
+								saving || Object.keys(sectorErrors).length > 0
+							}
+							title="儲存目前內容並前往月曆檢視調整日期"
+						>
+							<Calendar size={14} /> 儲存並前往月曆檢視
+						</button>
+					)}
 					<button className={styles.btnSecondary} onClick={onBack}>
 						取消
 					</button>

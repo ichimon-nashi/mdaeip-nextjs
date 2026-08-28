@@ -111,6 +111,15 @@ function dutyActiveOnIsoWeekday(duty, iso) {
 	return duty.active_weekdays?.includes(iso);
 }
 
+// hex "#2563eb" -> "rgba(37,99,235,alpha)" — used for tinted calendar cell backgrounds
+function hexToRgba(hex, alpha) {
+	const h = hex.replace("#", "");
+	const r = parseInt(h.substring(0, 2), 16);
+	const g = parseInt(h.substring(2, 4), 16);
+	const b = parseInt(h.substring(4, 6), 16);
+	return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
+
 function formatGroundStop(s1, s2) {
 	if (!s1 || !s2) return null;
 	const [h1, m1] = s1.arr_time.split(":").map(Number);
@@ -129,6 +138,9 @@ export default function DispatchMonthView({
 	onNewDuty,
 	onEditDuty,
 	savedCounter = 0,
+	// When this changes to a non-null id (e.g. right after DispatchDutyBuilder
+	// saves a new duty), jump straight to the 月曆檢視 tab with that duty armed.
+	armDutyId = null,
 }) {
 	const [activeTab, setActiveTab] = useState("list");
 	const [duties, setDuties] = useState([]);
@@ -164,6 +176,81 @@ export default function DispatchMonthView({
 
 	// Collapsible detail panel on portrait mobile/tablet
 	const [detailMinimised, setDetailMinimised] = useState(false);
+
+	// ── 月曆檢視 tab state ─────────────────────────
+	// Which single duty (by id, not code — same code can have many variants) is
+	// currently armed for date assignment. Only one armed at a time so the grid
+	// stays focus-only: armed duty's dates highlighted, everything else neutral.
+	const [calArmedId, setCalArmedId] = useState(null);
+	// Accordion collapse for base > duty_code groups in the calendar sidebar.
+	// Keyed "base|duty_code" — separate from collapsedBases (list tab) since
+	// the grouping granularity differs.
+	const [collapsedCalGroups, setCollapsedCalGroups] = useState(new Set());
+	const [calSaving, setCalSaving] = useState(false);
+
+	function toggleCalGroup(key) {
+		setCollapsedCalGroups((prev) => {
+			const next = new Set(prev);
+			next.has(key) ? next.delete(key) : next.add(key);
+			return next;
+		});
+	}
+
+	// Persist a duty's new specific_dates array: updates local state immediately
+	// (so the grid reflects the change without a reload) then writes through the
+	// same helper used everywhere else in this file (pdxDutyHelpers.update).
+	async function saveDutyDates(duty, nextDatesArr) {
+		const sorted = [...nextDatesArr].sort();
+		const patch = {
+			specific_dates: sorted,
+			date_from: sorted[0] || duty.date_from,
+			date_to: sorted[sorted.length - 1] || duty.date_to,
+		};
+		setDuties((prev) =>
+			prev.map((d) => (d.id === duty.id ? { ...d, ...patch } : d)),
+		);
+		setCalSaving(true);
+		const { error } = await pdxDutyHelpers.update(duty.id, patch);
+		setCalSaving(false);
+		if (error) {
+			toast.error("儲存失敗，請重新整理");
+			// Roll back local state on failure
+			setDuties((prev) =>
+				prev.map((d) => (d.id === duty.id ? { ...d, ...duty } : d)),
+			);
+		}
+	}
+
+	function toggleCalDate(dateStr) {
+		if (!calArmedId) return;
+		const duty = duties.find((d) => d.id === calArmedId);
+		if (!duty) return;
+		const current = new Set(duty.specific_dates || []);
+		current.has(dateStr) ? current.delete(dateStr) : current.add(dateStr);
+		saveDutyDates(duty, [...current]);
+	}
+
+	function toggleCalWeekday(isoDay, monthStartStr, monthEndStr) {
+		if (!calArmedId) return;
+		const duty = duties.find((d) => d.id === calArmedId);
+		if (!duty) return;
+		// Only ever operates within the currently loaded month — cross-month
+		// assignment is a separate decision, not handled here.
+		const matches = [];
+		const cur = new Date(monthStartStr);
+		const end = new Date(monthEndStr);
+		while (cur <= end) {
+			const ds = localDateStr(cur);
+			if (isoWeekday(ds) === isoDay) matches.push(ds);
+			cur.setDate(cur.getDate() + 1);
+		}
+		const current = new Set(duty.specific_dates || []);
+		const allPresent = matches.every((m) => current.has(m));
+		matches.forEach((m) =>
+			allPresent ? current.delete(m) : current.add(m),
+		);
+		saveDutyDates(duty, [...current]);
+	}
 
 
 	// Done/flagging state — persisted to localStorage per month
@@ -357,6 +444,23 @@ export default function DispatchMonthView({
 			});
 		}
 	}, [savedCounter]);
+
+	// Land on the calendar tab, armed on the duty just created/edited in the
+	// builder, whenever the parent passes a new armDutyId. Change-detected the
+	// same way savedCounter is above, so it doesn't refire on plain remount.
+	// Starts at null (not armDutyId) — this component is fully unmounted and
+	// remounted on every navigation (see page.js's view switch), so armDutyId
+	// only ever arrives as an *initial* prop value, never as a live change on
+	// an already-mounted instance. Initializing the ref to the prop itself
+	// would make this check always pass and silently skip arming.
+	const prevArmDutyIdRef = useRef(null);
+	useEffect(() => {
+		if (armDutyId === prevArmDutyIdRef.current) return;
+		prevArmDutyIdRef.current = armDutyId;
+		if (!armDutyId) return;
+		setActiveTab("calendar");
+		setCalArmedId(armDutyId);
+	}, [armDutyId]);
 
 	// Load cross-month duties for all months visible in the current week
 	useEffect(() => {
@@ -1112,6 +1216,16 @@ export default function DispatchMonthView({
 					onClick={handleWeekTabClick}
 				>
 					週次檢視
+				</button>
+				<button
+					className={`${styles.tabBtn} ${activeTab === "calendar" ? styles.tabActive : ""}`}
+					onClick={() => {
+						setActiveTab("calendar");
+						setFromWeek(false);
+						setTooltip(null);
+					}}
+				>
+					月曆檢視
 				</button>
 				<button
 					className={`${styles.tabBtn} ${activeTab === "ft" ? styles.tabActive : ""}`}
@@ -2511,6 +2625,600 @@ export default function DispatchMonthView({
 						</div>
 					);
 				})()}
+
+			{/* ── TAB: 月曆檢視 ─────────────────────── */}
+			{activeTab === "calendar" && (
+				<div className={styles.splitLayout}>
+					<div className={styles.dutySidebar}>
+						<div className={styles.sidebarHead}>
+							<span className={styles.sidebarHeadLabel}>
+								選擇班型以指派日期
+							</span>
+						</div>
+						<div className={styles.sidebarList}>
+							{duties.length === 0 ? (
+								<div className={styles.emptyMonth}>
+									<Layers size={28} style={{ opacity: 0.3 }} />
+									<span style={{ fontSize: 12, color: "#777" }}>
+										尚無班型
+									</span>
+								</div>
+							) : (
+								["KHH", "TSA", "RMQ"].map((base) => {
+									const baseDuties = duties.filter(
+										(d) => d.base === base,
+									);
+									if (baseDuties.length === 0) return null;
+									const isBaseCollapsed =
+										collapsedBases.has(base);
+									const baseColors = {
+										KHH: "#2563eb",
+										TSA: "#16a34a",
+										RMQ: "#ea580c",
+									};
+									const baseNames = {
+										KHH: "高雄",
+										TSA: "台北",
+										RMQ: "台中",
+									};
+									// Group this base's duties by duty_code — a code
+									// commonly has several variants (different date
+									// patterns/labels) that must stay distinguishable.
+									const codeGroups = {};
+									baseDuties.forEach((d) => {
+										(codeGroups[d.duty_code] =
+											codeGroups[d.duty_code] || []).push(d);
+									});
+									// Detect variants that are identical in reporting
+									// time, end time, and route — these need a small
+									// tiebreaker badge since the label text alone
+									// can't distinguish them. Everything else gets
+									// no badge, keeping the common case clean.
+									const variantSignature = (d) =>
+										`${d.reporting_time}|${d.duty_end_time}|${buildRoute(d.id)}`;
+									const tiebreakerIndex = {}; // duty.id -> "2" etc
+									Object.values(codeGroups).forEach(
+										(variants) => {
+											const bySig = {};
+											[...variants]
+												.sort((a, b) =>
+													(a.id || "").localeCompare(
+														b.id || "",
+													),
+												)
+												.forEach((d) => {
+													const sig =
+														variantSignature(d);
+													(bySig[sig] =
+														bySig[sig] || []).push(
+														d,
+													);
+												});
+											Object.values(bySig).forEach(
+												(dupes) => {
+													if (dupes.length > 1) {
+														dupes.forEach(
+															(d, i) => {
+																tiebreakerIndex[
+																	d.id
+																] = i + 1;
+															},
+														);
+													}
+												},
+											);
+										},
+									);
+									const sortedCodes = Object.keys(
+										codeGroups,
+									).sort((a, b) => a.localeCompare(b));
+									return (
+										<div key={base}>
+											<button
+												onClick={() =>
+													setCollapsedBases((prev) => {
+														const next = new Set(prev);
+														next.has(base)
+															? next.delete(base)
+															: next.add(base);
+														return next;
+													})
+												}
+												style={{
+													width: "100%",
+													display: "flex",
+													alignItems: "center",
+													justifyContent: "space-between",
+													padding: "9px 12px",
+													background: "#f8f9fa",
+													border: "none",
+													borderBottom: `2px solid ${baseColors[base]}`,
+													cursor: "pointer",
+													fontFamily: "inherit",
+												}}
+											>
+												<span
+													style={{
+														fontSize: 13,
+														fontWeight: 700,
+														color: baseColors[base],
+														letterSpacing: "0.04em",
+													}}
+												>
+													{base} {baseNames[base]}　
+													{baseDuties.length} 個班型
+												</span>
+												<span
+													style={{
+														fontSize: 12,
+														color: baseColors[base],
+													}}
+												>
+													{isBaseCollapsed ? "▶" : "▼"}
+												</span>
+											</button>
+											{!isBaseCollapsed &&
+												sortedCodes.map((code) => {
+													const groupKey = `${base}|${code}`;
+													const variants =
+														codeGroups[code];
+													const isGroupCollapsed =
+														collapsedCalGroups.has(
+															groupKey,
+														);
+													return (
+														<div key={groupKey}>
+															<button
+																onClick={() =>
+																	toggleCalGroup(
+																		groupKey,
+																	)
+																}
+																style={{
+																	width: "100%",
+																	display: "flex",
+																	alignItems:
+																		"center",
+																	justifyContent:
+																		"space-between",
+																	padding:
+																		"6px 12px 6px 20px",
+																	background:
+																		"#fff",
+																	border: "none",
+																	borderBottom:
+																		"1px solid #eee",
+																	cursor: "pointer",
+																	fontFamily:
+																		"inherit",
+																}}
+															>
+																<span
+																	style={{
+																		fontSize: 12,
+																		fontWeight: 600,
+																	}}
+																>
+																	{code}　
+																	<span
+																		style={{
+																			fontWeight: 400,
+																			color: "#999",
+																		}}
+																	>
+																		{
+																			variants.length
+																		}
+																		個版本
+																	</span>
+																</span>
+																<span
+																	style={{
+																		fontSize: 11,
+																		color: "#999",
+																	}}
+																>
+																	{isGroupCollapsed
+																		? "▶"
+																		: "▼"}
+																</span>
+															</button>
+															{!isGroupCollapsed &&
+																variants.map(
+																	(duty) => {
+																		const isArmed =
+																			calArmedId ===
+																			duty.id;
+																		return (
+																			<div
+																				key={
+																					duty.id
+																				}
+																				onClick={() =>
+																					setCalArmedId(
+																						isArmed
+																							? null
+																							: duty.id,
+																					)
+																				}
+																				style={{
+																					padding:
+																						"7px 12px 7px 28px",
+																					borderBottom:
+																						"1px solid #f3f3f3",
+																					cursor: "pointer",
+																					background: isArmed
+																						? hexToRgba(
+																								baseColors[
+																									base
+																								],
+																								0.1,
+																							)
+																						: "#fff",
+																					borderLeft: isArmed
+																						? `3px solid ${baseColors[base]}`
+																						: "3px solid transparent",
+																				}}
+																			>
+																				<div
+																					style={{
+																						fontSize: 12,
+																						fontWeight: isArmed
+																							? 600
+																							: 400,
+																					}}
+																				>
+																					{duty.reporting_time?.slice(
+																						0,
+																						5,
+																					)}
+																					–
+																					{duty.duty_end_time?.slice(
+																						0,
+																						5,
+																					)}
+																					{"　"}
+																					{buildRoute(
+																						duty.id,
+																					)}
+																					{tiebreakerIndex[
+																						duty
+																							.id
+																					] && (
+																						<span
+																							style={{
+																								fontSize: 10,
+																								color: "#999",
+																								marginLeft: 4,
+																							}}
+																							title="與同組另一版本時間/航線完全相同，僅供區分"
+																						>
+																							#
+																							{
+																								tiebreakerIndex[
+																									duty
+																										.id
+																								]
+																							}
+																						</span>
+																					)}
+																				</div>
+																				<div
+																					style={{
+																						fontSize: 10,
+																						color: "#555",
+																						marginTop: 2,
+																					}}
+																				>
+																					{(
+																						sectors[
+																							duty
+																								.id
+																						] ||
+																						[]
+																					)
+																						.map(
+																							(
+																								s,
+																							) =>
+																								s.flight_number,
+																						)
+																						.join(
+																							", ",
+																						) ||
+																						"—"}
+																				</div>
+																				<div
+																					style={{
+																						display:
+																							"flex",
+																						gap: 2,
+																						marginTop: 3,
+																					}}
+																				>
+																					{WEEKDAYS.map(
+																						(
+																							d,
+																							i,
+																						) => {
+																							const active =
+																								dutyActiveOnIsoWeekday(
+																									duty,
+																									d,
+																								);
+																							return (
+																								<span
+																									key={
+																										d
+																									}
+																									style={{
+																										fontSize: 9,
+																										color: active
+																											? baseColors[
+																													base
+																												]
+																											: "#ddd",
+																									}}
+																								>
+																									{
+																										DAY_NAMES[
+																											i
+																										]
+																									}
+																								</span>
+																							);
+																						},
+																					)}
+																				</div>
+																			</div>
+																		);
+																	},
+																)}
+														</div>
+													);
+												})}
+										</div>
+									);
+								})
+							)}
+						</div>
+					</div>
+
+					<div className={styles.detailArea} style={{ padding: 16 }}>
+						{(() => {
+							const armedDuty = duties.find(
+								(d) => d.id === calArmedId,
+							);
+							const baseColors = {
+								KHH: "#2563eb",
+								TSA: "#16a34a",
+								RMQ: "#ea580c",
+							};
+							if (!armedDuty) {
+								return (
+									<div className={styles.emptySelection}>
+										<Layers
+											size={32}
+											style={{ opacity: 0.25 }}
+										/>
+										<div className={styles.emptySelectionText}>
+											先從左側選擇一個班型版本
+										</div>
+										<div className={styles.emptySelectionSub}>
+											選擇後即可點選日期或星期標題來指派
+										</div>
+									</div>
+								);
+							}
+							const armedColor = baseColors[armedDuty.base];
+							const armedDates = new Set(
+								armedDuty.specific_dates || [],
+							);
+							const otherDatesWithAssignment = new Set();
+							duties.forEach((d) => {
+								if (d.id === armedDuty.id) return;
+								(d.specific_dates || []).forEach((ds) =>
+									otherDatesWithAssignment.add(ds),
+								);
+							});
+							const totalDaysInMonth = daysInMonth(
+								month.year,
+								month.month,
+							);
+							const firstOfMonth = new Date(
+								month.year,
+								month.month - 1,
+								1,
+							);
+							const leadBlank =
+								firstOfMonth.getDay() === 0
+									? 6
+									: firstOfMonth.getDay() - 1;
+							const cells = [];
+							for (let i = 0; i < leadBlank; i++)
+								cells.push(null);
+							for (let d = 1; d <= totalDaysInMonth; d++)
+								cells.push(
+									`${monthPrefix}-${String(d).padStart(2, "0")}`,
+								);
+							return (
+								<>
+									<div
+										style={{
+											display: "flex",
+											alignItems: "center",
+											justifyContent: "space-between",
+											marginBottom: 12,
+										}}
+									>
+										<div>
+											<span
+												style={{
+													fontSize: 15,
+													fontWeight: 600,
+													color: armedColor,
+												}}
+											>
+												{armedDuty.duty_code}
+											</span>
+											{armedDuty.label && (
+												<span
+													style={{
+														fontSize: 12,
+														color: "#666",
+														marginLeft: 8,
+													}}
+												>
+													{armedDuty.label}
+												</span>
+											)}
+											<span
+												style={{
+													fontSize: 12,
+													color: "#999",
+													marginLeft: 8,
+												}}
+											>
+												已指派 {armedDates.size} 天
+												{calSaving ? "　儲存中…" : ""}
+											</span>
+										</div>
+										<div style={{ display: "flex", gap: 8 }}>
+											<button
+												className={styles.btnExport}
+												onClick={() => {
+													lastEditedIdRef.current =
+														armedDuty.id;
+													onEditDuty(
+														armedDuty,
+														month,
+													);
+												}}
+											>
+												返回編輯此班型
+											</button>
+											<button
+												className={styles.btnExport}
+												onClick={() =>
+													setCalArmedId(null)
+												}
+											>
+												取消選擇
+											</button>
+											<button
+												className={styles.btnPrimary}
+												onClick={() => {
+													setCalArmedId(null);
+													onNewDuty(month);
+												}}
+											>
+												完成，建立下一班型
+											</button>
+										</div>
+									</div>
+									<div
+										style={{
+											display: "grid",
+											gridTemplateColumns:
+												"repeat(7, 1fr)",
+											gap: 4,
+										}}
+									>
+										{DAY_NAMES.map((name, i) => (
+											<div
+												key={name}
+												onClick={() =>
+													toggleCalWeekday(
+														i + 1,
+														monthStart,
+														monthEnd,
+													)
+												}
+												title={`切換全月所有星期${name}`}
+												style={{
+													textAlign: "center",
+													fontSize: 12,
+													color: "#666",
+													padding: "6px 0",
+													cursor: "pointer",
+													borderRadius: 4,
+												}}
+											>
+												{name}
+											</div>
+										))}
+										{cells.map((dateStr, idx) => {
+											if (!dateStr)
+												return <div key={idx} />;
+											const isArmedActive =
+												armedDates.has(dateStr);
+											const hasOther =
+												otherDatesWithAssignment.has(
+													dateStr,
+												);
+											return (
+												<div
+													key={dateStr}
+													onClick={() =>
+														toggleCalDate(dateStr)
+													}
+													style={{
+														minHeight: 52,
+														borderRadius: 6,
+														padding: "4px 6px",
+														cursor: "pointer",
+														background: isArmedActive
+															? hexToRgba(
+																	armedColor,
+																	0.15,
+																)
+															: "#fff",
+														border: isArmedActive
+															? `1px solid ${armedColor}`
+															: "1px solid #eee",
+														position: "relative",
+													}}
+												>
+													<div
+														style={{
+															fontSize: 12,
+															fontWeight: isArmedActive
+																? 600
+																: 400,
+															color: isArmedActive
+																? armedColor
+																: "#333",
+														}}
+													>
+														{dateStr.slice(8)}
+													</div>
+													{hasOther && (
+														<span
+															title="此日期還有其他班型"
+															style={{
+																position:
+																	"absolute",
+																top: 6,
+																right: 6,
+																width: 5,
+																height: 5,
+																borderRadius:
+																	"50%",
+																background:
+																	"#bbb",
+															}}
+														/>
+													)}
+												</div>
+											);
+										})}
+									</div>
+								</>
+							);
+						})()}
+					</div>
+				</div>
+			)}
 
 			{/* ── TAB: FT / FDP 統計 ─────────────────── */}
 			{activeTab === "ft" && (

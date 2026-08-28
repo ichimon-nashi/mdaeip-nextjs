@@ -984,10 +984,10 @@ function DutyChangeContent() {
 				};
 
 				// Person A — 原班表時數
-				if (ftData.firstFt !== null) {
-					const c = convertToCanvasCoords(FT_COORDS.firstOriginal.x, FT_COORDS.firstOriginal.y);
-					renderTextOnCanvas(minutesToDisplay(firstFt), c.x, c.y, FT_COORDS.fontSize, "left", "#1d4ed8");
-				}
+				// if (ftData.firstFt !== null) {
+				// 	const c = convertToCanvasCoords(FT_COORDS.firstOriginal.x, FT_COORDS.firstOriginal.y);
+				// 	renderTextOnCanvas(minutesToDisplay(firstFt), c.x, c.y, FT_COORDS.fontSize, "left", "#1d4ed8");
+				// }
 				// Person A — 互換後時數 (delta): green = gain, red = loss
 				// {
 				// 	const c = convertToCanvasCoords(FT_COORDS.firstDelta.x, FT_COORDS.firstDelta.y);
@@ -996,10 +996,10 @@ function DutyChangeContent() {
 				// }
 
 				// Person B — 原班表時數
-				if (ftData.secondFt !== null) {
-					const c = convertToCanvasCoords(FT_COORDS.secondOriginal.x, FT_COORDS.secondOriginal.y);
-					renderTextOnCanvas(minutesToDisplay(secondFt), c.x, c.y, FT_COORDS.fontSize, "left", "#1d4ed8");
-				}
+				// if (ftData.secondFt !== null) {
+				// 	const c = convertToCanvasCoords(FT_COORDS.secondOriginal.x, FT_COORDS.secondOriginal.y);
+				// 	renderTextOnCanvas(minutesToDisplay(secondFt), c.x, c.y, FT_COORDS.fontSize, "left", "#1d4ed8");
+				// }
 				// Person B — 互換後時數 (delta): green = gain, red = loss
 				// {
 				// 	const c = convertToCanvasCoords(FT_COORDS.secondDelta.x, FT_COORDS.secondDelta.y);

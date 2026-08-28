@@ -23,6 +23,10 @@ export default function DispatchPage() {
 	const [view, setView] = useState(VIEW.DASHBOARD);
 	const [selectedMonth, setSelectedMonth] = useState(null);
 	const [editingDuty, setEditingDuty] = useState(null);
+	// Which duty to arm in DispatchMonthView's 月曆檢視 tab on next mount.
+	// Only set by handleGoToCalendar; every other navigation clears it so a
+	// stale id can't re-arm the wrong duty next time MonthView mounts.
+	const [armDutyId, setArmDutyId] = useState(null);
 
 	// Auth guard — same pattern as database-management
 	useEffect(() => {
@@ -39,36 +43,51 @@ export default function DispatchPage() {
 
 	function handleSelectMonth(month) {
 		setSelectedMonth(month);
+		setArmDutyId(null);
 		setView(VIEW.MONTH);
 	}
 
 	function handleBackToDashboard() {
 		setSelectedMonth(null);
+		setArmDutyId(null);
 		setView(VIEW.DASHBOARD);
 	}
 
 	function handleNewDuty(month) {
 		setSelectedMonth(month);
 		setEditingDuty(null);
+		setArmDutyId(null);
 		setView(VIEW.NEW_DUTY);
 	}
 
 	function handleEditDuty(duty, month) {
 		setSelectedMonth(month);
 		setEditingDuty(duty);
+		setArmDutyId(null);
 		setView(VIEW.EDIT_DUTY);
+	}
+
+	// From DispatchDutyBuilder's "儲存並前往月曆檢視" — save already happened,
+	// land back on MonthView with this duty pre-armed for date assignment.
+	function handleGoToCalendar(duty, month) {
+		setSelectedMonth(month);
+		setEditingDuty(null);
+		setArmDutyId(duty.id);
+		setView(VIEW.MONTH);
 	}
 
 	const [savedCounter, setSavedCounter] = useState(0);
 
 	function handleDutySaved() {
 		setEditingDuty(null);
+		setArmDutyId(null);
 		setView(VIEW.MONTH);
 		setSavedCounter((c) => c + 1); // signal MonthView a save just happened
 	}
 
 	function handleBackToMonth() {
 		setEditingDuty(null);
+		setArmDutyId(null);
 		setView(VIEW.MONTH);
 	}
 
@@ -86,6 +105,7 @@ export default function DispatchPage() {
 				onNewDuty={handleNewDuty}
 				onEditDuty={handleEditDuty}
 				savedCounter={savedCounter}
+				armDutyId={armDutyId}
 			/>
 		);
 	}
@@ -97,6 +117,7 @@ export default function DispatchPage() {
 				duty={view === VIEW.EDIT_DUTY ? editingDuty : null}
 				onBack={handleBackToMonth}
 				onSaved={handleDutySaved}
+				onGoToCalendar={handleGoToCalendar}
 			/>
 		);
 	}
