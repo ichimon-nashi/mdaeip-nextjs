@@ -236,30 +236,12 @@
 
 .loadingContainer {
 	display: flex;
-	flex-direction: column;
-	align-items: center;
 	justify-content: center;
-	gap: 18px;
-	min-height: 100vh;
-	min-height: 100dvh;
-	background: radial-gradient(120% 80% at 50% 40%, #241a0d 0%, #0d0a08 48%, #050405 100%);
-}
-
-.loadingMark {
-	font-family: "Noto Serif TC", serif;
-	font-weight: 900;
-	font-size: 56px;
-	color: #fff8e8;
-	letter-spacing: 0.06em;
-	text-shadow: 0 0 26px rgba(255, 203, 120, 0.6);
-	animation: haloBreathe 3.2s ease-in-out infinite;
-	transform-origin: center;
-}
-
-.loadingText {
-	font-family: "Cinzel", serif;
-	font-size: 10px;
-	letter-spacing: 0.36em;
-	text-transform: uppercase;
-	color: #a9865a;
+	align-items: center;
+	height: 100vh;
+	background: black url("/assets/bodyBG.jpg") no-repeat;
+	background-size: cover;
+	background-position: center;
+	color: white;
+	font-size: 1.2rem;
 }

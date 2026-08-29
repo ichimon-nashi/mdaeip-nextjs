@@ -47,20 +47,20 @@ export default function HomePage() {
 		}
 	};
 
+	// Show loading while auth is being checked
 	if (loading) {
 		return (
 			<div className={styles.loadingContainer}>
-				<span className={styles.loadingMark}>豪神</span>
-				<span className={styles.loadingText}>Loading</span>
+				Loading...
 			</div>
 		);
 	}
 
+	// Don't show login form if user is already logged in
 	if (user) {
 		return (
 			<div className={styles.loadingContainer}>
-				<span className={styles.loadingMark}>豪神</span>
-				<span className={styles.loadingText}>登入中</span>
+				登入中...
 			</div>
 		);
 	}
