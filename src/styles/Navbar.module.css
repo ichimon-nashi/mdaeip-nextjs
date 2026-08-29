@@ -1,15 +1,39 @@
-/* NAVBAR */
+/* NAVBAR — Olympus bronze/gold treatment
+   Structure unchanged from before (nav > container > left/right),
+   only presentation changes. navBottomRule is a new sibling element,
+   not a pseudo-element, so its repeating-gradient doesn't fight with
+   any box-shadow on .navbar itself.                                  */
+
 .nav {
-	padding: 0.7rem 0.2rem;
+	padding: 0;
 }
 
 .navbar {
-	background-color: #2563eb;
-	color: white;
-	padding: 1rem 0;
-	box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+	background: linear-gradient(180deg, #2b2318 0%, #221c14 62%, #1b160f 100%);
+	color: #e6d8b8;
+	height: 56px;
+	padding: 0 20px;
+	display: flex;
+	align-items: center;
+	gap: 18px;
+	box-shadow: 0 2px 14px rgba(34, 28, 20, 0.35);
 	position: sticky;
 	top: 0;
+	z-index: 40;
+}
+
+/* 3px Greek-key rule along the bottom edge of the bar */
+.navBottomRule {
+	height: 3px;
+	background: repeating-linear-gradient(
+		90deg,
+		#c9a75c 0 14px,
+		rgba(201, 167, 92, 0.25) 14px 18px,
+		#c9a75c 18px 21px,
+		rgba(201, 167, 92, 0.25) 21px 35px
+	);
+	position: sticky;
+	top: 56px;
 	z-index: 40;
 }
 
@@ -18,82 +42,107 @@
 	display: flex;
 	justify-content: space-between;
 	align-items: center;
-	padding: 0 1rem;
+	gap: 18px;
 }
 
 .navbarLeft {
 	display: flex;
 	align-items: center;
-	gap: 1rem;
+	gap: 14px;
 }
 
 .navbarMenuButton {
-	width: 2.25rem;
-	height: 2.25rem;
-	background: none;
-	border: none;
-	color: white;
+	width: 32px;
+	height: 32px;
+	background: transparent;
+	border: 1px solid rgba(201, 167, 92, 0.45);
+	border-radius: 3px;
+	color: #e6d8b8;
 	cursor: pointer;
-	padding: 0.5rem;
-	border-radius: 0.25rem;
-	transition: background-color 0.2s;
 	display: flex;
 	align-items: center;
 	justify-content: center;
+	transition: background-color 0.2s, border-color 0.2s;
 }
 
 .navbarMenuButton:hover {
-	background-color: rgba(255, 255, 255, 0.1);
+	background-color: rgba(201, 167, 92, 0.18);
+	border-color: #c9a75c;
+}
+
+.navbarTitleGroup {
+	display: flex;
+	flex-direction: column;
+	gap: 1px;
+	line-height: 1;
 }
 
 .navbarTitle {
-	font-size: 1.25rem;
-	font-weight: bold;
+	font-family: "Noto Serif TC", serif;
+	font-weight: 900;
+	font-size: 22px;
+	letter-spacing: 0.14em;
+	color: #f6ead0;
+	text-shadow: 0 1px 0 rgba(0, 0, 0, 0.45);
+}
+
+.navbarKicker {
+	font-family: "Cinzel", serif;
+	font-weight: 600;
+	font-size: 10px;
+	letter-spacing: 0.34em;
+	text-transform: uppercase;
+	color: #cfa758;
 }
 
 .navbarRight {
 	display: flex;
 	align-items: center;
-	gap: 1rem;
+	gap: 14px;
 }
 
-.navbarWelcomeMsg {
-	width: 4.6rem;
-	font-size: 1rem;
+.navbarNickname {
+	font-family: "Cinzel", serif;
+	font-size: 12px;
+	letter-spacing: 0.14em;
+	color: #e6d8b8;
 	margin: 0;
-	color: white;
+	white-space: nowrap;
 }
 
 .settingsButton {
-	width: 2rem;
-	height: 2rem;
-	background: none;
-	border: none;
-	color: white;
+	width: 32px;
+	height: 32px;
+	background: transparent;
+	border: 1px solid rgba(201, 167, 92, 0.45);
+	border-radius: 3px;
+	color: #e6d8b8;
 	cursor: pointer;
-	padding: 0.25rem;
-	border-radius: 0.25rem;
-	transition: background-color 0.2s;
 	display: flex;
 	align-items: center;
 	justify-content: center;
+	transition: background-color 0.2s, border-color 0.2s;
 }
 
 .settingsButton:hover {
-	background-color: rgba(255, 255, 255, 0.1);
+	background-color: rgba(201, 167, 92, 0.18);
+	border-color: #c9a75c;
 }
 
 .logoutButton {
-	padding: 0.25rem 0.75rem;
-	background-color: #1d4ed8;
-	border: none;
-	border-radius: 0.25rem;
-	font-size: 0.875rem;
+	height: 30px;
+	padding: 0 14px;
+	background: transparent;
+	border: 1px solid #c9a75c;
+	border-radius: 3px;
+	color: #e6d8b8;
+	font-size: 12px;
+	letter-spacing: 0.08em;
 	cursor: pointer;
-	color: white;
-	transition: background-color 0.3s;
+	transition: background-color 0.2s, color 0.2s;
 }
 
 .logoutButton:hover {
-	background-color: #1e40af;
+	background-color: #c9a75c;
+	color: #221c14;
 }

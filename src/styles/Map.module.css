@@ -701,3 +701,592 @@
 	position: relative;
 	z-index: 1;
 }
+
+/* ── Region reveal layers (5-region Olympus map) ────────────
+   Added for MapContainer.js's per-region rewrite. .mapImageGray
+   and .mapImageColor above are UNCHANGED — mapImageGray is still
+   used as the base layer, mapImageColor is still used by the
+   alwaysColor (touch) path. These are additive only.            */
+
+/* Base layer, touch path: alwaysColor mode shows full colour
+   immediately, so the gray base underneath never needs to paint —
+   avoids a one-frame gray flash before the colour layer covers it. */
+.mapImageGrayHidden {
+	visibility: hidden;
+}
+
+/* One per region, always mounted, cross-fades on opacity.
+   transition intentionally omits clip-path/mask — those are set
+   once per region and never animate, only opacity does (.5s per
+   README). Identical object-fit/position to mapImageGray, required
+   for pixel-alignment with the base layer.                        */
+.mapRegionColorLayer {
+	position: absolute;
+	inset: 0;
+	width: 100%;
+	height: 100%;
+	object-fit: cover;
+	object-position: center center;
+	pointer-events: none;
+	opacity: 0;
+	transition: opacity 0.5s ease;
+}
+
+.mapLeySvg {
+	position: absolute;
+	inset: 0;
+	width: 100%;
+	height: 100%;
+	pointer-events: none;
+	z-index: 4; /* above region colour layers, below hotspots (z-index 10) */
+}
+
+.mapLeyLine {
+	transition: stroke 0.35s ease;
+	animation-name: leyFlow;
+	animation-timing-function: linear;
+	animation-iteration-count: infinite;
+}
+
+@keyframes leyFlow {
+	to {
+		stroke-dashoffset: -26;
+	}
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.mapLeyLine {
+		animation: none;
+	}
+}
+
+/* ── DesktopMap: world wrapper (zoom-on-lock target) ────────
+   transform lives here, not on MapContainer, so MapContainer
+   stays a dumb layer stack with no knowledge of zoom state.  */
+.mapWorld {
+	width: 100%;
+	height: 100%;
+	transition: transform 0.7s cubic-bezier(0.22, 0.9, 0.24, 1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.mapWorld {
+		transition: none;
+	}
+}
+
+/* Region hotspot — full-container div clipped to the region's own
+   polygon, so the clickable area matches the colour-reveal shape
+   exactly. pointer-events toggled inline per lock state.          */
+.regionHotspot {
+	position: absolute;
+	inset: 0;
+	width: 100%;
+	height: 100%;
+	cursor: pointer;
+	z-index: 8;
+}
+
+.regionLabel {
+	position: absolute;
+	transform: translate(-50%, -50%);
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: 3px;
+	padding: 6px 14px;
+	background: rgba(253, 251, 246, 0.62);
+	border-radius: 4px;
+	backdrop-filter: blur(1px);
+	text-shadow:
+		0 1px 6px rgba(255, 252, 244, 1),
+		0 0 24px rgba(255, 252, 244, 0.95);
+	z-index: 6;
+	transition: all 0.35s ease;
+	text-align: center;
+}
+
+.regionLabelZh {
+	font-weight: 700;
+	font-size: 20px;
+	letter-spacing: 0.16em;
+	line-height: 1.1;
+}
+
+.regionLabelEn {
+	font-family: "Cinzel", serif;
+	font-size: 8px;
+	letter-spacing: 0.3em;
+	text-transform: uppercase;
+}
+
+.regionLabelDomain {
+	font-family: "JetBrains Mono", monospace;
+	font-size: 8px;
+	letter-spacing: 0.14em;
+	color: #8a6a2f;
+}
+
+.regionHoverHint {
+	position: absolute;
+	left: 14px;
+	bottom: 14px;
+	font-size: 11px;
+	color: #8a6a2f;
+	letter-spacing: 0.06em;
+	background: rgba(253, 251, 246, 0.92);
+	padding: 6px 12px;
+	border-radius: 3px;
+	pointer-events: none;
+	z-index: 7;
+	transition: opacity 0.3s ease;
+}
+
+/* ── Point sheet ─────────────────────────────────────────── */
+.pointSheet {
+	position: absolute;
+	left: 0;
+	right: 0;
+	bottom: 0;
+	background: #fbf8f1;
+	box-shadow: 0 -18px 44px rgba(60, 48, 28, 0.24);
+	z-index: 9;
+	transform: translateY(104%);
+	transition: transform 0.5s cubic-bezier(0.22, 0.9, 0.24, 1);
+	border-top: 2px solid transparent;
+	border-image: repeating-linear-gradient(90deg, #b9955a 0 12px, transparent 12px 16px, #b9955a 16px 19px, transparent 19px 31px) 2;
+	max-height: 60%;
+	overflow-y: auto;
+}
+
+.pointSheetOpen {
+	transform: translateY(0);
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.pointSheet {
+		transition: none;
+	}
+}
+
+.sheetHeader {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	padding: 14px 18px;
+	border-bottom: 1px solid #e0d4bc;
+}
+
+.sheetTitleZh {
+	font-weight: 900;
+	font-size: 21px;
+	letter-spacing: 0.08em;
+	color: #221c14;
+}
+
+.sheetTitleEn {
+	font-family: "Cinzel", serif;
+	font-size: 10px;
+	letter-spacing: 0.24em;
+	text-transform: uppercase;
+	color: #a4823f;
+}
+
+.sheetMeta {
+	font-size: 12px;
+	color: #8c8171;
+	flex: 1;
+}
+
+.sheetCloseBtn {
+	width: 30px;
+	height: 30px;
+	flex-shrink: 0;
+	border: 1px solid #ddd0b6;
+	background: transparent;
+	border-radius: 3px;
+	cursor: pointer;
+	color: #5d5442;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+}
+
+.pointGrid {
+	display: grid;
+	grid-template-columns: repeat(3, 1fr);
+	gap: 9px;
+	padding: 14px 18px;
+}
+
+.pointRow {
+	height: 46px;
+	padding: 0 14px;
+	background: #fdfbf6;
+	border: 1px solid #e0d4bc;
+	border-radius: 3px;
+	cursor: pointer;
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	text-align: left;
+	font-family: inherit;
+}
+
+.pointColorBar {
+	width: 7px;
+	height: 26px;
+	border-radius: 2px;
+	flex-shrink: 0;
+}
+
+.pointText {
+	flex: 1;
+	min-width: 0;
+	display: flex;
+	flex-direction: column;
+	gap: 1px;
+}
+
+.pointTitle {
+	font-size: 14px;
+	color: #221c14;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+.pointDesc {
+	font-size: 10px;
+	color: #8c8171;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+.pointChevron {
+	font-family: "Cinzel", serif;
+	font-size: 15px;
+	color: #c0a874;
+	margin-left: auto;
+	flex-shrink: 0;
+	display: flex;
+	align-items: center;
+}
+
+.sheetDetail {
+	display: flex;
+	flex-direction: column;
+}
+
+.sheetDetailBody {
+	display: flex;
+	gap: 18px;
+	padding: 18px;
+}
+
+.sheetThumbnail {
+	width: 160px;
+	height: 126px;
+	flex-shrink: 0;
+	border-radius: 3px;
+	border: 1px solid #ddd0b6;
+	background-color: #e8e2d5;
+}
+
+.sheetDetailText {
+	flex: 1;
+	display: flex;
+	flex-direction: column;
+	justify-content: space-between;
+}
+
+.sheetDetailDesc {
+	font-size: 13px;
+	color: #5d5442;
+	line-height: 1.6;
+	margin: 0 0 14px;
+}
+
+.sheetDetailActions {
+	display: flex;
+	gap: 10px;
+}
+
+.sheetEnterBtn {
+	height: 42px;
+	padding: 0 22px;
+	font-family: "Cinzel", serif;
+	font-weight: 600;
+	font-size: 11px;
+	letter-spacing: 0.22em;
+	text-transform: uppercase;
+	background: #221c14;
+	color: #f6ead0;
+	border: none;
+	border-radius: 3px;
+	cursor: pointer;
+}
+
+.sheetFaqBtn {
+	height: 42px;
+	padding: 0 22px;
+	font-family: "Cinzel", serif;
+	font-weight: 600;
+	font-size: 11px;
+	letter-spacing: 0.22em;
+	text-transform: uppercase;
+	background: transparent;
+	color: #8a6a2f;
+	border: 1px solid #c9b58e;
+	border-radius: 3px;
+	cursor: pointer;
+}
+
+.sheetFaqBtn:disabled {
+	opacity: 0.6;
+	cursor: not-allowed;
+}
+
+/* ── TouchMap ────────────────────────────────────────────────
+   Replaces the old .mobile* / .landscapeMap* rules' job — those
+   classes are left in place above (still referenced by nothing
+   once MobileMap.js/LandscapeMap.js are deleted) rather than
+   removed here, per the golden rule of not touching what this
+   task didn't ask about. Delete them in the same pass that
+   deletes those two files.                                     */
+.touchMapWrapper {
+	flex: 1;
+	min-height: 0;
+	display: flex;
+	flex-direction: column;
+	overflow: hidden;
+}
+
+.touchScroller {
+	flex: 1;
+	min-height: 0;
+	overflow-x: auto;
+	overflow-y: hidden;
+	-webkit-overflow-scrolling: touch;
+	/* Hide the scrollbar — this scroller is driven by tabs, not by hand */
+	scrollbar-width: none;
+}
+
+.touchScroller::-webkit-scrollbar {
+	display: none;
+}
+
+.touchWorld {
+	height: 100%;
+	position: relative;
+	transition: width 0.5s cubic-bezier(0.22, 0.9, 0.24, 1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.touchWorld {
+		transition: none;
+	}
+}
+
+.touchWorldImage {
+	width: 100%;
+	height: 100%;
+	object-fit: cover;
+	object-position: center center;
+	display: block;
+	pointer-events: none;
+	transition: object-position 0.5s cubic-bezier(0.22, 0.9, 0.24, 1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.touchWorldImage {
+		transition: none;
+	}
+}
+
+.touchTabs {
+	display: grid;
+	grid-template-columns: repeat(5, 1fr);
+	height: 68px;
+	flex-shrink: 0;
+	background: linear-gradient(180deg, #fdfbf6, #f1eade);
+	border-top: 1px solid #ddd0b6;
+}
+
+.touchTab {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+	gap: 3px;
+	background: none;
+	border: none;
+	border-top: 2px solid transparent;
+	color: #8c8171;
+	cursor: pointer;
+	font-family: inherit;
+}
+
+.touchTabZh {
+	font-size: 1rem;
+	color: rgb(59, 59, 59);
+}
+
+.touchTabDomain {
+	font-family: "JetBrains Mono", monospace;
+	font-size: 0.6rem;
+	letter-spacing: 0.06em;
+}
+
+.touchTabSelected {
+	border-top-color: #a4823f;
+	margin-top: -1px;
+	background: #f4ecdb;
+}
+
+.touchTabSelected .touchTabZh {
+	color: #221c14;
+	font-weight: 700;
+}
+
+.touchTabSelected .touchTabDomain {
+	color: #8a6a2f;
+}
+
+.touchTabLocked {
+	color: #b3a894;
+}
+
+.touchPointArea {
+	flex-shrink: 0;
+	max-height: 40%;
+	overflow-y: auto;
+	background: #fbf8f1;
+}
+
+.touchPointList {
+	display: flex;
+	flex-direction: column;
+	gap: 7px;
+	padding: 10px 14px;
+}
+
+.touchPointRow {
+	height: 48px;
+	padding: 0 14px;
+	background: #fdfbf6;
+	border: 1px solid #e0d4bc;
+	border-radius: 3px;
+	cursor: pointer;
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	text-align: left;
+	font-family: inherit;
+	width: 100%;
+}
+
+.rotatePrompt {
+	flex: 1;
+	min-height: 0;
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+	gap: 14px;
+	padding: 2rem;
+	text-align: center;
+	color: #5d5442;
+	background: #fdfbf6;
+}
+
+.rotatePrompt svg {
+	animation: rotatePromptSpin 1.6s ease-in-out infinite;
+}
+
+.rotatePrompt span {
+	font-size: 14px;
+	letter-spacing: 0.04em;
+}
+
+@keyframes rotatePromptSpin {
+	0%, 100% {
+		transform: rotate(0deg);
+	}
+	50% {
+		transform: rotate(-90deg);
+	}
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.rotatePrompt svg {
+		animation: none;
+	}
+}
+
+/* ── Desktop point sheet — larger type/spacing ──────────────
+   Scoped to .pointSheet's own descendants only, so TouchMap's
+   .touchPointRow / .touchTab* classes above are untouched.     */
+@media (min-width: 1024px) {
+	.sheetHeader {
+		padding: 18px 24px;
+	}
+
+	.sheetTitleZh {
+		font-size: 24px;
+	}
+
+	.sheetTitleEn {
+		font-size: 11px;
+	}
+
+	.sheetMeta {
+		font-size: 13px;
+	}
+
+	.pointGrid {
+		gap: 12px;
+		padding: 18px 24px;
+	}
+
+	.pointRow {
+		height: 54px;
+		padding: 0 16px;
+		gap: 12px;
+	}
+
+	.pointColorBar {
+		width: 8px;
+		height: 30px;
+	}
+
+	.pointTitle {
+		font-size: 15px;
+	}
+
+	.pointDesc {
+		font-size: 11px;
+	}
+
+	.sheetDetailBody {
+		padding: 24px;
+		gap: 22px;
+	}
+
+	.sheetThumbnail {
+		width: 190px;
+		height: 150px;
+	}
+
+	.sheetDetailDesc {
+		font-size: 14px;
+	}
+
+	.sheetEnterBtn,
+	.sheetFaqBtn {
+		height: 46px;
+		padding: 0 26px;
+		font-size: 12px;
+	}
+}

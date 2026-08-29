@@ -58,10 +58,11 @@ const NavigationDrawer = ({ isOpen, onClose, userDetails }) => {
 		{
 			id: "cabin-crew",
 			title: "空服",
+			en: "Cabin Crew",
 			items: [
 				{
 					id: "dashboard",
-					title: "我的班表",
+					title: "儀表板",
 					description: "個人班表總覽",
 					icon: <PngIcon src="/assets/profile.png" alt="Dashboard" />,
 					path: "/dashboard",
@@ -128,6 +129,7 @@ const NavigationDrawer = ({ isOpen, onClose, userDetails }) => {
 		{
 			id: "cabin-crew-ofc",
 			title: "空服 OFC",
+			en: "Cabin Crew OFC",
 			items: [
 				{
 					id: "mrt-checker",
@@ -168,6 +170,7 @@ const NavigationDrawer = ({ isOpen, onClose, userDetails }) => {
 		{
 			id: "ground",
 			title: "地勤",
+			en: "Ground",
 			items: [
 				{
 					id: "ground-schedule",
@@ -202,6 +205,7 @@ const NavigationDrawer = ({ isOpen, onClose, userDetails }) => {
 		{
 			id: "system",
 			title: "系統",
+			en: "System",
 			items: [
 				{
 					id: "database-management",
@@ -244,11 +248,11 @@ const NavigationDrawer = ({ isOpen, onClose, userDetails }) => {
 		.filter((section) => section.items.length > 0);
 
 	const avatarStyle = {
-		backgroundColor: "#f3f4f6",
-		color: "#6b7280",
-		border: "2px solid #6b7280",
-		width: "56px",
-		height: "56px",
+		backgroundColor: "#f4ecdb",
+		color: "#6a5326",
+		border: "2px solid #b99a5c",
+		width: "52px",
+		height: "52px",
 		borderRadius: "50%",
 		overflow: "hidden",
 		flexShrink: 0,
@@ -348,6 +352,9 @@ const NavigationDrawer = ({ isOpen, onClose, userDetails }) => {
 							<div className={styles.drawerSection}>
 								<h3 className={styles.drawerSectionTitle}>
 									{section.title}
+									<span className={styles.drawerSectionEn}>
+										{section.en}
+									</span>
 								</h3>
 								<div className={styles.drawerMenu}>
 									{section.items.map((item) => {
@@ -362,6 +369,10 @@ const NavigationDrawer = ({ isOpen, onClose, userDetails }) => {
 												}
 												className={`${styles.drawerMenuItem} ${isActive ? styles.active : ""}`}
 											>
+												<span
+													className={styles.menuItemColorBar}
+													style={{ background: item.color }}
+												/>
 												<div
 													className={
 														styles.menuItemIcon
@@ -416,7 +427,7 @@ const NavigationDrawer = ({ isOpen, onClose, userDetails }) => {
 
 				{/* Footer */}
 				<div className={styles.drawerFooter}>
-					<div className={styles.appVersion}>豪神APP v4.4.5</div>
+					<div className={styles.appVersion}>豪神APP v5.4.7</div>
 				</div>
 			</div>
 		</>

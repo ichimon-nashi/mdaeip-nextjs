@@ -56,11 +56,13 @@ const Navbar = ({ title = "豪神", onMenuClick }) => {
 						>
 							<Menu size={20} />
 						</button>
-						<div className={styles.navbarTitle}>{title}</div>
+						<div className={styles.navbarTitleGroup}>
+							<div className={styles.navbarTitle}>{title}</div>
+						</div>
 					</div>
 					<div className={styles.navbarRight}>
 						<div>
-							<p className={styles.navbarWelcomeMsg}>
+							<p className={styles.navbarNickname}>
 								Hi, {navbarNickname()}
 							</p>
 						</div>
@@ -77,6 +79,7 @@ const Navbar = ({ title = "豪神", onMenuClick }) => {
 					</div>
 				</div>
 			</nav>
+			<div className={styles.navBottomRule} aria-hidden="true" />
 
 			{/* Settings Modal */}
 			<PasswordChangeModal 

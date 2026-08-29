@@ -2,39 +2,52 @@
 
 // MapDashboard
 // ─────────────────────────────────────────────────────────────────────────────
-// Three layout states:
+// Collapsed from three layout states to two now that MobileMap.js and
+// LandscapeMap.js have converged into one TouchMap.js component (same
+// scroll-to-centre behaviour regardless of orientation — see README §5
+// and TouchMap.js's header comment). Old routing:
 //
-//   "desktop"   — non-touch, any width → DesktopMap (hover clip-path reveal)
-//   "landscape" — touch + landscape orientation → LandscapeMap (2:1 combined,
-//                 full color, tap navigates)
-//   "carousel"  — touch + portrait orientation → MobileMap (Embla carousel)
+//   iPhone portrait/landscape, iPad portrait/landscape → carousel/landscape
+//   Desktop/laptop                                     → desktop
 //
-// Detection logic:
-//   isTouch:     pointer:coarse media query — catches all real touch devices
-//   isIpadSpoof: iPadOS 13+ reports MacIntel UA — supplement with maxTouchPoints
-//   isLandscape: innerWidth > innerHeight — simple orientation check
+// New routing:
 //
-// Device routing:
-//   iPhone portrait     → carousel
-//   iPhone landscape    → landscape
-//   iPad portrait       → carousel
-//   iPad landscape      → landscape
-//   Desktop/laptop      → desktop
+//   Any touch device, any orientation → TouchMap
+//   Desktop/laptop                    → DesktopMap
+//
+// Detection logic (isTouch / isIpadSpoof) is unchanged from before —
+// orientation no longer needs to be checked at all.
 //
 // SSR safety: layout starts "desktop" on server (no window).
 // One-frame flash on mount is acceptable since HUD renders first.
 // ─────────────────────────────────────────────────────────────────────────────
 
+// Portrait guard: true device orientation lock isn't reliably available to
+// a normal (non-fullscreen, non-installed) web page — the Screen Orientation
+// API has zero support in iOS Safari and only works inside fullscreen on
+// Android. Auto-fullscreening a dashboard people open constantly would be
+// worse UX than the problem it solves. This blocks the touch map with a
+// rotate prompt in landscape instead. Portrait is the only orientation the
+// touch map renders in.
+
 import { useState, useEffect } from "react";
+import { RotateCw } from "lucide-react";
 import DesktopMap from "./DesktopMap";
-import MobileMap from "./MobileMap";
-import LandscapeMap from "./LandscapeMap";
+import TouchMap from "./TouchMap";
 import styles from "../../styles/Map.module.css";
 
 const SHOW_MAP = true;
 
+const RotatePrompt = () => (
+	<div className={styles.rotatePrompt}>
+		<RotateCw size={28} />
+		<span>請將裝置轉為直向以使用地圖</span>
+	</div>
+);
+
 const MapDashboard = ({ user, onScheduleOpen }) => {
 	const [layout, setLayout] = useState("desktop"); // SSR-safe default
+	const [isPortrait, setIsPortrait] = useState(true);
 	const [mounted, setMounted] = useState(false);
 
 	useEffect(() => {
@@ -45,21 +58,17 @@ const MapDashboard = ({ user, onScheduleOpen }) => {
 			const isIpadSpoof =
 				navigator.platform === "MacIntel" &&
 				navigator.maxTouchPoints > 1;
-			const isTouchDevice = isTouch || isIpadSpoof;
-			const isLandscape = window.innerWidth > window.innerHeight;
-
-			if (!isTouchDevice) {
-				setLayout("desktop");
-			} else if (isLandscape) {
-				setLayout("landscape");
-			} else {
-				setLayout("carousel");
-			}
+			setLayout(isTouch || isIpadSpoof ? "touch" : "desktop");
+			// Dimension comparison, not matchMedia("orientation: ...") —
+			// orientationchange fires before layout dimensions update on
+			// several mobile browsers, giving a stale read on the first
+			// check after rotating. innerWidth/innerHeight reads current
+			// actual size, same method your original MapDashboard.js used.
+			setIsPortrait(window.innerHeight > window.innerWidth);
 		};
 
 		check();
 
-		// Re-check on resize AND orientation change
 		window.addEventListener("resize", check);
 		window.addEventListener("orientationchange", check);
 		return () => {
@@ -72,11 +81,9 @@ const MapDashboard = ({ user, onScheduleOpen }) => {
 
 	return (
 		<div className={styles.mapDashboardSection}>
-			{layout === "carousel" && (
-				<MobileMap user={user} onScheduleOpen={onScheduleOpen} />
-			)}
-			{layout === "landscape" && (
-				<LandscapeMap user={user} onScheduleOpen={onScheduleOpen} />
+			{layout === "touch" && !isPortrait && <RotatePrompt />}
+			{layout === "touch" && isPortrait && (
+				<TouchMap user={user} onScheduleOpen={onScheduleOpen} />
 			)}
 			{layout === "desktop" && (
 				<DesktopMap user={user} onScheduleOpen={onScheduleOpen} />
