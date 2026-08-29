@@ -132,7 +132,7 @@ export default function DutyChangeReviewPage() {
 		const rowB = schedules.find(s => String(s.employee_id) === String(req.person_b_id));
 
 		if (!rowA) throw new Error(`找不到甲方（${req.person_a_name}）的班表`);
-		if (!rowB) throw new Error(`找不刐乙方（${req.person_b_name}）的班表`);
+		if (!rowB) throw new Error(`找不到乙方（${req.person_b_name}）的班表`);
 
 		// 3. Clone both duties arrays
 		const dutiesA = [...(rowA.duties || [])];

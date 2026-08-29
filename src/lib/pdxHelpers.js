@@ -347,6 +347,62 @@ export const pdxSectorHelpers = {
 	},
 };
 
+// ─── DONE-STATE (dutyCardDoneBtn) ──────────────────────────────────────────
+// Per-user, per-month "reviewed/handled" flags for dispatch duty cards.
+// Lives on mdaeip_users.pdx_done_state (JSONB), shaped as:
+//   { "<month_id>": ["dutyId1", "dutyId2", ...] }
+// This replaces localStorage so the toggle is shared across whichever
+// computer a dispatcher logs into, instead of being stuck on one browser.
+//
+// REQUIRED ONE-TIME MIGRATION — run this before using pdxDoneHelpers:
+//   ALTER TABLE mdaeip_users ADD COLUMN pdx_done_state jsonb DEFAULT '{}'::jsonb;
+//
+// Known limitation: setForMonth does a read-modify-write, not an atomic
+// JSONB merge. If the same user toggles duties for two different months
+// from two tabs at nearly the same instant, the slower write could clobber
+// the faster one's month-key. Acceptable for a soft "reviewed" flag, but
+// not a pattern to copy for anything that needs real consistency.
+export const pdxDoneHelpers = {
+	async get(userId) {
+		try {
+			const { data, error } = await supabase
+				.from("mdaeip_users")
+				.select("pdx_done_state")
+				.eq("id", userId)
+				.single();
+			if (error) throw error;
+			return { data: data?.pdx_done_state || {}, error: null };
+		} catch (error) {
+			console.error("pdxDoneHelpers.get:", error);
+			return { data: {}, error: error.message };
+		}
+	},
+
+	async setForMonth(userId, monthId, dutyIds) {
+		try {
+			const { data: existing, error: readError } = await supabase
+				.from("mdaeip_users")
+				.select("pdx_done_state")
+				.eq("id", userId)
+				.single();
+			if (readError) throw readError;
+			const next = {
+				...(existing?.pdx_done_state || {}),
+				[monthId]: dutyIds,
+			};
+			const { error } = await supabase
+				.from("mdaeip_users")
+				.update({ pdx_done_state: next })
+				.eq("id", userId);
+			if (error) throw error;
+			return { error: null };
+		} catch (error) {
+			console.error("pdxDoneHelpers.setForMonth:", error);
+			return { error: error.message };
+		}
+	},
+};
+
 // ─── STATS VIEW ──────────────────────────────────────────────────────────────
 
 export const pdxStatsHelpers = {
@@ -449,6 +505,106 @@ export function monthLabel(year, month) {
 // Get number of days in a month
 export function daysInMonth(year, month) {
 	return new Date(year, month, 0).getDate();
+}
+
+// Parse a "YYYY-MM-DD" string into its ISO weekday (1=Mon...7=Sun) using
+// local date components, not `new Date(dateStr)` — the latter can shift by a
+// day depending on how the runtime interprets the string's timezone.
+function isoWeekdayOfDateStr(dateStr) {
+	const [y, m, d] = dateStr.split("-").map(Number);
+	const day = new Date(y, m - 1, d).getDay();
+	return day === 0 ? 7 : day;
+}
+
+// Auto-generate a duty label representing ONLY non-routine dates.
+// A clean full-weekday-coverage pattern (e.g. every Tuesday + Thursday this
+// month, no exceptions) needs no label at all — the weekday dot row already
+// conveys that. This only ever describes dates that don't belong to a fully
+// covered weekday (e.g. "the first three Mondays" or a one-off 9/30), which
+// is exactly the case a weekday-dot glance can't distinguish on its own.
+// Shared by DispatchDutyBuilder (on every form edit) and DispatchMonthView's
+// calendar tab (on every date/weekday toggle) so both stay in sync — if
+// only one of them recomputed this, editing dates through the other would
+// leave a stale or missing label.
+export function computeDutyLabel(specificDates, year, month) {
+	const total = daysInMonth(year, month);
+	if (
+		!specificDates ||
+		specificDates.length === 0 ||
+		specificDates.length === total
+	) {
+		return "";
+	}
+	const sorted = [...specificDates].sort();
+	const fmt = (d) => `${parseInt(d.slice(5, 7))}/${parseInt(d.slice(8, 10))}`;
+
+	const allDatesInMonth = Array.from({ length: total }, (_, i) => {
+		const day = i + 1;
+		return `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+	});
+	const byWeekday = {};
+	for (let w = 1; w <= 7; w++) {
+		byWeekday[w] = allDatesInMonth.filter(
+			(d) => isoWeekdayOfDateStr(d) === w,
+		);
+	}
+
+	const selectedSet = new Set(sorted);
+	const usedDates = new Set();
+	for (let w = 1; w <= 7; w++) {
+		const weekdayDates = byWeekday[w];
+		if (
+			weekdayDates.length > 0 &&
+			weekdayDates.every((d) => selectedSet.has(d))
+		) {
+			weekdayDates.forEach((d) => usedDates.add(d));
+		}
+	}
+
+	const remaining = sorted.filter((d) => !usedDates.has(d));
+	if (remaining.length === 0) return ""; // entirely routine
+
+	const runs = [];
+	let runStart = remaining[0];
+	let runEnd = remaining[0];
+	for (let i = 1; i < remaining.length; i++) {
+		const prev = new Date(remaining[i - 1]);
+		const curr = new Date(remaining[i]);
+		const diff = (curr - prev) / 86400000;
+		if (diff === 1) {
+			runEnd = remaining[i];
+		} else {
+			runs.push([runStart, runEnd]);
+			runStart = remaining[i];
+			runEnd = remaining[i];
+		}
+	}
+	runs.push([runStart, runEnd]);
+	return runs
+		.map(([s, e]) => (s === e ? fmt(s) : `${fmt(s)} - ${fmt(e)}`))
+		.join("、");
+}
+
+// Is this ISO weekday (1=Mon...7=Sun) *fully* covered by the duty's dates
+// within the given month — i.e. every occurrence of that weekday this month
+// is included, making it a routine pattern rather than a coincidental
+// one-off? Used to give the dayPill/weekday-dot row a distinct look for
+// "just happens to fall on a Wednesday once" vs "every Wednesday."
+// Falls back to active_weekdays for legacy duties with no specific_dates.
+export function isoWeekdayFullyCovered(duty, iso, year, month) {
+	if (!duty.specific_dates?.length) {
+		return duty.active_weekdays?.includes(iso) || false;
+	}
+	const total = daysInMonth(year, month);
+	const selectedSet = new Set(duty.specific_dates);
+	let hasAny = false;
+	for (let d = 1; d <= total; d++) {
+		const dateStr = `${year}-${String(month).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+		if (isoWeekdayOfDateStr(dateStr) !== iso) continue;
+		hasAny = true;
+		if (!selectedSet.has(dateStr)) return false;
+	}
+	return hasAny;
 }
 
 /**

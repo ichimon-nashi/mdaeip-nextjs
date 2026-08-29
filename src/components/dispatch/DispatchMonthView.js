@@ -22,11 +22,14 @@ import {
 	pdxDutyHelpers,
 	pdxSectorHelpers,
 	pdxStatsHelpers,
+	pdxDoneHelpers,
 	monthLabel,
 	minutesToDisplay,
 	weekdayLabel,
 	WEEKDAY_LABELS,
 	daysInMonth,
+	computeDutyLabel,
+	isoWeekdayFullyCovered,
 } from "../../lib/pdxHelpers";
 import styles from "../../styles/DispatchMonthView.module.css";
 
@@ -141,6 +144,9 @@ export default function DispatchMonthView({
 	// When this changes to a non-null id (e.g. right after DispatchDutyBuilder
 	// saves a new duty), jump straight to the 月曆檢視 tab with that duty armed.
 	armDutyId = null,
+	// Logged-in user's id (user.id from useAuth) — needed to scope the
+	// dutyCardDoneBtn state to this specific dispatcher in Supabase.
+	currentUserId = null,
 }) {
 	const [activeTab, setActiveTab] = useState("list");
 	const [duties, setDuties] = useState([]);
@@ -205,6 +211,11 @@ export default function DispatchMonthView({
 			specific_dates: sorted,
 			date_from: sorted[0] || duty.date_from,
 			date_to: sorted[sorted.length - 1] || duty.date_to,
+			// Keep label in sync the same way the builder does — without this,
+			// dates changed only through the calendar tab would leave a stale
+			// or missing label, and dayPills alone can't tell "every Wednesday"
+			// from "just this one Wednesday."
+			label: computeDutyLabel(sorted, month.year, month.month),
 		};
 		setDuties((prev) =>
 			prev.map((d) => (d.id === duty.id ? { ...d, ...patch } : d)),
@@ -253,11 +264,39 @@ export default function DispatchMonthView({
 	}
 
 
-	// Done/flagging state — persisted to localStorage per month
-	const doneStorageKey = `pdx_done_${month.id}`;
-	const [doneDutyIds, setDoneDutyIds] = useState(
-		() => new Set(JSON.parse(localStorage.getItem(doneStorageKey) || "[]")),
-	);
+	// Done/flagging state — now persisted server-side per user (see
+	// pdxDoneHelpers in pdxHelpers.js), scoped by month.id, so it's shared
+	// across whichever computer this dispatcher logs into instead of being
+	// stuck on one browser's localStorage.
+	const [doneDutyIds, setDoneDutyIds] = useState(() => new Set());
+	const doneSaveTimerRef = useRef(null);
+
+	// Load this user's done-state for this month once on mount
+	useEffect(() => {
+		if (!currentUserId) return;
+		let cancelled = false;
+		pdxDoneHelpers.get(currentUserId).then(({ data }) => {
+			if (cancelled) return;
+			setDoneDutyIds(new Set(data[month.id] || []));
+		});
+		return () => {
+			cancelled = true;
+		};
+	}, [currentUserId, month.id]);
+
+	// Debounced write — instant local UI update, write to Supabase ~600ms
+	// after the last toggle so rapid clicking (e.g. toggleAllDone across a
+	// large base) doesn't fire a write per click.
+	function persistDone(nextSet) {
+		if (!currentUserId) return;
+		if (doneSaveTimerRef.current) clearTimeout(doneSaveTimerRef.current);
+		doneSaveTimerRef.current = setTimeout(() => {
+			pdxDoneHelpers.setForMonth(currentUserId, month.id, [
+				...nextSet,
+			]);
+		}, 600);
+	}
+
 	function toggleAllDone(baseDutyIds, e) {
 		e.stopPropagation();
 		setDoneDutyIds((prev) => {
@@ -268,7 +307,7 @@ export default function DispatchMonthView({
 			} else {
 				baseDutyIds.forEach((id) => next.add(id));
 			}
-			localStorage.setItem(doneStorageKey, JSON.stringify([...next]));
+			persistDone(next);
 			return next;
 		});
 	}
@@ -278,7 +317,7 @@ export default function DispatchMonthView({
 		setDoneDutyIds((prev) => {
 			const next = new Set(prev);
 			next.has(dutyId) ? next.delete(dutyId) : next.add(dutyId);
-			localStorage.setItem(doneStorageKey, JSON.stringify([...next]));
+			persistDone(next);
 			return next;
 		});
 	}
@@ -1809,14 +1848,48 @@ export default function DispatchMonthView({
 									</div>
 
 									<div className={styles.weekdaySection}>
-										{WEEKDAYS.map((d) => (
-											<div
-												key={d}
-												className={`${styles.dayPill} ${dutyActiveOnIsoWeekday(selectedDuty, d) ? styles.dayPillOn : styles.dayPillOff}`}
-											>
-												{weekdayLabel(d)}
-											</div>
-										))}
+										{WEEKDAYS.map((d) => {
+											const active =
+												dutyActiveOnIsoWeekday(
+													selectedDuty,
+													d,
+												);
+											const routine =
+												active &&
+												isoWeekdayFullyCovered(
+													selectedDuty,
+													d,
+													month.year,
+													month.month,
+												);
+											const exception =
+												active && !routine;
+											return (
+												<div
+													key={d}
+												className={`${styles.dayPill} ${active ? styles.dayPillOn : styles.dayPillOff}`}
+												style={{
+													fontSize: 13,
+													fontWeight: exception ? 800 : 500,
+													...(exception
+														? {
+																border: "2px solid #c026d3",
+																background: "#fdf4ff",
+																color: "#a21caf",
+																position: "relative",
+															}
+														: {}),
+												}}
+													title={
+														exception
+															? "非固定週期 — 僅特定日期落在此星期"
+															: undefined
+													}
+												>
+													{weekdayLabel(d)}
+												</div>
+											);
+										})}
 										{selectedDuty.label && (
 											<span
 												className={styles.weekdayNote}
@@ -2809,7 +2882,7 @@ export default function DispatchMonthView({
 																		{
 																			variants.length
 																		}
-																		個版本
+																		種班次
 																	</span>
 																</span>
 																<span
@@ -2905,7 +2978,7 @@ export default function DispatchMonthView({
 																				</div>
 																				<div
 																					style={{
-																						fontSize: 10,
+																						fontSize: 11,
 																						color: "#555",
 																						marginTop: 2,
 																					}}
@@ -2937,34 +3010,51 @@ export default function DispatchMonthView({
 																					}}
 																				>
 																					{WEEKDAYS.map(
-																						(
-																							d,
-																							i,
-																						) => {
-																							const active =
-																								dutyActiveOnIsoWeekday(
+																						(d, i) => {
+																							const active = dutyActiveOnIsoWeekday(
+																								duty,
+																								d,
+																							);
+																							const routine =
+																								active &&
+																								isoWeekdayFullyCovered(
 																									duty,
 																									d,
+																									month.year,
+																									month.month,
 																								);
+																							const exception = active && !routine;
 																							return (
 																								<span
-																									key={
-																										d
+																									key={d}
+																									title={
+																										exception
+																											? "非固定週期 — 僅特定日期落在此星期"
+																											: undefined
 																									}
 																									style={{
-																										fontSize: 9,
-																										color: active
-																											? baseColors[
-																													base
-																												]
-																											: "#ddd",
+																										fontSize: 10,
+																										fontWeight: exception
+																											? 800
+																											: 400,
+																										color: exception
+																											? "#a21caf"
+																											: active
+																												? baseColors[
+																														base
+																													]
+																												: "#ddd",
+																										background:
+																											exception
+																												? "#fdf4ff"
+																												: "transparent",
+																										borderRadius: 3,
+																										padding: exception
+																											? "0 2px"
+																											: 0,
 																									}}
 																								>
-																									{
-																										DAY_NAMES[
-																											i
-																										]
-																									}
+																									{DAY_NAMES[i]}
 																								</span>
 																							);
 																						},
@@ -3085,7 +3175,6 @@ export default function DispatchMonthView({
 										</div>
 										<div style={{ display: "flex", gap: 8 }}>
 											<button
-												className={styles.btnExport}
 												onClick={() => {
 													lastEditedIdRef.current =
 														armedDuty.id;
@@ -3094,14 +3183,32 @@ export default function DispatchMonthView({
 														month,
 													);
 												}}
+												style={{
+													backgroundColor:
+														"#9984d4",
+													color: "#fff",
+													border: "1px solid #9984d4",
+													borderRadius: 6,
+													padding: "6px 14px",
+													fontSize: 13,
+													cursor: "pointer",
+												}}
 											>
 												返回編輯此班型
 											</button>
 											<button
-												className={styles.btnExport}
 												onClick={() =>
 													setCalArmedId(null)
 												}
+												style={{
+													backgroundColor: "#fff",
+													color: "#555",
+													border: "1px solid #d1d5db",
+													borderRadius: 6,
+													padding: "6px 14px",
+													fontSize: 13,
+													cursor: "pointer",
+												}}
 											>
 												取消選擇
 											</button>
@@ -3109,10 +3216,10 @@ export default function DispatchMonthView({
 												className={styles.btnPrimary}
 												onClick={() => {
 													setCalArmedId(null);
-													onNewDuty(month);
+													setActiveTab("list");
 												}}
 											>
-												完成，建立下一班型
+												完成
 											</button>
 										</div>
 									</div>

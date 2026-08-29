@@ -4,8 +4,8 @@ import { Toaster } from 'react-hot-toast';
 import './globals.css';
 
 export const metadata = {
-  title: '豪神APP',
-  description: '豪神APP',
+  title: '豪神',
+  description: '豪神',
 };
 
 export const viewport = {

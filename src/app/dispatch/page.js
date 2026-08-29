@@ -106,6 +106,7 @@ export default function DispatchPage() {
 				onEditDuty={handleEditDuty}
 				savedCounter={savedCounter}
 				armDutyId={armDutyId}
+				currentUserId={user?.id}
 			/>
 		);
 	}

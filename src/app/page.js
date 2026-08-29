@@ -18,16 +18,15 @@ export default function HomePage() {
 	const handleChange = (event) => {
 		const { name, value } = event.target;
 		setLoginDetails((prev) => ({ ...prev, [name]: value }));
-		// Clear error when user starts typing
 		if (error) setError("");
 	};
 
 	const handleLoginSubmit = async (event) => {
 		event.preventDefault();
-		
+
 		setIsLoading(true);
 		setError("");
-		
+
 		try {
 			const result = await login(loginDetails.employeeID, loginDetails.password);
 
@@ -35,7 +34,7 @@ export default function HomePage() {
 				toast.success("Login successful");
 			} else {
 				toast("你是哪根蔥?!", {
-					icon: '🤨', 
+					icon: '🤨',
 					duration: 3000,
 				});
 				setError(result.error);
@@ -48,67 +47,79 @@ export default function HomePage() {
 		}
 	};
 
-	// Show loading while auth is being checked
 	if (loading) {
 		return (
 			<div className={styles.loadingContainer}>
-				Loading...
+				<span className={styles.loadingMark}>豪神</span>
+				<span className={styles.loadingText}>Loading</span>
 			</div>
 		);
 	}
 
-	// Don't show login form if user is already logged in
 	if (user) {
 		return (
 			<div className={styles.loadingContainer}>
-				登入中...
+				<span className={styles.loadingMark}>豪神</span>
+				<span className={styles.loadingText}>登入中</span>
 			</div>
 		);
 	}
 
 	return (
 		<div className={styles.loginPageContainer}>
+			<div className={styles.rays} aria-hidden="true" />
+			<div className={styles.halo} aria-hidden="true" />
+			<div className={styles.vignette} aria-hidden="true" />
+
 			<form onSubmit={handleLoginSubmit} className={styles.loginForm}>
 				<div className={styles.login}>
-					<h1 className={styles.title}>豪神</h1>
-					
+					<div className={styles.brand}>
+						<h1 className={styles.title}>豪神</h1>
+						<div className={styles.tagline}>
+							<span className={styles.rule} />
+							<span className={styles.taglineText}>Divine Access</span>
+							<span className={styles.rule} />
+						</div>
+					</div>
+
 					{error && (
 						<div className={styles.errorContainer}>
 							{error}
 						</div>
 					)}
-					
-					<div className={styles.input}>
+
+					<div className={styles.fields}>
 						<input
 							type="text"
 							name="employeeID"
 							onChange={handleChange}
 							value={loginDetails.employeeID}
-							placeholder="員編 Employee ID"
+							placeholder="員編　Employee ID"
 							autoComplete="username"
 							disabled={isLoading}
 							className={styles.inputField}
 						/>
-					</div>
-					<div className={styles.input}>
 						<input
 							type="password"
 							name="password"
 							onChange={handleChange}
 							value={loginDetails.password}
-							placeholder="密碼 Password"
+							placeholder="密碼　Password"
 							autoComplete="current-password"
 							disabled={isLoading}
 							className={styles.inputField}
 						/>
 					</div>
-					<button 
-						type="submit" 
+
+					<button
+						type="submit"
 						disabled={isLoading}
 						className={styles.loginButton}
 					>
-						{isLoading ? "Signing in..." : "Sign in"}
+						{isLoading ? "Ascending…" : "Ascend"}
 					</button>
+
+					<div className={styles.footnote}>Only the worthy pass</div>
 				</div>
 			</form>
 		</div>

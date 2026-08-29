@@ -10,6 +10,7 @@ import {
 	calcReportingTime,
 	minutesToDisplay,
 	WEEKDAY_LABELS,
+	computeDutyLabel,
 } from "../../lib/pdxHelpers";
 import styles from "../../styles/DispatchDutyBuilder.module.css";
 
@@ -290,87 +291,12 @@ export default function DispatchDutyBuilder({ month, duty, onBack, onSaved, onGo
 	const labelManualRef = useRef(false);
 
 	// Auto-generate label from specific dates when not manually edited.
-	// Weekday patterns (e.g. every Tuesday + Thursday this month) are detected
-	// first and rendered compactly as "每週二、四" — otherwise a bulk weekday
-	// toggle from the calendar tab produces a long, unreadable date list here.
-	// Whatever doesn't fit a full weekday pattern falls back to the previous
-	// contiguous-date-run grouping.
+	// A clean recurring weekday pattern needs no label — the weekday dot row
+	// already shows it. See computeDutyLabel in pdxHelpers.js (shared with
+	// DispatchMonthView's calendar tab, so both stay in sync).
 	useEffect(() => {
 		if (labelManualRef.current) return;
-		const total = daysInMonthFn(month.year, month.month);
-		if (specificDates.length === 0 || specificDates.length === total) {
-			setLabel(""); // full month or empty — no label
-			return;
-		}
-		const sorted = [...specificDates].sort();
-		const fmt = (d) =>
-			`${parseInt(d.slice(5, 7))}/${parseInt(d.slice(8, 10))}`;
-
-		function isoWeekdayOf(dateStr) {
-			const [y, m, d] = dateStr.split("-").map(Number);
-			const day = new Date(y, m - 1, d).getDay();
-			return day === 0 ? 7 : day;
-		}
-
-		const allDatesInMonth = Array.from({ length: total }, (_, i) =>
-			localDateStr(month.year, month.month, i + 1),
-		);
-		const byWeekday = {};
-		for (let w = 1; w <= 7; w++) {
-			byWeekday[w] = allDatesInMonth.filter(
-				(d) => isoWeekdayOf(d) === w,
-			);
-		}
-
-		const selectedSet = new Set(sorted);
-		const fullyCoveredWeekdays = [];
-		const usedDates = new Set();
-		for (let w = 1; w <= 7; w++) {
-			const weekdayDates = byWeekday[w];
-			if (
-				weekdayDates.length > 0 &&
-				weekdayDates.every((d) => selectedSet.has(d))
-			) {
-				fullyCoveredWeekdays.push(w);
-				weekdayDates.forEach((d) => usedDates.add(d));
-			}
-		}
-
-		const remaining = sorted.filter((d) => !usedDates.has(d));
-		const parts = [];
-
-		if (fullyCoveredWeekdays.length > 0) {
-			const names = fullyCoveredWeekdays.map(
-				(w) => DAY_NAMES_SHORT[w - 1],
-			);
-			parts.push(`每週${names.join("、")}`);
-		}
-
-		if (remaining.length > 0) {
-			// Group leftover (non-pattern) dates into contiguous runs
-			const runs = [];
-			let runStart = remaining[0];
-			let runEnd = remaining[0];
-			for (let i = 1; i < remaining.length; i++) {
-				const prev = new Date(remaining[i - 1]);
-				const curr = new Date(remaining[i]);
-				const diff = (curr - prev) / 86400000;
-				if (diff === 1) {
-					runEnd = remaining[i];
-				} else {
-					runs.push([runStart, runEnd]);
-					runStart = remaining[i];
-					runEnd = remaining[i];
-				}
-			}
-			runs.push([runStart, runEnd]);
-			const runParts = runs.map(([s, e]) =>
-				s === e ? fmt(s) : `${fmt(s)} - ${fmt(e)}`,
-			);
-			parts.push(runParts.join("、"));
-		}
-
-		setLabel(parts.join("　+"));
+		setLabel(computeDutyLabel(specificDates, month.year, month.month));
 	}, [specificDates]);
 
 	// Sectors
@@ -726,14 +652,34 @@ export default function DispatchDutyBuilder({ month, duty, onBack, onSaved, onGo
 				<div className={styles.topBarRight}>
 					{onGoToCalendar && (
 						<button
-							className={styles.btnSecondary}
 							onClick={handleSaveAndGoToCalendar}
 							disabled={
 								saving || Object.keys(sectorErrors).length > 0
 							}
 							title="儲存目前內容並前往月曆檢視調整日期"
+							style={{
+								backgroundColor: "#9984d4",
+								color: "#fff",
+								border: "1px solid #9984d4",
+								borderRadius: 6,
+								padding: "6px 14px",
+								fontSize: 13,
+								cursor:
+									saving ||
+									Object.keys(sectorErrors).length > 0
+										? "not-allowed"
+										: "pointer",
+								opacity:
+									saving ||
+									Object.keys(sectorErrors).length > 0
+										? 0.6
+										: 1,
+								display: "inline-flex",
+								alignItems: "center",
+								gap: 6,
+							}}
 						>
-							<Calendar size={14} /> 儲存並前往月曆檢視
+							<Calendar size={14} /> 月曆檢視調整日期
 						</button>
 					)}
 					<button className={styles.btnSecondary} onClick={onBack}>
