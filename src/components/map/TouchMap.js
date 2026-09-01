@@ -12,7 +12,12 @@
 // in the app depends on it before removing the package.
 //
 // mActive drives centring exactly like the README's touch spec: tap a
-// region tab, world scrolls to centre it, point list below updates.
+// region tab, world scrolls to centre it, point list below updates. It's
+// bidirectional — manually scrolling also updates mActive once the scroll
+// settles (see the scroll-sync effect below). That detection only has the
+// X axis to work with (phoneCx/tabletCx), so regions whose cx values sit
+// close together will be ambiguous to it — space touch-specific cx values
+// apart rather than leaving them at whatever the real artwork position is.
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
@@ -27,6 +32,7 @@ import {
 	isRegionLocked,
 	isPointLocked,
 	getRegionById,
+	getThumbnailStyle,
 } from "./mapRegions";
 import { getFaqByHotspot } from "../../lib/faqHelpers";
 import styles from "../../styles/Map.module.css";
@@ -39,12 +45,23 @@ const ZOOM_PHONE = 1.8;
 const ZOOM_TABLET = 1.7;
 // iPad Mini portrait = 768px — same threshold the old MobileMap.js used.
 const TABLET_BREAKPOINT = 768;
+// How much closer a different region's trigger point must be than the
+// current region's before scroll-sync actually switches — in percentage
+// points of world width. Raise this if switching still feels twitchy near
+// a boundary; lower it if switching feels sluggish/unresponsive.
+const SWITCH_HYSTERESIS = 4;
+// How long scrolling must be idle before scroll-sync checks position —
+// raised from an earlier 130ms because momentum-scroll deceleration on
+// some browsers leaves gaps longer than that between scroll events,
+// causing sync to fire mid-momentum instead of after it settles.
+const SCROLL_SETTLE_MS = 220;
 
 const easeInOutCubic = (t) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);
 
 const TouchMap = ({ user, onScheduleOpen }) => {
 	const scrollerRef = useRef(null);
 	const rafRef = useRef(null);
+	const isAutoScrollingRef = useRef(false); // true only during our own rAF animation
 
 	const [worldWidth, setWorldWidth] = useState(0);
 	const [isTablet, setIsTablet] = useState(false);
@@ -69,11 +86,12 @@ const TouchMap = ({ user, onScheduleOpen }) => {
 		return override ?? fallback;
 	}, []);
 
-	// Re-centre on the first region this role can see whenever role changes
-	// (README: "Switching role resets everything and re-centres the touch
-	// scroller on the first region that role can see.")
+	// Re-centre on mount/role-change: prefer a region explicitly flagged
+	// touchDefault (mapRegions.js) if it's accessible, otherwise fall back
+	// to the first accessible region in REGIONS order.
 	useEffect(() => {
-		const firstOpen = REGIONS.find((r) => !lockedIds.includes(r.id));
+		const preferred = REGIONS.find((r) => r.touchDefault && !lockedIds.includes(r.id));
+		const firstOpen = preferred ?? REGIONS.find((r) => !lockedIds.includes(r.id));
 		setMActive(firstOpen ? firstOpen.id : REGIONS[0].id);
 		setPoint(null);
 	}, [lockedIds]);
@@ -112,7 +130,7 @@ const TouchMap = ({ user, onScheduleOpen }) => {
 			0,
 			Math.min(
 				(cx / 100) * worldWidth - scroller.clientWidth / 2,
-				scroller.scrollWidth - scroller.clientWidth,
+				worldWidth - scroller.clientWidth,
 			),
 		);
 		const start = scroller.scrollLeft;
@@ -123,10 +141,15 @@ const TouchMap = ({ user, onScheduleOpen }) => {
 		const startTime = performance.now();
 
 		if (rafRef.current) cancelAnimationFrame(rafRef.current);
+		isAutoScrollingRef.current = true;
 		const step = (now) => {
 			const t = Math.min(1, (now - startTime) / dur);
 			scroller.scrollLeft = start + dist * easeInOutCubic(t);
-			if (t < 1) rafRef.current = requestAnimationFrame(step);
+			if (t < 1) {
+				rafRef.current = requestAnimationFrame(step);
+			} else {
+				isAutoScrollingRef.current = false;
+			}
 		};
 		rafRef.current = requestAnimationFrame(step);
 	}, [worldWidth, isTablet]);
@@ -140,6 +163,68 @@ const TouchMap = ({ user, onScheduleOpen }) => {
 	}, [mActive, worldWidth, scrollToRegion]);
 
 	useEffect(() => () => { if (rafRef.current) cancelAnimationFrame(rafRef.current); }, []);
+
+	// A real touch always wins over our own snap-animation — cancel it
+	// immediately so the two don't fight over scrollLeft.
+	useEffect(() => {
+		const scroller = scrollerRef.current;
+		if (!scroller) return;
+		const onTouchStart = () => {
+			if (rafRef.current) { cancelAnimationFrame(rafRef.current); rafRef.current = null; }
+			isAutoScrollingRef.current = false;
+		};
+		scroller.addEventListener("touchstart", onTouchStart, { passive: true });
+		return () => scroller.removeEventListener("touchstart", onTouchStart);
+	}, []);
+
+	// Manual scroll → sync mActive (and therefore the tabs + point list)
+	// to whichever region's TRIGGER point is nearest the viewport center
+	// once scrolling settles. Trigger points (phoneTriggerCx/tabletTriggerCx)
+	// are separate from the resting/snap points (phoneCx/tabletCx) — set
+	// them explicitly on regions whose snap positions sit too close together
+	// for reliable detection, rather than fighting the snap position itself.
+	// Hysteresis (SWITCH_HYSTERESIS) requires a decisive crossing before
+	// switching, so small back-and-forth near a boundary doesn't flip-flop.
+	useEffect(() => {
+		const scroller = scrollerRef.current;
+		if (!scroller || !worldWidth) return;
+		let settleTimer;
+
+		const triggerCx = (region) =>
+			isTablet
+				? region.tabletTriggerCx ?? region.tabletCx ?? region.cx
+				: region.phoneTriggerCx ?? region.phoneCx ?? region.cx;
+
+		const onScroll = () => {
+			if (isAutoScrollingRef.current) return;
+			clearTimeout(settleTimer);
+			settleTimer = setTimeout(() => {
+				const centerPct = ((scroller.scrollLeft + scroller.clientWidth / 2) / worldWidth) * 100;
+
+				let nearestId = null;
+				let nearestDist = Infinity;
+				for (const region of REGIONS) {
+					if (lockedIds.includes(region.id)) continue;
+					const dist = Math.abs(triggerCx(region) - centerPct);
+					if (dist < nearestDist) { nearestDist = dist; nearestId = region.id; }
+				}
+				if (!nearestId || nearestId === mActive) return;
+
+				const current = getRegionById(mActive);
+				const currentDist = current ? Math.abs(triggerCx(current) - centerPct) : Infinity;
+				if (currentDist - nearestDist < SWITCH_HYSTERESIS) return; // not a decisive crossing
+
+				setPoint(null);
+				setMActive(nearestId);
+			}, SCROLL_SETTLE_MS);
+		};
+
+		scroller.addEventListener("scroll", onScroll, { passive: true });
+		return () => {
+			scroller.removeEventListener("scroll", onScroll);
+			clearTimeout(settleTimer);
+		};
+	}, [worldWidth, isTablet, mActive, lockedIds]);
 
 	const handleTabClick = (id) => {
 		if (lockedIds.includes(id)) {
@@ -243,11 +328,7 @@ const TouchMap = ({ user, onScheduleOpen }) => {
 						<div className={styles.sheetDetailBody}>
 							<div
 								className={styles.sheetThumbnail}
-								style={{
-									backgroundImage: `url(${MAP_IMAGE_SRC})`,
-									backgroundSize: "400% auto",
-									backgroundPosition: `${activeRegion.cx}% ${activeRegion.cy}%`,
-								}}
+								style={getThumbnailStyle(activeRegion)}
 							/>
 							<div className={styles.sheetDetailText}>
 								<p className={styles.sheetDetailDesc}>{point.description}</p>

@@ -27,6 +27,7 @@ import {
 	isPointLocked,
 	getRegionZoomTransform,
 	getRegionClipPath,
+	getThumbnailStyle,
 } from "./mapRegions";
 import { getFaqByHotspot } from "../../lib/faqHelpers";
 import styles from "../../styles/Map.module.css";
@@ -218,11 +219,7 @@ const DesktopMap = ({ user, onScheduleOpen }) => {
 						<div className={styles.sheetDetailBody}>
 							<div
 								className={styles.sheetThumbnail}
-								style={{
-									backgroundImage: `url(${MAP_IMAGE_SRC})`,
-									backgroundSize: "400% auto",
-									backgroundPosition: `${activeRegion.cx}% ${activeRegion.cy}%`,
-								}}
+								style={getThumbnailStyle(activeRegion)}
 							/>
 							<div className={styles.sheetDetailText}>
 								<p className={styles.sheetDetailDesc}>{point.description}</p>

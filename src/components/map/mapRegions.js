@@ -149,6 +149,24 @@ const POINTS = {
 //   tabletCy               — vertical crop position on tablet.
 //   touchZoomPhone        — per-region override of ZOOM_PHONE (TouchMap.js).
 //   touchZoomTablet       — per-region override of ZOOM_TABLET (TouchMap.js).
+//   touchDefault          — true on exactly one region: which region the
+//                           touch map opens on first load. Omit everywhere
+//                           to fall back to the first accessible region in
+//                           REGIONS order (TouchMap.js).
+//   phoneTriggerCx         — scroll-sync detection point on phone, separate
+//                           from phoneCx (the resting/snap point). Set this
+//                           when a region's snap position sits too close to
+//                           a neighbor's for reliable "which region is the
+//                           user looking at" detection. Omit to fall back
+//                           to phoneCx, then cx.
+//   tabletTriggerCx        — same, for tablet. Omit to fall back to
+//                           tabletCx, then cx.
+//   thumbnailCx / thumbnailCy — sheet-detail thumbnail crop position,
+//                           independent of cx/cy (which drive zoom-fit,
+//                           the hover mask, and the clip shape). Omit to
+//                           fall back to cx/cy.
+//   thumbnailZoom          — thumbnail background-size percentage. Omit
+//                           for 400 (the original hardcoded value).
 //
 // phoneCy/tabletCy exist because object-fit:cover on the touch scroller's
 // world box crops the image's TOP/BOTTOM (not left/right — the box is
@@ -171,8 +189,12 @@ export const REGIONS = [
 		// maskRx: 20, maskRy: 24, tabletCx: 52, touchZoomTablet: 1.5,
 		tabletCx:50,
 		tabletCy:8,
+		tabletTriggerCx: 58,
         phoneCx: 49,
+		thumbnailCx: 49,
+		thumbnailCy: 18,
         phoneCy: 10,
+        phoneTriggerCx: 58,
 		touchZoomTablet: 1.7,
 		touchZoomPhone: 1.95,
 		points: [POINTS.dashboard, POINTS.schedule, POINTS.gday],
@@ -190,7 +212,12 @@ export const REGIONS = [
 		ly: 55,
 		tabletCx:49,
 		tabletCy:60,
-        phoneCy:60,
+		tabletTriggerCx: 35,
+		thumbnailCx: 53.8,
+		thumbnailCy: 64,
+		thumbnailZoom: 520,
+		phoneCy:60,
+        phoneTriggerCx: 35,
         touchZoomPhone: 1.8,
 		touchZoomTablet: 1.8,
 		points: [POINTS.etr, POINTS.clb, POINTS.turtle],
@@ -208,6 +235,9 @@ export const REGIONS = [
 		ly: 40,
 		tabletCx: 2,
 		tabletCy: 20,
+		thumbnailCx: 6.5,
+		thumbnailCy: 25,
+		thumbnailZoom: 380,
         phoneCx:17.5,
         phoneCy:16,
 		touchZoomTablet: 1.7,
@@ -227,6 +257,8 @@ export const REGIONS = [
 		ly: 36,
 		tabletCx: 100,
 		tabletCy: 43,
+		thumbnailCx: 92,
+		thumbnailCy: 33.5,
         phoneCx: 82.5,
         phoneCy: 40,
         touchZoomPhone: 1.6,
@@ -246,6 +278,9 @@ export const REGIONS = [
 		ly: 78,
 		tabletCx: 65,
 		tabletCy: 100,
+		thumbnailCx: 68.5,
+		thumbnailCy: 95,
+		thumbnailZoom: 500,
 		touchZoomTablet: 1.5,
         phoneCx: 64.1,
         phoneCy: 96,
@@ -265,6 +300,16 @@ export const getRegionClipPath = (region) => {
 	const ry = region.clipRy ?? region.ry;
 	return `ellipse(${rx}% ${ry}% at ${region.cx}% ${region.cy}%)`;
 };
+
+// Sheet-detail thumbnail crop, decoupled from cx/cy so you can frame the
+// thumbnail independently of what those coordinates drive elsewhere
+// (zoom-fit, hover mask, clip shape). Used by both DesktopMap.js and
+// TouchMap.js's sheetThumbnail — one place instead of two copies drifting.
+export const getThumbnailStyle = (region) => ({
+	backgroundImage: `url(${MAP_IMAGE_SRC})`,
+	backgroundSize: `${region.thumbnailZoom ?? 400}% auto`,
+	backgroundPosition: `${region.thumbnailCx ?? region.cx}% ${region.thumbnailCy ?? region.cy}%`,
+});
 
 export const LEYS = [
 	["naos", "pharos"],
