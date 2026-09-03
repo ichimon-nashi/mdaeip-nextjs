@@ -240,7 +240,7 @@ function CrewColumn({
 												const sign = ftDelta > 0 ? "+" : ftDelta < 0 ? "" : "±";
 												const h = Math.floor(Math.abs(ftDelta) / 60);
 												const m = Math.abs(ftDelta) % 60;
-												const label = `${sign}${h > 0 ? h + "h" : ""}${m > 0 ? m : h === 0 ? "0" : ""}`;
+												const label = `${sign}${h > 0 ? h + "h" : ""}${m > 0 ? `${h > 0 ? " " : ""}${m}m` : h === 0 ? "0m" : ""}`;
 												const isPos = ftDelta > 0;
 												const isNeg = ftDelta < 0;
 												return (
@@ -286,7 +286,7 @@ function CrewColumn({
 				const sign = totalFtDelta > 0 ? "+" : totalFtDelta < 0 ? "" : "±";
 				const h = Math.floor(Math.abs(totalFtDelta) / 60);
 				const m = Math.abs(totalFtDelta) % 60;
-				const label = `${sign}${h > 0 ? h + "h" : ""}${m > 0 ? m : h === 0 ? "0" : ""}`;
+				const label = `${sign}${h > 0 ? h + "h" : ""}${m > 0 ? `${h > 0 ? " " : ""}${m}m` : h === 0 ? "0m" : ""}`;
 				const isPos = totalFtDelta > 0, isNeg = totalFtDelta < 0;
 				return (
 					<div className={`${styles.totalDeltaBar} ${isPos ? styles.calDeltaPos : isNeg ? styles.calDeltaNeg : styles.calDeltaZero}`}>
@@ -845,7 +845,9 @@ export default function SwapTab() {
 								const fmt = (min) => {
 									const sign = min >= 0 ? "+" : "−";
 									const abs = Math.abs(min);
-									return `${sign}${Math.floor(abs/60)}h${abs%60 > 0 ? abs%60 : ""}`;
+									const h = Math.floor(abs / 60);
+									const m = abs % 60;
+									return `${sign}${h > 0 ? h + "h" : ""}${m > 0 ? `${h > 0 ? " " : ""}${m}m` : h === 0 ? "0m" : ""}`;
 								};
 								const color = (d) => d > 0 ? "#16a34a" : d < 0 ? "#dc2626" : "#64748b";
 								return (
