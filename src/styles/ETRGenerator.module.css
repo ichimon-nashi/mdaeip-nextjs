@@ -1,540 +1,900 @@
-.etrGeneratorContainer {
-	background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
-	font-family: "Roboto", sans-serif;
-	color: #1a202c;
-	min-height: 100vh;
+/* ─────────────────────────────────────────────────────────────
+   e-TAHI Report — Olympus (night) theme
+   Palette lives here as custom properties so the other 豪神 pages
+   can import the same values.
+   ───────────────────────────────────────────────────────────── */
 
-	background: black url("/assets/bodyBG.jpg") no-repeat;
-	background-size: cover;
-	background-position: center;
+.etrGeneratorContainer {
+	--night: #070b18;
+	--gold: #c9a75c;
+	--gold-hi: #ecd49a;
+	--cream: #f4ecd8;
+	--body: #dcd6c6;
+	--mute: #93a0bc;
+	--moon: #9dbbe8;
+	--ember: #f0c3a8;
+
+	--glass-a: rgba(24, 33, 66, 0.44);
+	--glass-b: rgba(10, 15, 34, 0.58);
+	--edge: rgba(201, 167, 92, 0.24);
+
 	position: relative;
-	z-index: 1; /* Ensure it's below the navigation drawer */
+	z-index: 1; /* below the navigation drawer */
+	min-height: 100vh;
+	font-family: "Noto Serif TC", serif;
+	color: var(--body);
+	background: var(--night) url("/assets/bodyBG.jpg") no-repeat center top;
+	background-size: cover;
+	background-attachment: fixed;
+}
+
+/* Darkens the artwork enough for CJK body text to hold contrast over the
+   bright temple in its upper third. */
+.nightVeil {
+	position: fixed;
+	inset: 0;
+	pointer-events: none;
+	background: radial-gradient(
+		120% 80% at 50% 0%,
+		rgba(7, 11, 24, 0.28) 0%,
+		rgba(7, 11, 24, 0.72) 46%,
+		rgba(5, 8, 18, 0.92) 100%
+	);
 }
 
 .etrContent {
-	padding: 1rem;
-}
-
-.etrContent input[type="number"]::-webkit-inner-spin-button,
-.etrContent input[type="number"]::-webkit-outer-spin-button {
-	opacity: 1;
+	position: relative;
+	max-width: 980px;
+	margin: 0 auto;
+	padding: 0 26px 132px;
 }
 
 .etrContent li {
 	list-style: none;
 }
 
-.etrContent fieldset {
-	margin: 1.5rem 0;
-	background: rgba(255, 255, 255, 0.7);
-	backdrop-filter: blur(10px);
-	border-radius: 12px;
-	box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+.loadingState {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	gap: 12px;
+	padding: 90px 0;
+	color: var(--gold-hi);
+	font-size: 1rem;
+	letter-spacing: 0.14em;
 }
 
-.etrContent h2 {
-	font-size: 1.4rem;
-	color: #2d3748;
+.loadingGlow {
+	width: 9px;
+	height: 9px;
+	border-radius: 50%;
+	background: var(--gold);
+	box-shadow: 0 0 14px var(--gold);
+	animation: brazier 1.6s ease-in-out infinite;
 }
 
-/* Header Component */
+/* ── Header ─────────────────────────────────────────────── */
+
 .headerContainer {
+	position: relative;
+	padding: 46px 0 26px;
 	text-align: center;
+}
+
+/* The only motion in the header. Replaces the old 1.1s neon flicker, which
+   read as a failing tube rather than lamplight. */
+.brazier {
+	position: absolute;
+	top: 12px;
+	left: 50%;
+	width: 340px;
+	height: 130px;
+	transform: translateX(-50%);
+	pointer-events: none;
+	background: radial-gradient(
+		50% 50% at 50% 50%,
+		rgba(216, 180, 102, 0.26),
+		rgba(216, 180, 102, 0)
+	);
+	animation: brazier 4.2s ease-in-out infinite;
+}
+
+@keyframes brazier {
+	0%,
+	100% {
+		opacity: 0.55;
+	}
+	45% {
+		opacity: 0.9;
+	}
+	70% {
+		opacity: 0.68;
+	}
+}
+
+.headerInner {
+	position: relative;
+	display: inline-flex;
+	flex-direction: column;
+	align-items: center;
+	gap: 12px;
+}
+
+.kicker {
+	font-family: "Cinzel", serif;
+	font-size: 12px;
+	font-weight: 600;
+	letter-spacing: 0.34em;
+	text-transform: uppercase;
+	color: #a08d63;
 }
 
 .title {
-	font-size: 3rem;
-	letter-spacing: 0.2rem;
+	margin: 0;
+	font-family: "Noto Serif TC", serif;
+	font-weight: 900;
+	font-size: 42px;
+	letter-spacing: 0.14em;
+	color: var(--cream);
+	text-shadow: 0 0 24px rgba(201, 167, 92, 0.4), 0 2px 0 rgba(0, 0, 0, 0.5);
 }
 
-.neonText {
-	color: #fff;
-	text-shadow: 0 0 5px #fff, 0 0 10px #fff, 0 0 20px #fff,
-		0 0 40px rgb(63, 92, 255), 0 0 80px rgb(63, 92, 255),
-		0 0 90px rgb(63, 92, 255), 0 0 100px rgb(63, 92, 255);
-	font-weight: 700;
+.ember {
+	color: var(--ember);
+	text-shadow: 0 0 10px rgba(226, 150, 116, 0.7),
+		0 0 34px rgba(214, 132, 108, 0.45), 0 2px 0 rgba(0, 0, 0, 0.55);
 }
 
-.redNeon {
-	color: #c95b5b;
-	text-shadow: 0 0 5px #c95b5b, 0 0 10px #da4848, 0 0 40px #da4848,
-		0 0 80px #da4848, 0 0 90px rgb(63, 92, 255), 0 0 100px rgb(63, 92, 255);
-	font-weight: 700;
+.updatedRow {
+	display: flex;
+	align-items: center;
+	gap: 10px;
 }
 
-.neonText span {
-	animation: flicker 1100ms infinite;
+.rule {
+	width: 40px;
+	height: 1px;
+	background: linear-gradient(90deg, transparent, rgba(201, 167, 92, 0.7));
 }
 
-.neonFlicker {
-	animation-delay: 0.1s;
-}
-
-@keyframes flicker {
-	0% {
-		opacity: 0.5;
-	}
-	10% {
-		opacity: 1;
-	}
-	20% {
-		opacity: 0.5;
-	}
-	40% {
-		opacity: 1;
-	}
-	50% {
-		opacity: 0.5;
-	}
-	60% {
-		opacity: 1;
-	}
-	80% {
-		opacity: 0.5;
-	}
-	100% {
-		opacity: 1;
-	}
+.updatedRow .rule:last-child {
+	background: linear-gradient(270deg, transparent, rgba(201, 167, 92, 0.7));
 }
 
 .versionNo {
-	display: block;
-	margin: 0.5rem 0;
-	font-size: 0.9rem;
-	opacity: 0.7;
-	color: #ffffff;
+	font-family: "JetBrains Mono", monospace;
+	font-size: 12.5px;
+	letter-spacing: 0.1em;
+	color: #98a3bd;
 }
 
-.warning {
-	letter-spacing: 0.3rem;
-	color: #ffffff;
-	text-shadow: 0 0 5px #ffffff, 0 0 10px #ffffff;
-	font-weight: 600;
-}
+/* ── Altar (date / time / seals) ────────────────────────── */
 
-.datePickerContainer {
-	margin: 1rem 0;
-	display: flex;
-	align-items: center;
-	gap: 10px;
-	flex-wrap: wrap;
-	justify-content: center;
-}
-
-.datePickerContainer input {
-	color: #374151;
-	text-align: center;
-	font-size: 1.1rem;
-	background-color: #f9fafb;
-	border: 2px solid #e5e7eb;
-	border-radius: 8px;
-	padding: 8px 12px;
-	transition: all 0.2s ease;
-}
-
-.datePickerContainer input:focus {
-	outline: none;
-	border-color: #3b82f6;
-	box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
-}
-
-.checkboxLabel {
-	display: inline-flex;
-	align-items: center;
-	gap: 6px;
-	color: #ffffff;
-	font-size: 1.1rem;
-	font-weight: 600;
-	cursor: pointer;
-	user-select: none;
-	text-shadow: 0 0 2px #ffffff, 0 0 1px #ffffff;
-}
-
-.missionCheckbox {
-	width: 20px;
-	height: 20px;
-	cursor: pointer;
-	accent-color: #3b82f6;
-}
-
-.etrContent legend {
-	font-size: 1.3rem;
-	letter-spacing: 0.15rem;
-	color: #3f5cff;
-	text-shadow: 0 0 5px #fff, 0 0 10px #fff, 0 0 20px #fff,
-		0 0 40px rgb(63, 92, 255), 0 0 80px rgb(63, 92, 255),
-		0 0 90px rgb(63, 92, 255), 0 0 100px rgb(63, 92, 255);
-	font-weight: 600;
-	padding: 0;
+.altar {
 	position: relative;
+	/* Above the stelae below it — each of those creates its own stacking context
+	   via backdrop-filter, so without this the datepicker popup (which renders
+	   inline inside the altar) is painted under CCOM抽問. */
+	z-index: 30;
+	padding: 24px;
+	border-radius: 6px;
+	border: 1px solid rgba(201, 167, 92, 0.3);
+	border-top: 2px solid var(--gold);
+	background: linear-gradient(155deg, rgba(24, 33, 66, 0.5), rgba(10, 15, 34, 0.62));
+	backdrop-filter: blur(18px) saturate(1.15);
+	-webkit-backdrop-filter: blur(18px) saturate(1.15);
+	box-shadow: 0 20px 54px rgba(0, 0, 0, 0.5),
+		inset 0 1px 0 rgba(255, 255, 255, 0.13),
+		inset 0 0 0 1px rgba(255, 255, 255, 0.035);
+	animation: riseIn 0.4s ease both;
+}
+
+@keyframes riseIn {
+	from {
+		opacity: 0;
+		transform: translateY(8px);
+	}
+	to {
+		opacity: 1;
+		transform: none;
+	}
+}
+
+.altarHead {
 	display: flex;
 	align-items: center;
 	gap: 10px;
+	padding-bottom: 14px;
+	color: var(--gold);
 }
 
-/* Add Button for legends */
-.addButton {
-	background: #3b82f6;
-	color: white;
+.altarTitle {
+	font-weight: 700;
+	font-size: 13px;
+	letter-spacing: 0.16em;
+	color: #e8d9b4;
+}
+
+.altarEn {
+	font-family: "Cinzel", serif;
+	font-size: 11px;
+	letter-spacing: 0.22em;
+	text-transform: uppercase;
+	color: var(--mute);
+}
+
+.altarRow {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: flex-end;
+	gap: 14px;
+}
+
+.fieldGroup,
+.sealGroup {
+	display: flex;
+	flex-direction: column;
+	gap: 7px;
+	min-width: 0;
+}
+
+.fieldLabel {
+	font-size: 12.5px;
+	font-weight: 700;
+	letter-spacing: 0.14em;
+	color: #aab5cd;
+}
+
+.inputShell {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	height: 42px;
+	padding: 0 13px;
+	border-radius: 4px;
+	border: 1px solid rgba(201, 167, 92, 0.32);
+	background: rgba(9, 14, 32, 0.55);
+	backdrop-filter: blur(6px);
+	-webkit-backdrop-filter: blur(6px);
+	color: var(--gold);
+}
+
+.inputShell:focus-within {
+	border-color: var(--gold);
+	box-shadow: 0 0 0 3px rgba(201, 167, 92, 0.16);
+}
+
+/* The datepicker popup is a child of this shell; keep it clear of siblings. */
+.fieldGroup {
+	position: relative;
+	z-index: 2;
+}
+
+.bareInput,
+.inputShell :global(.react-datepicker__input-container) input {
+	width: 100%;
+	min-width: 0;
+	background: transparent;
 	border: none;
-	border-radius: 50%;
-	width: 24px;
-	height: 24px;
-	display: inline-flex;
+	outline: none;
+	color: var(--cream);
+	font-family: "JetBrains Mono", monospace;
+	font-size: 15px;
+	letter-spacing: 0.04em;
+	color-scheme: dark;
+}
+
+.sealRow {
+	display: flex;
+	gap: 9px;
+}
+
+/* Qualification seals. Mutual exclusion is expressed by disabling the losing
+   seal, so the illegal combination is unreachable. */
+.seal {
+	display: flex;
 	align-items: center;
 	justify-content: center;
+	gap: 9px;
+	height: 42px;
+	padding: 0 16px;
+	border-radius: 4px;
 	cursor: pointer;
-	font-size: 14px;
+	font-family: "Noto Serif TC", serif;
+	font-size: 13px;
+	letter-spacing: 0.06em;
+	color: var(--cream);
+	border: 1px solid rgba(201, 167, 92, 0.3);
+	background: rgba(9, 14, 32, 0.5);
+	backdrop-filter: blur(6px);
+	-webkit-backdrop-filter: blur(6px);
+	transition: all 0.22s ease;
+}
+
+.seal:hover:not(:disabled):not(.sealOn) {
+	border-color: var(--gold);
+	background: rgba(201, 167, 92, 0.12);
+}
+
+/* An active seal keeps its gold plate on hover — swapping to the translucent
+   hover fill left black text on a dark background. */
+.sealOn:hover:not(:disabled) {
+	background: linear-gradient(180deg, #f5e2b6, var(--gold-hi));
+	box-shadow: 0 0 24px rgba(201, 167, 92, 0.5);
+}
+
+.seal:disabled {
+	opacity: 0.38;
+	cursor: not-allowed;
+}
+
+.sealOn {
+	color: #1a1408;
+	border-color: var(--gold);
+	background: linear-gradient(180deg, var(--gold-hi), var(--gold));
+	box-shadow: 0 0 18px rgba(201, 167, 92, 0.35);
+}
+
+.sealDot {
+	width: 7px;
+	height: 7px;
+	flex: 0 0 7px;
+	border-radius: 50%;
+	background: rgba(201, 167, 92, 0.45);
+}
+
+.sealOn .sealDot {
+	background: #1a1408;
+	animation: sealPulse 2.4s ease-out infinite;
+}
+
+@keyframes sealPulse {
+	0%,
+	100% {
+		box-shadow: 0 0 0 0 rgba(201, 167, 92, 0.5);
+	}
+	50% {
+		box-shadow: 0 0 0 6px rgba(201, 167, 92, 0);
+	}
+}
+
+.sealNote {
+	margin-top: 14px;
+	padding-top: 13px;
+	border-top: 1px dashed rgba(201, 167, 92, 0.2);
+	font-size: 13px;
+	letter-spacing: 0.05em;
+	color: var(--mute);
+}
+
+.sealNoteActive {
+	color: var(--gold-hi);
+}
+
+/* ── "The Tablet" divider ───────────────────────────────── */
+
+.tabletDivider {
+	display: flex;
+	align-items: center;
+	gap: 14px;
+	padding: 30px 2px 16px;
+}
+
+.dividerEn {
+	font-family: "Cinzel", serif;
+	font-size: 12px;
+	font-weight: 600;
+	letter-spacing: 0.28em;
+	text-transform: uppercase;
+	color: var(--mute);
+	white-space: nowrap;
+}
+
+.dividerLine {
+	flex: 1;
+	height: 1px;
+	background: linear-gradient(
+		90deg,
+		rgba(201, 167, 92, 0.5),
+		rgba(201, 167, 92, 0.06)
+	);
+}
+
+.dividerNote {
+	font-size: 13px;
+	letter-spacing: 0.08em;
+	color: var(--mute);
+	white-space: nowrap;
+}
+
+/* ── Stelae ─────────────────────────────────────────────── */
+
+.stele {
+	margin-bottom: 18px;
+	border-radius: 6px;
+	overflow: hidden;
+	border: 1px solid var(--edge);
+	background: linear-gradient(155deg, var(--glass-a), var(--glass-b));
+	backdrop-filter: blur(18px) saturate(1.15);
+	-webkit-backdrop-filter: blur(18px) saturate(1.15);
+	box-shadow: 0 20px 54px rgba(0, 0, 0, 0.5),
+		inset 0 1px 0 rgba(255, 255, 255, 0.13),
+		inset 0 0 0 1px rgba(255, 255, 255, 0.035);
+	animation: riseIn 0.45s ease both;
+}
+
+.steleHead {
+	display: flex;
+	align-items: center;
+	gap: 14px;
+	padding: 14px 24px;
+	border-bottom: 1px solid rgba(201, 167, 92, 0.22);
+	background: linear-gradient(
+		180deg,
+		rgba(201, 167, 92, 0.15),
+		rgba(201, 167, 92, 0.02)
+	);
+}
+
+.numeral {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 34px;
+	height: 34px;
+	flex: 0 0 34px;
+	border-radius: 3px;
+	border: 1px solid rgba(201, 167, 92, 0.45);
+	background: rgba(9, 14, 32, 0.45);
+	font-family: "Cinzel", serif;
+	font-weight: 700;
+	font-size: 15px;
+	color: var(--gold-hi);
+}
+
+.steleHeadText {
+	display: flex;
+	flex-direction: column;
+	gap: 3px;
+}
+
+.steleTitle {
+	font-weight: 700;
+	font-size: 17px;
+	letter-spacing: 0.12em;
+	color: var(--cream);
+}
+
+/* Deliberately Noto Serif TC, not Cinzel: this label is Chinese, and at the
+   old 9px all-caps it was below the readability floor. */
+.steleSub {
+	font-size: 13px;
+	font-weight: 400;
+	letter-spacing: 0.1em;
+	color: var(--mute);
+}
+
+.addButton {
+	margin-left: auto;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 30px;
+	height: 30px;
+	flex: 0 0 30px;
+	border-radius: 3px;
+	background: transparent;
+	border: 1px solid rgba(201, 167, 92, 0.4);
+	color: var(--gold);
+	cursor: pointer;
 	transition: all 0.2s ease;
-	margin-left: 10px;
 }
 
 .addButton:hover {
-	background: #2563eb;
-	transform: scale(1.1);
+	background: rgba(201, 167, 92, 0.16);
+	border-color: var(--gold);
+	color: var(--gold-hi);
 }
 
-/* CCOM Container */
-.ccomContainer {
-	border: 2px solid #e0e7ff;
-	border-radius: 12px;
-	padding: 1.5rem;
+.steleBody {
+	display: flex;
+	flex-direction: column;
+	gap: 14px;
+	padding: 24px;
 }
 
-/* Bulletin Container */
-.bulletinContainer {
-	border: 2px solid #dbeafe;
-	border-radius: 12px;
-	padding: 1.5rem;
+.steleBody h2 {
+	margin: 0 0 14px;
+	font-size: 16px;
+	font-weight: 700;
+	letter-spacing: 0.06em;
+	color: var(--gold-hi);
 }
+
+.steleBody p,
+.steleBody li {
+	margin: 0 0 10px;
+	font-size: 15px;
+	line-height: 2;
+	letter-spacing: 0.03em;
+	color: var(--body);
+	text-wrap: pretty;
+}
+
+/* ── Bulletin count stepper ─────────────────────────────── */
 
 .bulletinControlContainer {
-	margin-top: 0.2rem;
-	margin-bottom: 0.5rem;
-	text-align: left;
+	display: flex;
+	align-items: center;
+	gap: 14px;
+	flex-wrap: wrap;
+	padding-bottom: 4px;
 }
 
-.bulletinLabel {
-	display: block;
-	margin-bottom: 0.5rem;
-	font-size: 1.1rem;
-	color: #374151;
-	font-weight: 500;
+.bulletinLabelGroup {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+}
+
+.bulletinHint {
+	font-size: 12.5px;
+	color: var(--mute);
 }
 
 .bulletinInputGroup {
 	display: inline-flex;
 	align-items: center;
-	border-radius: 8px;
 	overflow: hidden;
-	background-color: #ffffff;
-	box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-	border: 2px solid #e5e7eb;
+	border: 1px solid rgba(201, 167, 92, 0.34);
+	border-radius: 4px;
+	background: rgba(9, 14, 32, 0.5);
+	backdrop-filter: blur(6px);
+	-webkit-backdrop-filter: blur(6px);
 }
 
 .bulletinButton {
-	width: 50px;
-	height: 50px;
-	background-color: #3b82f6;
-	border: none;
-	color: white;
-	font-size: 24px;
-	font-weight: bold;
-	cursor: pointer;
-	transition: background-color 0.2s ease;
+	width: 46px;
+	height: 44px;
 	display: flex;
 	align-items: center;
 	justify-content: center;
+	border: none;
+	background: rgba(201, 167, 92, 0.12);
+	color: var(--gold-hi);
+	font-size: 21px;
 	line-height: 1;
+	cursor: pointer;
+	transition: background 0.18s ease;
+}
+
+.bulletinButton:first-child {
+	border-right: 1px solid rgba(201, 167, 92, 0.28);
+}
+
+.bulletinButton:last-child {
+	border-left: 1px solid rgba(201, 167, 92, 0.28);
 }
 
 .bulletinButton:hover:not(:disabled) {
-	background-color: #2563eb;
-}
-
-.bulletinButton:active:not(:disabled) {
-	background-color: #1d4ed8;
+	background: rgba(201, 167, 92, 0.24);
 }
 
 .bulletinButton:disabled {
-	background-color: #9ca3af;
+	color: rgba(201, 167, 92, 0.3);
 	cursor: not-allowed;
-	opacity: 0.5;
 }
 
 .bulletinInput {
-	width: 80px;
-	height: 50px;
-	background: transparent;
-	border: none;
-	border-left: 1px solid rgba(255, 255, 255, 0.3);
-	border-right: 1px solid rgba(255, 255, 255, 0.3);
-	color: #374151;
-	font-size: 18px;
-	font-weight: bold;
-	text-align: center;
-	outline: none;
+	width: 62px;
+	height: 44px;
 	margin: 0;
 	padding: 0;
+	background: transparent;
+	border: none;
+	outline: none;
+	text-align: center;
+	font-family: "JetBrains Mono", monospace;
+	font-weight: 700;
+	font-size: 17px;
+	color: var(--cream);
+	-moz-appearance: textfield;
 }
 
-/* Hide number input spinners */
 .bulletinInput::-webkit-outer-spin-button,
 .bulletinInput::-webkit-inner-spin-button {
 	-webkit-appearance: none;
 	margin: 0;
 }
 
-.bulletinInput {
-	-moz-appearance: textfield; /* Firefox */
+.cutoffNote {
+	margin-left: auto;
+	font-family: "JetBrains Mono", monospace;
+	font-size: 12.5px;
+	letter-spacing: 0.08em;
+	color: var(--mute);
 }
 
-.etrContent li,
-.etrContent p {
-	margin-bottom: 1rem;
-	color: #374151;
-}
+/* ── Bulletin list ──────────────────────────────────────── */
 
+/* Each row owns its own timestamp (via ::before from data-timestamp), so a
+   wrapping title can never push the stamps out of step with their bulletins.
+   The old build rendered two independent <ul> columns that drifted apart.
+   Generated content is excluded from textContent, so the copy is unaffected. */
 .bulletinDataContainer {
-	display: flex;
-	gap: 1rem;
-	align-items: flex-start;
+	display: block;
 }
 
 .leftColumn {
-	color: #dc2626;
-	flex-shrink: 0;
-	min-width: 120px;
-	font-weight: 600;
-}
-
-.leftColumn li {
-	margin-bottom: 1rem;
-	line-height: 1.4;
-	font-size: 0.9rem;
-	color: #dc2626;
-}
-
-.rightColumn {
-	flex: 1;
+	display: none;
 }
 
 .rightColumn li {
-	margin-bottom: 1rem;
-	line-height: 1.4;
-	color: #1f2937;
+	display: grid;
+	grid-template-columns: 158px 1fr;
+	gap: 0 16px;
+	align-items: baseline;
+	margin: 0;
+	padding: 10px 12px;
+	border-radius: 3px;
+	line-height: 2;
 }
 
-/* Additional Remarks Container */
-.additionalRemarksContainer {
-	margin-bottom: 4.5rem;
-	border: 2px solid #f3f4f6;
-	border-radius: 12px;
-	padding: 1.5rem;
+/* Moonlight blue, not the old red — red read as an error state and vibrated
+   against the indigo background. */
+.rightColumn li::before {
+	content: attr(data-timestamp);
+	font-family: "JetBrains Mono", monospace;
+	font-size: 13px;
+	letter-spacing: 0.02em;
+	color: var(--moon);
 }
 
-.additionalRemarkInput {
-	width: 100%;
-	height: 5rem;
-	font-size: 1rem;
-	background-color: #ffffff;
-	border: 2px solid #e5e7eb;
-	border-radius: 8px;
-	padding: 12px;
-	color: #374151;
+.rightColumn li:nth-child(odd) {
+	background: rgba(255, 255, 255, 0.028);
 }
 
-.additionalRemarkInput:focus {
-	outline: none;
-	border-color: #3b82f6;
-	box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
-}
+/* ── Copy dock ──────────────────────────────────────────── */
 
-/* Copy Button */
-.copyButton {
-	cursor: pointer;
+.copyDock {
 	position: fixed;
 	left: 0;
+	right: 0;
 	bottom: 0;
-	width: 100%;
-	height: 7%;
-	background: linear-gradient(135deg, #10b981 0%, #059669 100%);
-	animation: blink 2s infinite linear;
-	color: white;
-	font-size: 2.2rem;
-	border: none;
-	border-radius: 0.5rem 0.5rem 0 0;
-	text-shadow: 0 0 5px rgba(255, 255, 255, 0.5),
-		0 0 10px rgba(16, 185, 129, 0.3);
-	font-weight: 700;
-	z-index: 100; /* Lower than navigation drawer */
+	z-index: 100; /* below the navigation drawer */
+	padding: 14px 0;
+	padding-bottom: calc(14px + env(safe-area-inset-bottom));
+	border-top: 1px solid rgba(201, 167, 92, 0.3);
+	background: linear-gradient(
+		180deg,
+		rgba(7, 11, 24, 0.35),
+		rgba(7, 11, 24, 0.92) 55%
+	);
+	backdrop-filter: blur(16px) saturate(1.1);
+	-webkit-backdrop-filter: blur(16px) saturate(1.1);
 }
 
-@keyframes blink {
-	0%,
-	100% {
-		background: linear-gradient(135deg, #10b981 0%, #059669 100%);
-		box-shadow: 0 0 5px rgba(16, 185, 129, 0.3),
-			0 0 25px rgba(16, 185, 129, 0.2), 0 0 50px rgba(16, 185, 129, 0.1);
-	}
-	50% {
-		background: linear-gradient(135deg, #34d399 0%, #10b981 100%);
-		box-shadow: 0 0 5px rgba(52, 211, 153, 0.4),
-			0 0 25px rgba(52, 211, 153, 0.3), 0 0 50px rgba(52, 211, 153, 0.2);
-	}
+.copyDockInner {
+	max-width: 980px;
+	margin: 0 auto;
+	padding: 0 26px;
+	display: flex;
+	align-items: center;
+}
+
+/* Steady, not blinking. The old 2s infinite blink on a full-width fixed bar
+   was an accessibility problem and fought the artwork. */
+.copyButton {
+	margin-left: auto;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	gap: 11px;
+	height: 52px;
+	padding: 0 34px;
+	border-radius: 4px;
+	cursor: pointer;
+	color: #160f04;
+	border: 1px solid var(--gold);
+	background: linear-gradient(180deg, var(--gold-hi), var(--gold));
+	box-shadow: 0 0 26px rgba(201, 167, 92, 0.32),
+		inset 0 1px 0 rgba(255, 255, 255, 0.4);
+	transition: all 0.28s ease;
+}
+
+.copyButton:hover {
+	transform: translateY(-1px);
+	box-shadow: 0 0 34px rgba(201, 167, 92, 0.45),
+		inset 0 1px 0 rgba(255, 255, 255, 0.4);
 }
 
 .copyButton.copied {
-	background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
-	animation: copiedBlink 3s infinite linear;
+	border-color: #7fb08a;
+	background: linear-gradient(180deg, #a8d8b4, #6fa87d);
+	box-shadow: 0 0 26px rgba(127, 176, 138, 0.35),
+		inset 0 1px 0 rgba(255, 255, 255, 0.4);
 }
 
-@keyframes copiedBlink {
-	0%,
-	100% {
-		background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
-		box-shadow: 0 0 5px rgba(245, 158, 11, 0.3),
-			0 0 25px rgba(245, 158, 11, 0.2), 0 0 50px rgba(245, 158, 11, 0.1);
+.copyLabel {
+	font-weight: 700;
+	font-size: 16px;
+	letter-spacing: 0.14em;
+}
+
+.copyEn {
+	font-family: "Cinzel", serif;
+	font-size: 12px;
+	font-weight: 600;
+	letter-spacing: 0.24em;
+	text-transform: uppercase;
+	opacity: 0.78;
+}
+
+/* ── Widescreen ─────────────────────────────────────────── */
+
+@media screen and (min-width: 1600px) {
+	.etrContent,
+	.copyDockInner {
+		/* Capped so CJK line length stays comfortable rather than edge-to-edge. */
+		max-width: 1180px;
+		padding-left: 28px;
+		padding-right: 28px;
 	}
-	50% {
-		background: linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%);
-		box-shadow: 0 0 5px rgba(251, 191, 36, 0.4),
-			0 0 25px rgba(251, 191, 36, 0.3), 0 0 50px rgba(251, 191, 36, 0.2);
+
+	.steleBody,
+	.steleHead,
+	.altar {
+		padding: 28px;
+	}
+
+	.rightColumn li {
+		grid-template-columns: 172px 1fr;
 	}
 }
 
-/* Desktop Responsive Design */
-@media screen and (min-width: 1000px) {
+/* ── Tablet ─────────────────────────────────────────────── */
+
+@media screen and (max-width: 1000px) {
+	.etrContent,
+	.copyDockInner {
+		padding-left: 20px;
+		padding-right: 20px;
+	}
+
 	.title {
-		font-size: 3rem;
-	}
-
-	.etrContent {
-		margin: 0 2rem;
-	}
-
-	.etrContent legend {
-		font-size: 2rem;
-		font-weight: 600;
-	}
-
-	.etrContent label {
-		font-size: 1.2rem;
-	}
-
-	.etrContent li,
-	.etrContent p {
-		line-height: 2rem;
-		font-size: 1.3rem;
-	}
-
-	.leftColumn {
-		min-width: 180px;
-	}
-
-	.leftColumn li,
-	.rightColumn li {
-		line-height: 2rem;
-		font-size: 1.3rem;
-	}
-
-	.copyButton {
-		position: relative;
-		width: 15%;
-		display: flex;
-		border-radius: 1rem;
-		margin: auto;
-		margin-bottom: 1rem;
-		justify-content: center;
-		align-items: center;
-		height: 4.5rem;
-		background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
-		color: white;
-		font-size: 2rem;
-		border: none;
-		box-shadow: 0 8px 25px rgba(59, 130, 246, 0.3);
-		z-index: 100; /* Ensure it stays below navigation */
-	}
-
-	.copyButton:hover {
-		transform: translateY(-2px);
-		box-shadow: 0 12px 35px rgba(59, 130, 246, 0.4);
-	}
-
-	.etrContent textarea {
-		font-size: 1.2rem;
+		font-size: 34px;
 	}
 }
 
-/* Mobile Responsive Design */
-@media screen and (max-width: 768px) {
-	.bulletinDataContainer {
-		display: block;
+/* ── Mobile ─────────────────────────────────────────────── */
+
+@media screen and (max-width: 640px) {
+	.etrContent {
+		padding: 0 14px 108px;
 	}
 
-	.leftColumn {
-		display: none; /* Hide the separate timestamp column on mobile */
+	.copyDockInner {
+		padding-left: 14px;
+		padding-right: 14px;
 	}
 
+	.headerContainer {
+		padding: 30px 0 20px;
+	}
+
+	.title {
+		font-size: 27px;
+	}
+
+	.altar,
+	.steleBody {
+		padding: 16px;
+	}
+
+	.steleHead {
+		padding: 12px 16px;
+		gap: 11px;
+	}
+
+	.numeral {
+		width: 28px;
+		height: 28px;
+		flex: 0 0 28px;
+		font-size: 13px;
+	}
+
+	.steleTitle {
+		font-size: 15px;
+	}
+
+	.steleSub,
+	.dividerNote {
+		font-size: 12px;
+	}
+
+	/* Controls stack two-up; the seals take the full row. */
+	.altarRow {
+		display: grid;
+		grid-template-columns: 1fr 1fr;
+		gap: 12px;
+	}
+
+	.sealGroup {
+		grid-column: 1 / -1;
+	}
+
+	.sealRow {
+		display: grid;
+		grid-template-columns: 1fr 1fr;
+	}
+
+	.seal,
+	.inputShell {
+		height: 46px;
+	}
+
+	.seal {
+		padding: 0 10px;
+	}
+
+	.bulletinControlContainer {
+		align-items: flex-start;
+		gap: 10px;
+	}
+
+	.bulletinButton {
+		width: 48px;
+		height: 46px;
+	}
+
+	.bulletinInput {
+		width: 54px;
+		height: 46px;
+	}
+
+	.cutoffNote {
+		flex: 1 0 100%;
+		margin-left: 0;
+		font-size: 11.5px;
+	}
+
+	/* The 158px timestamp column doesn't fit — stack each stamp above its
+	   line, the same information in one column. */
 	.rightColumn li {
-		margin-bottom: 1rem;
-		font-size: 0.9rem;
-		padding: 0.8rem;
-		background: linear-gradient(
-			135deg,
-			rgba(59, 130, 246, 0.05) 0%,
-			rgba(147, 197, 253, 0.05) 100%
-		);
-		border-radius: 8px;
-		border-left: 3px solid #3b82f6;
-		position: relative;
-		color: #1f2937;
-		box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+		display: block;
+		margin-bottom: 7px;
+		padding: 9px 11px;
+		border-radius: 4px;
+		border-left: 2px solid rgba(157, 187, 232, 0.5);
+		background: rgba(255, 255, 255, 0.03);
+		font-size: 14px;
+		line-height: 1.6;
+	}
+
+	.rightColumn li:nth-child(odd) {
+		background: rgba(255, 255, 255, 0.03);
 	}
 
 	.rightColumn li::before {
-		content: attr(data-timestamp);
 		display: block;
-		color: #dc2626;
-		font-size: 0.75rem;
-		font-weight: bold;
-		margin-bottom: 0.3rem;
-		opacity: 0.9;
-	}
-
-	.title {
-		font-size: 2rem;
+		margin-bottom: 3px;
+		font-size: 12px;
 	}
 
 	.copyButton {
-		font-size: 1.8rem;
-		height: 60px;
+		width: 100%;
+		margin-left: 0;
+		height: 50px;
+		padding: 0 20px;
 	}
 }
 
-/* Very Small Mobile */
-@media screen and (max-width: 480px) {
-	.etrContent {
-		padding: 0.5rem;
-	}
-
-	.title {
-		font-size: 1.5rem;
-	}
-
-	.leftColumn li {
-		font-size: 0.7rem;
-		margin-right: 0.5rem;
-		padding: 0.1rem 0.3rem;
-	}
-
-	.rightColumn li {
-		font-size: 0.8rem;
-		margin-bottom: 0.6rem;
-	}
-
-	.copyButton {
-		font-size: 1.5rem;
-		height: 50px;
+@media (prefers-reduced-motion: reduce) {
+	.brazier,
+	.loadingGlow,
+	.sealOn .sealDot,
+	.altar,
+	.stele {
+		animation: none;
 	}
 }

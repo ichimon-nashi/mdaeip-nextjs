@@ -1,68 +1,115 @@
-/* Modal Overlay */
+/* Add Bulletin — Olympus (night) theme.
+   Same class names as before; no JS changes needed. */
+
 .modalOverlay {
+	--gold: #c9a75c;
+	--gold-hi: #ecd49a;
+	--cream: #f4ecd8;
+	--body: #dcd6c6;
+	--mute: #93a0bc;
+	--moon: #9dbbe8;
+	--edge: rgba(201, 167, 92, 0.28);
+
 	position: fixed;
 	top: 0;
 	left: 0;
 	right: 0;
 	bottom: 0;
-	background-color: rgba(0, 0, 0, 0.5);
+	z-index: 10000;
 	display: flex;
 	align-items: center;
 	justify-content: center;
-	z-index: 10000;
+	padding: 16px;
+	background: rgba(5, 8, 18, 0.72);
+	backdrop-filter: blur(6px);
+	-webkit-backdrop-filter: blur(6px);
+	animation: fadeIn 0.22s ease both;
 }
 
-/* Modal Content */
+@keyframes fadeIn {
+	from {
+		opacity: 0;
+	}
+	to {
+		opacity: 1;
+	}
+}
+
 .modalContent {
-	background: white;
-	border-radius: 8px;
-	max-width: 500px;
 	width: 90%;
+	max-width: 500px;
 	max-height: 90vh;
 	overflow-y: auto;
-	box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
+	border-radius: 6px;
+	border: 1px solid var(--edge);
+	border-top: 2px solid var(--gold);
+	background: linear-gradient(155deg, rgba(24, 33, 66, 0.94), rgba(10, 15, 34, 0.97));
+	backdrop-filter: blur(18px) saturate(1.15);
+	-webkit-backdrop-filter: blur(18px) saturate(1.15);
+	box-shadow: 0 24px 60px rgba(0, 0, 0, 0.62),
+		inset 0 1px 0 rgba(255, 255, 255, 0.1);
+	font-family: "Noto Serif TC", serif;
+	color: var(--body);
+	animation: riseIn 0.28s cubic-bezier(0.22, 0.9, 0.24, 1) both;
 }
 
-/* Modal Header */
+@keyframes riseIn {
+	from {
+		opacity: 0;
+		transform: translateY(10px);
+	}
+	to {
+		opacity: 1;
+		transform: none;
+	}
+}
+
 .modalHeader {
 	display: flex;
 	justify-content: space-between;
 	align-items: center;
-	padding: 20px 24px 16px;
-	border-bottom: 1px solid #e5e7eb;
+	padding: 16px 24px;
+	border-bottom: 1px solid var(--edge);
+	background: linear-gradient(
+		180deg,
+		rgba(201, 167, 92, 0.15),
+		rgba(201, 167, 92, 0.02)
+	);
 }
 
 .modalHeader h2 {
 	margin: 0;
-	font-size: 1.25rem;
-	font-weight: 600;
-	color: #111827;
+	font-size: 17px;
+	font-weight: 700;
+	letter-spacing: 0.12em;
+	color: var(--cream);
 }
 
 .modalCloseButton {
-	background: none;
-	border: none;
-	cursor: pointer;
-	padding: 4px;
-	border-radius: 4px;
 	display: flex;
 	align-items: center;
 	justify-content: center;
-	color: #6b7280;
+	width: 32px;
+	height: 32px;
+	padding: 0;
+	border: 1px solid rgba(201, 167, 92, 0.4);
+	border-radius: 3px;
+	background: transparent;
+	color: var(--gold);
+	cursor: pointer;
 	transition: all 0.2s;
 }
 
 .modalCloseButton:hover {
-	background-color: #f3f4f6;
-	color: #374151;
+	background: rgba(201, 167, 92, 0.16);
+	border-color: var(--gold);
+	color: var(--gold-hi);
 }
 
-/* Modal Body */
 .modalBody {
 	padding: 24px;
 }
 
-/* Form Styles */
 .bulletinForm {
 	display: flex;
 	flex-direction: column;
@@ -75,135 +122,167 @@
 
 .formGroup label {
 	display: block;
-	margin-bottom: 6px;
-	font-weight: 500;
-	color: #374151;
-	font-size: 14px;
+	margin-bottom: 7px;
+	font-size: 12.5px;
+	font-weight: 700;
+	letter-spacing: 0.14em;
+	color: #aab5cd;
 }
 
 .formGroup input,
 .formGroup textarea {
 	width: 100%;
-	padding: 8px 12px;
-	border: 1px solid #d1d5db;
-	border-radius: 4px;
-	font-size: 14px;
-	font-family: inherit;
 	box-sizing: border-box;
-	transition:
-		border-color 0.2s,
-		box-shadow 0.2s;
+	padding: 11px 13px;
+	border: 1px solid rgba(201, 167, 92, 0.32);
+	border-radius: 4px;
+	background: rgba(9, 14, 32, 0.6);
+	color: var(--cream);
+	font-family: "Noto Serif TC", serif;
+	font-size: 15px;
+	color-scheme: dark;
+	transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.formGroup input[type="date"],
+.formGroup input[type="time"] {
+	font-family: "JetBrains Mono", monospace;
+	letter-spacing: 0.04em;
 }
 
 .formGroup textarea {
 	resize: vertical;
-	min-height: 60px;
-	line-height: 1.5;
+	min-height: 72px;
+	line-height: 1.7;
+}
+
+.formGroup textarea::placeholder {
+	color: #6f7a94;
 }
 
 .formGroup input:focus,
 .formGroup textarea:focus {
 	outline: none;
-	border-color: #3b82f6;
-	box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+	border-color: var(--gold);
+	box-shadow: 0 0 0 3px rgba(201, 167, 92, 0.16);
 }
 
 .formGroup input:disabled,
 .formGroup textarea:disabled {
-	background-color: #f9fafb;
+	opacity: 0.5;
 	cursor: not-allowed;
-	opacity: 0.7;
 }
 
-/* Form Actions */
+/* Parsed preview — the oracle reading back what it understood. Moonlight
+   rather than the old green; green now means "copied" elsewhere in the app. */
+.parsedPreview {
+	display: flex;
+	flex-direction: column;
+	gap: 5px;
+	margin-top: 9px;
+	padding: 10px 12px;
+	border: 1px solid rgba(157, 187, 232, 0.32);
+	border-left: 2px solid var(--moon);
+	border-radius: 4px;
+	background: rgba(157, 187, 232, 0.08);
+	font-size: 13px;
+	color: #cddcf3;
+}
+
+.parsedPreview strong {
+	color: var(--moon);
+	font-weight: 700;
+	letter-spacing: 0.06em;
+}
+
 .formActions {
 	display: flex;
 	gap: 12px;
 	justify-content: flex-end;
 	margin-top: 24px;
 	padding-top: 16px;
-	border-top: 1px solid #f3f4f6;
+	border-top: 1px solid rgba(201, 167, 92, 0.18);
 }
 
 .cancelButton,
 .submitButton {
-	padding: 10px 20px;
-	border-radius: 6px;
-	font-size: 14px;
-	font-weight: 500;
-	cursor: pointer;
+	min-width: 92px;
+	padding: 11px 20px;
+	border-radius: 4px;
 	border: 1px solid;
-	transition: all 0.2s;
-	min-width: 80px;
+	font-family: "Noto Serif TC", serif;
+	font-size: 14px;
+	font-weight: 700;
+	letter-spacing: 0.1em;
+	cursor: pointer;
+	transition: all 0.22s;
 }
 
 .cancelButton {
-	background-color: white;
-	border-color: #d1d5db;
-	color: #374151;
+	background: rgba(9, 14, 32, 0.6);
+	border-color: rgba(201, 167, 92, 0.3);
+	color: var(--cream);
 }
 
-.cancelButton:hover {
-	background-color: #f9fafb;
-	border-color: #9ca3af;
+.cancelButton:hover:not(:disabled) {
+	background: rgba(201, 167, 92, 0.14);
+	border-color: var(--gold);
+	color: var(--gold-hi);
 }
 
 .submitButton {
-	background-color: #3b82f6;
-	border-color: #3b82f6;
-	color: white;
+	background: linear-gradient(180deg, var(--gold-hi), var(--gold));
+	border-color: var(--gold);
+	color: #160f04;
+	box-shadow: 0 0 22px rgba(201, 167, 92, 0.3),
+		inset 0 1px 0 rgba(255, 255, 255, 0.4);
 }
 
-.submitButton:hover {
-	background-color: #2563eb;
-	border-color: #2563eb;
+/* Keeps its gold plate on hover — swapping to a dark fill would leave the
+   black label unreadable. */
+.submitButton:hover:not(:disabled) {
+	background: linear-gradient(180deg, #f5e2b6, var(--gold-hi));
+	box-shadow: 0 0 30px rgba(201, 167, 92, 0.45),
+		inset 0 1px 0 rgba(255, 255, 255, 0.4);
 }
 
 .submitButton:disabled,
 .cancelButton:disabled {
-	opacity: 0.5;
+	opacity: 0.45;
 	cursor: not-allowed;
 }
 
-.submitButton:disabled:hover,
-.cancelButton:disabled:hover {
-	background-color: initial;
-	border-color: initial;
-}
-
-/* Form Note */
 .formNote {
 	margin-top: 16px;
-	padding: 12px;
-	background-color: #f0f9ff;
+	padding: 12px 14px;
 	border-radius: 4px;
-	border-left: 4px solid #0ea5e9;
+	border-left: 2px solid var(--gold);
+	background: rgba(201, 167, 92, 0.09);
 }
 
 .formNote p {
 	margin: 0;
 	font-size: 13px;
-	color: #0c4a6e;
-	line-height: 1.4;
+	line-height: 1.6;
+	color: #cbbb95;
 }
 
-/* Responsive Design */
 @media (max-width: 640px) {
 	.modalOverlay {
 		padding: 8px;
 	}
 
 	.modalContent {
-		max-height: 95vh;
 		width: 95%;
+		max-height: 95vh;
 	}
 
 	.modalHeader {
-		padding: 16px 20px 12px;
+		padding: 14px 18px;
 	}
 
 	.modalBody {
-		padding: 20px;
+		padding: 18px;
 	}
 
 	.formActions {
@@ -214,19 +293,13 @@
 	.cancelButton,
 	.submitButton {
 		width: 100%;
+		padding: 13px 20px;
 	}
 }
 
-/* Parsed bulletin preview */
-.parsedPreview {
-	display: flex;
-	flex-direction: column;
-	gap: 4px;
-	margin-top: 8px;
-	padding: 8px 10px;
-	background-color: #f0fdf4;
-	border: 1px solid #bbf7d0;
-	border-radius: 4px;
-	font-size: 13px;
-	color: #166534;
+@media (prefers-reduced-motion: reduce) {
+	.modalOverlay,
+	.modalContent {
+		animation: none;
+	}
 }

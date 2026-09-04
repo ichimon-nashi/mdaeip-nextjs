@@ -58,7 +58,7 @@ const GIF_KEYS = {
 		"m_machinist2","m_malboro","m_man","m_mediator","m_mimic","m_minotaur","m_monk","m_netherseer","m_ninja","m_oldman",
 		"m_oldwidow","m_onionknight","m_oracle","m_panther","m_pirate","m_piscodemon","m_queklain","m_ramza1","m_ramza2","m_ramza3",
 		"m_robot","m_runeknight","m_samurai","m_serpentarius","m_skeleton","m_soldier","m_squire","m_summoner","m_swordsaint",
-		"m_teenager","m_templar","m_thief","m_tiamat","m_timemage","m_uribo","m_viscount","m_whitemage","m_widow","wiegraf1",
+		"m_teenager","m_templar","m_thief","m_tiamat","m_timemage","m_uribo","m_viscount","m_whitemage","m_widow","m_wiegraf1",
 		"m_wiegraf2","m_zalera",
 	]
 };
