@@ -45,8 +45,8 @@ const GIF_KEYS = {
 		"f_ahriman","f_alma","f_archer","f_assassin1","f_assassin2","f_assassin3","f_behemoth","f_blackmage","f_bomb",
 		"f_byblos","f_calculator","f_chemist","f_chocobo","f_darkknight","f_demon","f_divineknight","f_dragon1","f_dragon2",
 		"f_dragonkin","f_geomancer","f_ghoul","f_girl","f_goblin","f_holyknight","f_juravis","f_knight","f_lancer","f_malboro",
-		"f_mediator","f_mimic","f_monk","f_ninja","f_oldman","f_oldwidow","f_onionknight","f_oracle","f_panther","f_piscodemon",
-		"f_princess","f_samurai","f_skeleton","f_skyseer","f_squire","f_summoner","f_teenager","f_thief","f_tiamat","tietra",
+		"f_mediator","f_mimic","f_monk","f_ninja","f_oldwoman","f_oldwidow","f_onionknight","f_oracle","f_panther","f_piscodemon",
+		"f_princess","f_samurai","f_skeleton","f_skyseer","f_squire","f_summoner","f_teenager","f_thief","f_tiamat","f_tietra",
 		"f_timemage","f_treant","f_uribo","f_whitemage","f_widow","f_witch","f_woman",
 	],
 	M: [
