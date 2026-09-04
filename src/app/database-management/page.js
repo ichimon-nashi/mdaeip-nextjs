@@ -41,23 +41,26 @@ const getUserGroup = (userData) => {
 };
 
 const GIF_KEYS = {
-	M: [
-		"m_ahriman","m_archer","m_bard","m_blackmage","m_bomb","m_calculator","m_chemist",
-		"m_chocobo","m_darkknight","m_dark_behemoth","m_engineer","m_geomancer","m_ghoul",
-		"m_goblin","m_hellknight","m_holyknight","m_hunter","m_juravis","m_knight","m_lancer",
-		"m_mediator","m_mimic","m_monk","m_monster","m_morbol","m_ninja","m_onionknight",
-		"m_oracle","m_pirate","m_pisco_demon","m_ramza1","m_ramza2","m_ramza3","m_red_panther",
-		"m_robot","m_samurai","m_skeleton","m_soldier","m_squire","m_summoner","m_templeknight",
-		"m_thief","m_tiamat","m_timemage","m_whitemage","m_wildbow","m_woodman",
-	],
 	F: [
-		"f_ahriman","f_archer","f_blackmage","f_bomb","f_calculator","f_chemist","f_chocobo",
-		"f_dancer","f_darkknight","f_dark_behemoth","f_dragon","f_dragoner","f_geomancer",
-		"f_ghoul","f_goblin","f_hellknight","f_holyknight","f_juravis","f_knight","f_lancer",
-		"f_mediator","f_mimic","f_monk","f_monster","f_morbol","f_ninja","f_onionknight",
-		"f_oracle","f_red_panther","f_samurai","f_skeleton","f_squire","f_summoner",
-		"f_templeknight","f_thief","f_tiamat","f_timemage","f_whitemage","f_wildbow","f_woodman",
+		"f_ahriman","f_alma","f_archer","f_assassin1","f_assassin2","f_assassin3","f_behemoth","f_blackmage","f_bomb",
+		"f_byblos","f_calculator","f_chemist","f_chocobo","f_darkknight","f_demon","f_divineknight","f_dragon1","f_dragon2",
+		"f_dragonkin","f_geomancer","f_ghoul","f_girl","f_goblin","f_holyknight","f_juravis","f_knight","f_lancer","f_malboro",
+		"f_mediator","f_mimic","f_monk","f_ninja","f_oldman","f_oldwidow","f_onionknight","f_oracle","f_panther","f_piscodemon",
+		"f_princess","f_samurai","f_skeleton","f_skyseer","f_squire","f_summoner","f_teenager","f_thief","f_tiamat","tietra",
+		"f_timemage","f_treant","f_uribo","f_whitemage","f_widow","f_witch","f_woman",
 	],
+	M: [
+		"m_adrammelech","m_ahriman","m_algus","m_archer","m_arkknight1","m_arkknight2","m_astrologer","m_bard","m_behemoth",
+		"m_belias","m_blackmage","m_bomb","m_boy","m_byblos","m_calculator","m_cardinal","m_celebrant","m_chemist","m_chocobo",
+		"m_darkknight","m_delita1","m_delita2","m_delita3","m_demon","m_divineknight1","m_divineknight2","m_divineknight3",
+		"m_divineknight4","m_dragon1","m_dragon2","m_duke1","m_duke2","m_duke3","m_elder","m_fellknight","m_funeralpriest",
+		"m_geomancer","m_ghoul","m_goblin","m_hashmal","m_highpriest","m_hunter","m_juravis","m_knight","m_lancer","m_machinist1",
+		"m_machinist2","m_malboro","m_man","m_mediator","m_mimic","m_minotaur","m_monk","m_netherseer","m_ninja","m_oldman",
+		"m_oldwidow","m_onionknight","m_oracle","m_panther","m_pirate","m_piscodemon","m_queklain","m_ramza1","m_ramza2","m_ramza3",
+		"m_robot","m_runeknight","m_samurai","m_serpentarius","m_skeleton","m_soldier","m_squire","m_summoner","m_swordsaint",
+		"m_teenager","m_templar","m_thief","m_tiamat","m_timemage","m_uribo","m_viscount","m_whitemage","m_widow","wiegraf1",
+		"m_wiegraf2","m_zalera",
+	]
 };
 
 const DatabaseManagement = () => {
