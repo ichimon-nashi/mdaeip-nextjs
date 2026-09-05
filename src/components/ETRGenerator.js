@@ -449,10 +449,10 @@ const ETRGenerator = () => {
 	const lockNo738 = is738Mission;
 
 	const sealNote = is738Mission
-		? "738任務：抽問 1R / 3L / 3R 三題。"
+		? "738任務：抽問 1R / 3L / 3R 各一題。"
 		: isNo738
 		? "無738資格：改由 Ch.10 題庫抽問。"
-		: "二選一；未選則由當期章節抽問 F2 單題。";
+		: "預設ATR：依當期章節抽問 F2 題目。";
 
 	return (
 		<div className={styles.etrGeneratorContainer}>
