@@ -56,6 +56,15 @@ const POINTS = {
 		path: "/clb-generator",
 		section: "clb_generator",
 	},
+	evalFormGenerator: {
+		id: "eval-form-generator",
+		label: "考核表產生器",
+		description: "IOSA 訓練考核表數位化產生",
+		icon: "/assets/evaluation.png",
+		color: "#8c6d1f",
+		path: "/eval-form-generator",
+		section: "evalform_generator",
+	},
 	turtle: {
 		id: "turtle",
 		label: "Turtle Ranking",
@@ -220,7 +229,7 @@ export const REGIONS = [
         phoneTriggerCx: 35,
         touchZoomPhone: 1.8,
 		touchZoomTablet: 1.8,
-		points: [POINTS.etr, POINTS.clb, POINTS.turtle],
+		points: [POINTS.etr, POINTS.clb, POINTS.evalFormGenerator, POINTS.turtle],
 	},
 	{
 		id: "pharos",

@@ -38,7 +38,19 @@ const getUserGroup = (userData) => {
 	if (GROUND_RANKS.includes(userData.rank)) return 'ground';
 	if (userData.rank === 'OTHER') return 'other';
 	return 'cabin'; 
-};
+	};
+
+// Full app_permissions key list — single source of truth so the three
+// places that build a default permissions object (initial state, add,
+// edit-fallback) and the user-card badge list can't drift out of sync.
+const ALL_APP_PERMISSION_KEYS = [
+	"roster", "mrt_checker", "gday", "etr_generator", "clb_generator",
+	"dispatch", "duty_change_review", "database_management",
+	"turtle_ranking", "ground_schedule", "ground_roster", "evalform_generator",
+];
+const isSpecialAdminId = (id) => id === "admin" || id === "51892";
+const buildAppPermissions = (access = false) =>
+Object.fromEntries(ALL_APP_PERMISSION_KEYS.map((k) => [k, { access }]));
 
 const GIF_KEYS = {
 	F: [
@@ -129,6 +141,7 @@ const DatabaseManagement = () => {
 			turtle_ranking: { access: false },
 			clb_generator: { access: false }, // NEW — CLB產生器
 		},
+		app_permissions: buildAppPermissions(false),
 	});
 	const [isLookingUp, setIsLookingUp] = useState(false);
 	const [showPassword, setShowPassword] = useState(false);
@@ -933,6 +946,7 @@ const DatabaseManagement = () => {
 				ground_schedule: { access: false },
 				ground_roster: { access: false },
 			},
+			app_permissions: buildAppPermissions(false),
 		});
 		setShowUserModal(true);
 	};
@@ -962,6 +976,9 @@ const DatabaseManagement = () => {
 				ground_schedule: { access: false },
 				ground_roster: { access: false },
 			},
+			app_permissions: isSpecialAdminId(user.id)
+			? buildAppPermissions(true)
+			: user.app_permissions || buildAppPermissions(false),
 		});
 		setShowUserModal(true);
 	};
@@ -1114,6 +1131,7 @@ const DatabaseManagement = () => {
 			{ key: "database_management", label: "DB" },
 			{ key: "ground_schedule", label: "地勤班表" },
 			{ key: "ground_roster", label: "地勤排班" },
+			{ key: "evalform_generator", label: "考核" },
 		].filter(({ key }) => userData.app_permissions?.[key]?.access === true);
 
 		const userGroup = getUserGroup(userData);
@@ -2162,7 +2180,13 @@ const DatabaseManagement = () => {
 												type="text"
 												value={userFormData.id}
 												onChange={(e) =>
-													setUserFormData((prev) => ({ ...prev, id: e.target.value }))
+													setUserFormData((prev) => ({
+														...prev,
+														id: e.target.value,
+														app_permissions: isSpecialAdminId(e.target.value)
+															? buildAppPermissions(true)
+															: prev.app_permissions,
+													}))
 												}
 												placeholder="請輸入員工編號"
 												disabled={userModalMode === "edit"}
@@ -2267,6 +2291,7 @@ const DatabaseManagement = () => {
 											{ key: "clb_generator", label: "CLB產生器" },
 											{ key: "etr_generator", label: "eTR產生器" },
 											{ key: "turtle_ranking", label: "烏龜排行榜 🐢" },
+											{ key: "evalform_generator", label: "考核表產生器" },
 										].map(({ key, label }) => (
 											<label key={key} className={styles.permissionToggle}>
 												<input

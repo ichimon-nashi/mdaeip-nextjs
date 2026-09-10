@@ -1,0 +1,176 @@
+.page {
+	max-width: 720px;
+	margin: 0 auto;
+	padding: 1rem 1rem 6rem;
+}
+
+.title {
+	font-size: 1.4rem;
+	font-weight: 700;
+	margin-bottom: 1rem;
+}
+
+.card {
+	background: #fff;
+	border: 1px solid #e5e0d5;
+	border-radius: 10px;
+	padding: 1rem;
+	margin-bottom: 1rem;
+}
+
+.fieldLabel {
+	display: block;
+	font-weight: 600;
+	margin-bottom: 0.4rem;
+	font-size: 0.9rem;
+}
+
+.radioRow {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 0.5rem;
+	margin-bottom: 0.75rem;
+}
+
+.radioBtn {
+	padding: 0.4rem 0.8rem;
+	border-radius: 8px;
+	border: 1px solid #cfc6b4;
+	background: #f7f4ec;
+	font-size: 0.85rem;
+	cursor: pointer;
+}
+
+.radioBtnActive {
+	background: #b99a5c;
+	color: #fff;
+	border-color: #b99a5c;
+}
+
+.textInput {
+	width: 100%;
+	padding: 0.5rem;
+	border: 1px solid #cfc6b4;
+	border-radius: 6px;
+	margin-bottom: 0.5rem;
+	font-size: 0.9rem;
+}
+
+.headerGrid {
+	display: grid;
+	grid-template-columns: repeat(2, 1fr);
+	gap: 0.5rem;
+}
+
+@media (min-width: 600px) {
+	.headerGrid {
+		grid-template-columns: repeat(3, 1fr);
+	}
+}
+
+.hint {
+	font-size: 0.8rem;
+	color: #a15c2c;
+}
+
+.totalBar {
+	position: sticky;
+	top: 0;
+	z-index: 10;
+	padding: 0.6rem 1rem;
+	border-radius: 8px;
+	font-weight: 700;
+	text-align: center;
+	margin-bottom: 1rem;
+}
+
+.totalPass {
+	background: #e3f3e9;
+	color: #1f6d3c;
+}
+
+.totalFail {
+	background: #fbe9e7;
+	color: #a13a2c;
+}
+
+.sectionHeader {
+	font-weight: 700;
+	margin-bottom: 0.5rem;
+}
+
+.referenceList {
+	font-size: 0.8rem;
+	color: #7a7264;
+	margin: 0 0 0.6rem 1.1rem;
+	padding: 0;
+}
+
+.scoreRow {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 0.35rem;
+	margin-bottom: 0.5rem;
+}
+
+.scoreBtn {
+	width: 34px;
+	height: 34px;
+	border-radius: 8px;
+	border: 1px solid #cfc6b4;
+	background: #f7f4ec;
+	cursor: pointer;
+	font-size: 0.85rem;
+}
+
+.scoreBtnActive {
+	background: #6d3b47;
+	color: #fff;
+	border-color: #6d3b47;
+}
+
+.commentBlock {
+	margin-top: 0.5rem;
+}
+
+.textarea {
+	width: 100%;
+	min-height: 70px;
+	padding: 0.5rem;
+	border: 1px solid #cfc6b4;
+	border-radius: 6px;
+	font-size: 0.85rem;
+	resize: vertical;
+}
+
+.regenBtn {
+	margin-top: 0.35rem;
+	font-size: 0.78rem;
+	background: none;
+	border: none;
+	color: #6d3b47;
+	text-decoration: underline;
+	cursor: pointer;
+	padding: 0;
+}
+
+.exportBtn {
+	position: fixed;
+	bottom: 1rem;
+	left: 50%;
+	transform: translateX(-50%);
+	padding: 0.8rem 2rem;
+	border-radius: 999px;
+	border: none;
+	background: #b99a5c;
+	color: #fff;
+	font-weight: 700;
+	font-size: 1rem;
+	cursor: pointer;
+	box-shadow: 0 4px 14px rgba(0, 0, 0, 0.18);
+}
+
+.exportBtn:disabled {
+	opacity: 0.6;
+	cursor: not-allowed;
+}
