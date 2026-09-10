@@ -1,176 +1,827 @@
-.page {
-	max-width: 720px;
+/* ─────────────────────────────────────────────────────────────
+   考核表產生器 — same Olympus "night" theme + font sizes as
+   ETRGenerator.module.css. Custom properties and sizing copied
+   directly from there rather than re-derived, per Eric's request
+   to match style and font size exactly.
+   ───────────────────────────────────────────────────────────── */
+
+.evalGeneratorContainer {
+	--night: #070b18;
+	--gold: #c9a75c;
+	--gold-hi: #ecd49a;
+	--cream: #f4ecd8;
+	--body: #dcd6c6;
+	--mute: #93a0bc;
+	--moon: #9dbbe8;
+	--ember: #f0c3a8;
+	--fail: #e2836b;
+	--fail-hi: #f3a98f;
+
+	--glass-a: rgba(24, 33, 66, 0.44);
+	--glass-b: rgba(10, 15, 34, 0.58);
+	--edge: rgba(201, 167, 92, 0.24);
+
+	position: relative;
+	z-index: 1;
+	min-height: 100vh;
+	font-family: "Noto Serif TC", serif;
+	color: var(--body);
+	background: var(--night) url("/assets/bodyBG.jpg") no-repeat center top;
+	background-size: cover;
+	background-attachment: fixed;
+}
+
+.nightVeil {
+	position: fixed;
+	inset: 0;
+	pointer-events: none;
+	background: radial-gradient(
+		120% 80% at 50% 0%,
+		rgba(7, 11, 24, 0.28) 0%,
+		rgba(7, 11, 24, 0.72) 46%,
+		rgba(5, 8, 18, 0.92) 100%
+	);
+}
+
+.evalContent {
+	position: relative;
+	max-width: 980px;
 	margin: 0 auto;
-	padding: 1rem 1rem 6rem;
+	padding: 0 26px 132px;
+}
+
+/* ── Header ─────────────────────────────────────────────── */
+
+.headerContainer {
+	position: relative;
+	padding: 46px 0 26px;
+	text-align: center;
+}
+
+.headerInner {
+	position: relative;
+	display: inline-flex;
+	flex-direction: column;
+	align-items: center;
+	gap: 12px;
+}
+
+.kicker {
+	font-family: "Cinzel", serif;
+	font-size: 12px;
+	font-weight: 600;
+	letter-spacing: 0.34em;
+	text-transform: uppercase;
+	color: #a08d63;
 }
 
 .title {
-	font-size: 1.4rem;
-	font-weight: 700;
-	margin-bottom: 1rem;
+	margin: 0;
+	font-family: "Noto Serif TC", serif;
+	font-weight: 900;
+	font-size: 42px;
+	letter-spacing: 0.14em;
+	color: var(--cream);
+	text-shadow: 0 0 24px rgba(201, 167, 92, 0.4), 0 2px 0 rgba(0, 0, 0, 0.5);
 }
 
-.card {
-	background: #fff;
-	border: 1px solid #e5e0d5;
-	border-radius: 10px;
-	padding: 1rem;
-	margin-bottom: 1rem;
+.ember {
+	color: var(--ember);
+	text-shadow: 0 0 10px rgba(226, 150, 116, 0.7),
+		0 0 34px rgba(214, 132, 108, 0.45), 0 2px 0 rgba(0, 0, 0, 0.55);
+}
+
+/* ── Altar-style cards (form type / training type / details) ─────────── */
+
+.altar {
+	position: relative;
+	z-index: 5;
+	padding: 24px;
+	margin-bottom: 20px;
+	border-radius: 6px;
+	border: 1px solid rgba(201, 167, 92, 0.3);
+	border-top: 2px solid var(--gold);
+	background: linear-gradient(155deg, var(--glass-a), var(--glass-b));
+	backdrop-filter: blur(18px) saturate(1.15);
+	-webkit-backdrop-filter: blur(18px) saturate(1.15);
+	box-shadow: 0 20px 54px rgba(0, 0, 0, 0.5),
+		inset 0 1px 0 rgba(255, 255, 255, 0.13),
+		inset 0 0 0 1px rgba(255, 255, 255, 0.035);
+}
+
+.altarHead {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	padding-bottom: 14px;
+	color: var(--gold);
+}
+
+.altarTitle {
+	font-weight: 700;
+	font-size: 13px;
+	letter-spacing: 0.16em;
+	color: #e8d9b4;
+}
+
+.altarEn {
+	font-family: "Cinzel", serif;
+	font-size: 11px;
+	letter-spacing: 0.22em;
+	text-transform: uppercase;
+	color: var(--mute);
+}
+
+.altarRow {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: flex-end;
+	gap: 14px;
+}
+
+.fieldGroup {
+	position: relative;
+	z-index: 2;
+	display: flex;
+	flex-direction: column;
+	gap: 7px;
+	min-width: 0;
+	flex: 1 1 160px;
+}
+
+/* Popup-hosting fields (datepicker, employee search dropdown) need to
+   stack above LATER siblings that share the base z-index: 2 — without
+   this, whichever field comes later in the DOM wins the stacking tie
+   and paints over the open popup. */
+.popoverFieldGroup {
+	z-index: 50;
 }
 
 .fieldLabel {
-	display: block;
-	font-weight: 600;
-	margin-bottom: 0.4rem;
-	font-size: 0.9rem;
+	font-size: 12.5px;
+	font-weight: 700;
+	letter-spacing: 0.14em;
+	color: #aab5cd;
 }
 
-.radioRow {
+.inputShell {
 	display: flex;
-	flex-wrap: wrap;
-	gap: 0.5rem;
-	margin-bottom: 0.75rem;
+	align-items: center;
+	gap: 10px;
+	height: 42px;
+	padding: 0 13px;
+	border-radius: 4px;
+	border: 1px solid rgba(201, 167, 92, 0.32);
+	background: rgba(9, 14, 32, 0.55);
+	backdrop-filter: blur(6px);
+	-webkit-backdrop-filter: blur(6px);
+	color: var(--gold);
 }
 
-.radioBtn {
-	padding: 0.4rem 0.8rem;
-	border-radius: 8px;
-	border: 1px solid #cfc6b4;
-	background: #f7f4ec;
-	font-size: 0.85rem;
+.inputShell:focus-within {
+	border-color: var(--gold);
+	box-shadow: 0 0 0 3px rgba(201, 167, 92, 0.16);
+}
+
+.bareInput,
+.inputShell :global(.react-datepicker-wrapper),
+.inputShell :global(.react-datepicker__input-container) {
+	width: 100%;
+	min-width: 0;
+}
+
+.bareInput,
+.inputShell :global(.react-datepicker__input-container) input {
+	background: transparent;
+	border: none;
+	outline: none;
+	color: var(--cream);
+	font-family: "JetBrains Mono", monospace;
+	font-size: 15px;
+	letter-spacing: 0.04em;
+	color-scheme: dark;
+}
+
+.searchBtn {
+	flex-shrink: 0;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 30px;
+	height: 30px;
+	border-radius: 4px;
+	border: none;
+	background: rgba(201, 167, 92, 0.16);
+	color: var(--gold-hi);
 	cursor: pointer;
 }
 
-.radioBtnActive {
-	background: #b99a5c;
-	color: #fff;
-	border-color: #b99a5c;
+.searchBtn:hover:not(:disabled) {
+	background: rgba(201, 167, 92, 0.28);
 }
 
-.textInput {
+.searchBtn:disabled {
+	opacity: 0.5;
+	cursor: not-allowed;
+}
+
+/* ── Employee search combobox ─────────────────────────────────────────── */
+.employeeChip {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 10px;
+	height: 42px;
+	padding: 0 13px;
+	border-radius: 4px;
+	border: 1px solid rgba(201, 167, 92, 0.4);
+	background: rgba(201, 167, 92, 0.1);
+	color: var(--gold-hi);
+	font-family: "JetBrains Mono", monospace;
+	font-size: 14px;
+	letter-spacing: 0.03em;
+}
+
+.employeeChipClear {
+	flex-shrink: 0;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 26px;
+	height: 26px;
+	border-radius: 4px;
+	border: none;
+	background: rgba(201, 167, 92, 0.16);
+	color: var(--gold-hi);
+	cursor: pointer;
+}
+
+.employeeChipClear:hover {
+	background: rgba(201, 167, 92, 0.3);
+}
+
+.employeeDropdown {
+	position: absolute;
+	top: calc(100% + 6px);
+	left: 0;
+	right: 0;
+	z-index: 60;
+	margin: 0;
+	padding: 6px;
+	list-style: none;
+	max-height: 260px;
+	overflow-y: auto;
+	border-radius: 4px;
+	border: 1px solid rgba(201, 167, 92, 0.32);
+	background: rgba(9, 14, 32, 0.94);
+	backdrop-filter: blur(14px);
+	-webkit-backdrop-filter: blur(14px);
+	box-shadow: 0 14px 34px rgba(0, 0, 0, 0.5);
+}
+
+.employeeResultItem {
+	display: flex;
+	align-items: baseline;
+	gap: 10px;
 	width: 100%;
-	padding: 0.5rem;
-	border: 1px solid #cfc6b4;
-	border-radius: 6px;
-	margin-bottom: 0.5rem;
-	font-size: 0.9rem;
+	padding: 8px 10px;
+	border: none;
+	border-radius: 3px;
+	background: none;
+	color: var(--cream);
+	font-size: 14px;
+	text-align: left;
+	cursor: pointer;
 }
 
-.headerGrid {
-	display: grid;
-	grid-template-columns: repeat(2, 1fr);
-	gap: 0.5rem;
+.employeeResultItem:hover {
+	background: rgba(201, 167, 92, 0.14);
 }
 
-@media (min-width: 600px) {
-	.headerGrid {
-		grid-template-columns: repeat(3, 1fr);
-	}
+.employeeResultId {
+	font-family: "JetBrains Mono", monospace;
+	font-size: 12.5px;
+	color: var(--gold-hi);
+	flex-shrink: 0;
+}
+
+.employeeResultMeta {
+	margin-left: auto;
+	font-size: 11.5px;
+	color: var(--mute);
+	flex-shrink: 0;
+}
+
+.employeeNoResult {
+	padding: 10px;
+	font-size: 13px;
+	color: var(--mute);
+	text-align: center;
+}
+
+.regInputGroup {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+}
+
+.regPrefix {
+	font-family: "JetBrains Mono", monospace;
+	font-size: 15px;
+	color: var(--mute);
+	letter-spacing: 0.04em;
+	white-space: nowrap;
+}
+
+/* ── Seal buttons — mutually-exclusive selection, same pattern as
+   ETR's 資格印記 (738任務/無738資格). Reused for form type, training
+   type, aircraft family, assignment, and sector prefix. ── */
+.sealGroup {
+	display: flex;
+	flex-direction: column;
+	gap: 7px;
+	min-width: 0;
+}
+
+.sealRow {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 9px;
+}
+
+.seal {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	gap: 9px;
+	height: 42px;
+	padding: 0 16px;
+	border-radius: 4px;
+	cursor: pointer;
+	font-family: "Noto Serif TC", serif;
+	font-size: 13px;
+	letter-spacing: 0.06em;
+	color: var(--cream);
+	border: 1px solid rgba(201, 167, 92, 0.3);
+	background: rgba(9, 14, 32, 0.5);
+	backdrop-filter: blur(6px);
+	-webkit-backdrop-filter: blur(6px);
+	transition: all 0.22s ease;
+}
+
+.seal:hover:not(:disabled):not(.sealOn) {
+	border-color: var(--gold);
+	background: rgba(201, 167, 92, 0.12);
+}
+
+.sealOn {
+	color: #1a1408;
+	border-color: var(--gold);
+	background: linear-gradient(180deg, var(--gold-hi), var(--gold));
+	box-shadow: 0 0 18px rgba(201, 167, 92, 0.35);
+}
+
+.sealOn:hover:not(:disabled) {
+	background: linear-gradient(180deg, #f5e2b6, var(--gold-hi));
+	box-shadow: 0 0 24px rgba(201, 167, 92, 0.5);
+}
+
+.seal:disabled {
+	opacity: 0.38;
+	cursor: not-allowed;
 }
 
 .hint {
-	font-size: 0.8rem;
-	color: #a15c2c;
+	font-size: 13px;
+	letter-spacing: 0.05em;
+	color: var(--mute);
+	margin-top: 6px;
 }
 
+/* ── Live total — reuses altar styling, colored by pass/fail ── */
 .totalBar {
 	position: sticky;
 	top: 0;
-	z-index: 10;
-	padding: 0.6rem 1rem;
-	border-radius: 8px;
+	z-index: 15;
+	margin-bottom: 20px;
+	padding: 14px 20px;
+	border-radius: 6px;
+	font-family: "JetBrains Mono", monospace;
+	font-size: 15px;
 	font-weight: 700;
+	letter-spacing: 0.06em;
 	text-align: center;
-	margin-bottom: 1rem;
+	border: 1px solid rgba(201, 167, 92, 0.3);
+	backdrop-filter: blur(14px);
+	-webkit-backdrop-filter: blur(14px);
 }
 
 .totalPass {
-	background: #e3f3e9;
-	color: #1f6d3c;
+	color: #bfe3c4;
+	background: rgba(38, 74, 46, 0.55);
+	border-color: rgba(143, 201, 154, 0.4);
 }
 
 .totalFail {
-	background: #fbe9e7;
-	color: #a13a2c;
+	color: var(--fail-hi);
+	background: rgba(74, 38, 32, 0.55);
+	border-color: rgba(226, 131, 107, 0.4);
 }
 
-.sectionHeader {
+/* ── "The Tablet" divider — reused between details and section list ── */
+.tabletDivider {
+	display: flex;
+	align-items: center;
+	gap: 14px;
+	padding: 30px 2px 16px;
+}
+
+.dividerEn {
+	font-family: "Cinzel", serif;
+	font-size: 12px;
+	font-weight: 600;
+	letter-spacing: 0.28em;
+	text-transform: uppercase;
+	color: var(--mute);
+	white-space: nowrap;
+}
+
+.dividerLine {
+	flex: 1;
+	height: 1px;
+	background: linear-gradient(90deg, rgba(201, 167, 92, 0.5), transparent);
+}
+
+.dividerNote {
+	font-size: 13px;
+	color: var(--mute);
+	white-space: nowrap;
+}
+
+/* ── Stele — one per scoring section ─────────────────────── */
+.stele {
+	position: relative;
+	margin-bottom: 18px;
+	border-radius: 6px;
+	border: 1px solid var(--edge);
+	background: linear-gradient(155deg, var(--glass-a), var(--glass-b));
+	backdrop-filter: blur(16px) saturate(1.1);
+	-webkit-backdrop-filter: blur(16px) saturate(1.1);
+	box-shadow: 0 14px 34px rgba(0, 0, 0, 0.4);
+}
+
+.steleHead {
+	display: flex;
+	align-items: center;
+	gap: 14px;
+	padding: 16px 22px;
+	border-bottom: 1px solid rgba(201, 167, 92, 0.18);
+}
+
+.numeral {
+	flex: 0 0 32px;
+	width: 32px;
+	height: 32px;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	border-radius: 50%;
+	border: 1px solid rgba(201, 167, 92, 0.4);
+	background: rgba(201, 167, 92, 0.1);
+	color: var(--gold-hi);
+	font-family: "Cinzel", serif;
+	font-size: 14px;
+}
+
+.steleHeadText {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+}
+
+.steleTitle {
+	font-size: 16px;
 	font-weight: 700;
-	margin-bottom: 0.5rem;
+	color: var(--gold-hi);
+	letter-spacing: 0.03em;
 }
 
-.referenceList {
-	font-size: 0.8rem;
-	color: #7a7264;
-	margin: 0 0 0.6rem 1.1rem;
-	padding: 0;
+.steleSub {
+	font-family: "Cinzel", serif;
+	font-size: 11px;
+	letter-spacing: 0.18em;
+	text-transform: uppercase;
+	color: var(--mute);
 }
 
+.steleBody {
+	padding: 20px 22px;
+}
+
+.steleBody ul {
+	margin: 0 0 16px;
+	padding-left: 20px;
+}
+
+.steleBody li {
+	font-size: 15px;
+	line-height: 2;
+	letter-spacing: 0.03em;
+	color: var(--body);
+}
+
+/* ── Score buttons ────────────────────────────────────────── */
 .scoreRow {
 	display: flex;
 	flex-wrap: wrap;
-	gap: 0.35rem;
-	margin-bottom: 0.5rem;
+	gap: 8px;
 }
 
 .scoreBtn {
-	width: 34px;
-	height: 34px;
-	border-radius: 8px;
-	border: 1px solid #cfc6b4;
-	background: #f7f4ec;
+	width: 38px;
+	height: 38px;
+	border-radius: 4px;
+	border: 1px solid rgba(201, 167, 92, 0.3);
+	background: rgba(9, 14, 32, 0.5);
+	color: var(--cream);
+	font-family: "JetBrains Mono", monospace;
+	font-size: 14px;
+	font-weight: 700;
 	cursor: pointer;
-	font-size: 0.85rem;
+	transition: all 0.18s ease;
+}
+
+.scoreBtn:hover {
+	border-color: var(--gold);
+	background: rgba(201, 167, 92, 0.14);
 }
 
 .scoreBtnActive {
-	background: #6d3b47;
-	color: #fff;
-	border-color: #6d3b47;
+	color: #1a1408;
+	border-color: var(--gold);
+	background: linear-gradient(180deg, var(--gold-hi), var(--gold));
+	box-shadow: 0 0 14px rgba(201, 167, 92, 0.4);
 }
 
-.commentBlock {
-	margin-top: 0.5rem;
+/* Scores 1-6 fail the form's own 7-point minimum (11.4) — bordered in
+   ember even unselected, solid ember fill when selected. */
+.scoreBtnLow {
+	border-color: rgba(226, 131, 107, 0.45);
+	color: var(--fail-hi);
 }
 
-.textarea {
+.scoreBtnLow:hover {
+	border-color: var(--fail);
+	background: rgba(226, 131, 107, 0.14);
+}
+
+.scoreBtnLowActive {
+	color: #2a0f0a;
+	border-color: var(--fail);
+	background: linear-gradient(180deg, var(--fail-hi), var(--fail));
+	box-shadow: 0 0 14px rgba(226, 131, 107, 0.45);
+}
+
+/* Scores 9-10 — "great" tier, distinct from the default 7-8 gold. */
+.scoreBtnHigh {
+	border-color: rgba(143, 201, 154, 0.45);
+	color: #bfe3c4;
+}
+
+.scoreBtnHigh:hover {
+	border-color: #8fc99a;
+	background: rgba(143, 201, 154, 0.14);
+}
+
+.scoreBtnHighActive {
+	color: #0f2a14;
+	border-color: #8fc99a;
+	background: linear-gradient(180deg, #d3ecd6, #8fc99a);
+	box-shadow: 0 0 14px rgba(143, 201, 154, 0.45);
+}
+
+/* ── Quiz-item checklist (sections 9-10) ─────────────────────────────── */
+.quizList {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+	margin-bottom: 16px;
+}
+
+.quizItem {
+	display: flex;
+	align-items: flex-start;
+	gap: 10px;
+	font-size: 15px;
+	line-height: 1.5;
+	color: var(--body);
+	cursor: pointer;
+}
+
+.quizItem input {
+	margin-top: 4px;
+	accent-color: var(--gold);
+}
+
+/* ── Consolidated remarks ─────────────────────────────────────────────── */
+.remarksTextarea {
 	width: 100%;
-	min-height: 70px;
-	padding: 0.5rem;
-	border: 1px solid #cfc6b4;
-	border-radius: 6px;
-	font-size: 0.85rem;
+	min-height: 180px;
+	padding: 14px;
+	border-radius: 4px;
+	border: 1px solid rgba(201, 167, 92, 0.32);
+	background: rgba(9, 14, 32, 0.5);
+	backdrop-filter: blur(6px);
+	-webkit-backdrop-filter: blur(6px);
+	color: var(--cream);
+	font-family: "Noto Serif TC", serif;
+	font-size: 15px;
+	line-height: 1.9;
 	resize: vertical;
 }
 
-.regenBtn {
-	margin-top: 0.35rem;
-	font-size: 0.78rem;
-	background: none;
-	border: none;
-	color: #6d3b47;
-	text-decoration: underline;
-	cursor: pointer;
-	padding: 0;
+.remarksTextarea:focus {
+	outline: none;
+	border-color: var(--gold);
+	box-shadow: 0 0 0 3px rgba(201, 167, 92, 0.16);
 }
 
-.exportBtn {
+/* ── Export dock — mirrors ETR's copyDock ────────────────────────────── */
+.exportDock {
 	position: fixed;
-	bottom: 1rem;
-	left: 50%;
-	transform: translateX(-50%);
-	padding: 0.8rem 2rem;
-	border-radius: 999px;
-	border: none;
-	background: #b99a5c;
-	color: #fff;
-	font-weight: 700;
-	font-size: 1rem;
-	cursor: pointer;
-	box-shadow: 0 4px 14px rgba(0, 0, 0, 0.18);
+	left: 0;
+	right: 0;
+	bottom: 0;
+	z-index: 100;
+	padding: 14px 0;
+	padding-bottom: calc(14px + env(safe-area-inset-bottom));
+	border-top: 1px solid rgba(201, 167, 92, 0.3);
+	background: linear-gradient(180deg, rgba(7, 11, 24, 0.35), rgba(7, 11, 24, 0.92) 55%);
+	backdrop-filter: blur(16px) saturate(1.1);
+	-webkit-backdrop-filter: blur(16px) saturate(1.1);
 }
 
-.exportBtn:disabled {
-	opacity: 0.6;
+.exportDockInner {
+	max-width: 980px;
+	margin: 0 auto;
+	padding: 0 26px;
+	display: flex;
+	align-items: center;
+	gap: 12px;
+}
+
+.exportStatus {
+	font-family: "JetBrains Mono", monospace;
+	font-size: 13px;
+	color: var(--mute);
+}
+
+.exportButton {
+	margin-left: auto;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	gap: 11px;
+	height: 52px;
+	padding: 0 34px;
+	border-radius: 4px;
+	cursor: pointer;
+	color: #160f04;
+	border: 1px solid var(--gold);
+	background: linear-gradient(180deg, var(--gold-hi), var(--gold));
+	box-shadow: 0 0 26px rgba(201, 167, 92, 0.32),
+		inset 0 1px 0 rgba(255, 255, 255, 0.4);
+	transition: all 0.28s ease;
+}
+
+.exportButton:hover:not(:disabled) {
+	transform: translateY(-1px);
+	box-shadow: 0 0 34px rgba(201, 167, 92, 0.45),
+		inset 0 1px 0 rgba(255, 255, 255, 0.4);
+}
+
+.exportButton:disabled {
+	opacity: 0.55;
 	cursor: not-allowed;
+}
+
+.exportButton.exportButtonDone {
+	border-color: #7fb08a;
+	background: linear-gradient(180deg, #a8d8b4, #6fa87d);
+	box-shadow: 0 0 26px rgba(127, 176, 138, 0.35),
+		inset 0 1px 0 rgba(255, 255, 255, 0.4);
+}
+
+.exportLabel {
+	font-weight: 700;
+	font-size: 16px;
+	letter-spacing: 0.14em;
+}
+
+.exportEn {
+	font-family: "Cinzel", serif;
+	font-size: 12px;
+	font-weight: 600;
+	letter-spacing: 0.24em;
+	text-transform: uppercase;
+	opacity: 0.78;
+}
+
+/* ── Widescreen — same breakpoint/behavior as ETR ────────────────────── */
+@media screen and (min-width: 1600px) {
+	.evalContent,
+	.exportDockInner {
+		max-width: 1180px;
+		padding-left: 28px;
+		padding-right: 28px;
+	}
+	.steleBody,
+	.steleHead,
+	.altar {
+		padding: 28px;
+	}
+}
+
+@media screen and (max-width: 1000px) {
+	.evalContent,
+	.exportDockInner {
+		padding-left: 20px;
+		padding-right: 20px;
+	}
+	.title {
+		font-size: 34px;
+	}
+}
+
+@media screen and (max-width: 640px) {
+	.evalContent {
+		padding: 0 14px 108px;
+	}
+	.exportDockInner {
+		padding-left: 14px;
+		padding-right: 14px;
+	}
+	.headerContainer {
+		padding: 30px 0 20px;
+	}
+	.title {
+		font-size: 27px;
+	}
+	.altar,
+	.steleBody {
+		padding: 16px;
+	}
+	.steleHead {
+		padding: 12px 16px;
+		gap: 11px;
+	}
+	.numeral {
+		width: 28px;
+		height: 28px;
+		flex: 0 0 28px;
+		font-size: 13px;
+	}
+	.steleTitle {
+		font-size: 15px;
+	}
+	.steleSub {
+		font-size: 12px;
+	}
+	.altarRow {
+		display: grid;
+		grid-template-columns: 1fr 1fr;
+		gap: 12px;
+	}
+	.sealGroup {
+		grid-column: 1 / -1;
+	}
+	.sealRow {
+		display: grid;
+		grid-template-columns: repeat(2, 1fr);
+	}
+	.seal,
+	.inputShell {
+		height: 46px;
+	}
+	.exportButton {
+		width: 100%;
+		margin-left: 0;
+		height: 50px;
+		padding: 0 20px;
+	}
+	.exportDockInner {
+		flex-wrap: wrap;
+	}
+	.exportStatus {
+		flex: 1 0 100%;
+		order: 2;
+		text-align: center;
+	}
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.stele,
+	.altar {
+		animation: none;
+	}
 }

@@ -111,6 +111,20 @@ const NavigationDrawer = ({ isOpen, onClose, userDetails }) => {
 					hasAccess: hasAppAccess(user, "etr_generator"),
 				},
 				{
+					id: "evalform-generator",
+					title: "考核表產生器",
+					description: "訓練考核表產生器",
+					icon: (
+						<PngIcon
+							src="/assets/evaluation.png"
+							alt="EvalForm Generator"
+						/>
+					),
+					path: "/eval-form-generator",
+					color: "#8c6d1f",
+					hasAccess: hasAppAccess(user, "evalform_generator"),
+				},
+				{
 					id: "turtle-ranking",
 					title: "Turtle Ranking",
 					description: "烏龜速度排行榜 🐢",
@@ -427,7 +441,7 @@ const NavigationDrawer = ({ isOpen, onClose, userDetails }) => {
 
 				{/* Footer */}
 				<div className={styles.drawerFooter}>
-					<div className={styles.appVersion}>豪神APP v5.4.9</div>
+					<div className={styles.appVersion}>豪神APP v5.5.9</div>
 				</div>
 			</div>
 		</>

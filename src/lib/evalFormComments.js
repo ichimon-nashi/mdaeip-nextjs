@@ -131,3 +131,27 @@ export function getDraftComment(formType, sectionNumber, score) {
 	if (variants.length === 0) return "";
 	return variants[Math.floor(Math.random() * variants.length)];
 }
+
+// Builds the full 教師綜合評量及備註 draft as ONE block, one line per
+// section that needs explanation (11.3: scores of 8-9 are exempt).
+// `quizItemLabels` for sections 9/10 gets prepended so the remark names
+// which procedures were actually quizzed — pass QUIZ_ITEM_LABELS +
+// quizSelections from evalFormCoords.js / page.js state.
+export function buildRemarksDraft(formType, sectionScores, quizSelections = {}, quizItemLabels = {}) {
+	const lines = [];
+	for (let section = 1; section <= 10; section++) {
+		const score = sectionScores?.[section];
+		if (score == null || score === 8 || score === 9) continue;
+		const bank = getSectionBank(formType, section);
+		const title = bank?.title || `第${section}項`;
+		let quizNote = "";
+		if ((section === 9 || section === 10) && quizSelections[section]?.length) {
+			const labels = quizItemLabels[section] || [];
+			const chosenText = quizSelections[section].map((n) => labels[n - 1]).filter(Boolean).join("、");
+			if (chosenText) quizNote = `（本次抽問：${chosenText}）`;
+		}
+		const comment = getDraftComment(formType, section, score);
+		lines.push(`【${title}】${quizNote}${comment}`);
+	}
+	return lines.join("\n");
+}
