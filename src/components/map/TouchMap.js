@@ -68,9 +68,12 @@ const POINT_LIST_PADDING_Y = 20; // 10px top + 10px bottom
 const easeInOutCubic = (t) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);
 
 const TouchMap = ({ user, onScheduleOpen }) => {
+	const wrapperRef = useRef(null);
 	const scrollerRef = useRef(null);
 	const rafRef = useRef(null);
 	const isAutoScrollingRef = useRef(false); // true only during our own rAF animation
+
+	const [wrapperHeight, setWrapperHeight] = useState(null);
 
 	const [worldWidth, setWorldWidth] = useState(0);
 	const [isTablet, setIsTablet] = useState(false);
@@ -84,6 +87,37 @@ const TouchMap = ({ user, onScheduleOpen }) => {
 		() => REGIONS.filter((r) => isRegionLocked(user, r)).map((r) => r.id),
 		[user],
 	);
+
+	// Clamp this component's own height to the REAL visible viewport,
+	// measured live via visualViewport (which shrinks/grows with the
+	// mobile address bar and on-screen keyboard) rather than trusting
+	// whatever height a 100vh-based ancestor flex layout hands down —
+	// 100vh is the address-bar-hidden size, so on first load (and any
+	// time the bar is showing) it's larger than what's actually visible,
+	// pushing this component's bottom edge below the true fold. This
+	// measures our own top offset against the real viewport and caps our
+	// height to whatever's actually left, scoped entirely to this
+	// component — no page-level CSS involved.
+	useEffect(() => {
+		const el = wrapperRef.current;
+		if (!el) return;
+
+		const recalc = () => {
+			const vh = window.visualViewport ? window.visualViewport.height : window.innerHeight;
+			const top = el.getBoundingClientRect().top;
+			setWrapperHeight(Math.max(200, Math.round(vh - top)));
+		};
+
+		recalc();
+		window.visualViewport?.addEventListener("resize", recalc);
+		window.addEventListener("resize", recalc);
+		window.addEventListener("orientationchange", recalc);
+		return () => {
+			window.visualViewport?.removeEventListener("resize", recalc);
+			window.removeEventListener("resize", recalc);
+			window.removeEventListener("orientationchange", recalc);
+		};
+	}, []);
 
 	// Per-region zoom, falling back to the device-level constant when a
 	// region doesn't set its own touchZoomPhone/touchZoomTablet.
@@ -279,7 +313,11 @@ const TouchMap = ({ user, onScheduleOpen }) => {
 		: undefined;
 
 	return (
-		<div className={styles.touchMapWrapper}>
+		<div
+			className={styles.touchMapWrapper}
+			ref={wrapperRef}
+			style={wrapperHeight ? { height: wrapperHeight, maxHeight: wrapperHeight } : undefined}
+		>
 			<div className={styles.touchScroller} ref={scrollerRef}>
 				<div className={styles.touchWorld} style={{ width: worldWidth || "100%" }}>
 					{/* eslint-disable-next-line @next/next/no-img-element */}
