@@ -1160,7 +1160,12 @@
 
 .touchPointArea {
 	flex-shrink: 0;
-	max-height: 40%;
+	/* No min-height guess here anymore — TouchMap.js sets an exact inline
+	   height based on activeRegion.points.length × (ROW_HEIGHT + gap) so
+	   every point is guaranteed visible with zero scrolling, regardless
+	   of point count. max-height/overflow-y stay only as a safety net in
+	   case a future region has enough points to genuinely need scrolling. */
+	max-height: 60%;
 	overflow-y: auto;
 	background: #fbf8f1;
 }

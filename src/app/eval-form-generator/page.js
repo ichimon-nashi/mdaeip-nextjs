@@ -20,7 +20,7 @@ import { Calendar, Check, X } from "lucide-react";
 import toast from "react-hot-toast";
 import { hasAppAccess } from "../../lib/permissionHelpers";
 import { employeeList } from "../../lib/DataRoster";
-import { getSectionBank, buildRemarksDraft } from "../../lib/evalFormComments";
+import { getSectionBank, buildRemarksDraft, getSummaryLine } from "../../lib/evalFormComments";
 import { generateEvalFormPdf } from "../../lib/generateEvalFormPdf";
 import { QUIZ_ITEM_LABELS } from "../../lib/evalFormCoords";
 import styles from "../../styles/EvalFormGenerator.module.css";
@@ -110,6 +110,7 @@ export default function EvalFormGeneratorPage() {
 	const [sectionScores, setSectionScores] = useState({});
 	const [quizSelections, setQuizSelections] = useState({ 9: [], 10: [] });
 	const [remarksText, setRemarksText] = useState("");
+	const [summaryText, setSummaryText] = useState("");
 	const [isExporting, setIsExporting] = useState(false);
 	const [exportDone, setExportDone] = useState(false);
 
@@ -128,12 +129,23 @@ export default function EvalFormGeneratorPage() {
 	const threshold = trainingType.selected === "FALC" ? 85 : 80;
 	const passes = total >= threshold;
 
-	// Auto-refresh on every score/quiz change — overwrites manual edits
-	// each time, by design (see prior note to Eric on this trade-off).
+	// Auto-refresh on every score change — overwrites manual edits each
+	// time, by design (see prior note to Eric on this trade-off). No
+	// longer depends on quizSelections: sections 9/10 get one plain
+	// comment same as every other section now, the subitem picks don't
+	// surface here at all.
 	useEffect(() => {
-		setRemarksText(buildRemarksDraft(formType, sectionScores, quizSelections, QUIZ_ITEM_LABELS));
+		setRemarksText(buildRemarksDraft(formType, sectionScores));
 		// eslint-disable-next-line react-hooks/exhaustive-deps
-	}, [formType, sectionScores, quizSelections]);
+	}, [formType, sectionScores]);
+
+	// Same auto-refresh pattern for the closing tiered-rating summary —
+	// depends on the total and training type rather than per-section
+	// scores directly.
+	useEffect(() => {
+		setSummaryText(getSummaryLine(total, trainingType.selected));
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [total, trainingType.selected]);
 
 	const handleScoreChange = (section, score) => {
 		setSectionScores((prev) => ({ ...prev, [section]: score }));
@@ -221,6 +233,7 @@ export default function EvalFormGeneratorPage() {
 				sectionScores,
 				quizSelections,
 				remarksText,
+				summaryText,
 				teacherName,
 				generatedDate: printableDate,
 			});
@@ -228,7 +241,8 @@ export default function EvalFormGeneratorPage() {
 			const url = URL.createObjectURL(blob);
 			const a = document.createElement("a");
 			a.href = url;
-			a.download = `${compactDate}_${trainingType.selected}_${teacherName || "evaluation"}.pdf`;
+			// a.download = `${compactDate}_${trainingType.selected}_${teacherName || "evaluation"}.pdf`;
+			a.download = `${compactDate}_${trainingType.selected}_${name || "evaluation"}.pdf`;
 			a.click();
 			URL.revokeObjectURL(url);
 
@@ -562,13 +576,23 @@ export default function EvalFormGeneratorPage() {
 						<span className={styles.altarEn}>Remarks</span>
 					</div>
 					<div className={styles.hint} style={{ marginBottom: 8 }}>
-						畫面上的「【項目名稱】」標籤僅供對照參考 — 匯出的 PDF 不會印出這些標籤，只會有編輯後的文字內容。
+						畫面上的「【項目名稱】」標籤僅供對照參考 — 匯出的 PDF 不會印出這些標籤，只有您編輯後的文字內容。
 					</div>
 					<textarea
 						className={styles.remarksTextarea}
 						value={remarksText}
 						onChange={(e) => setRemarksText(e.target.value)}
 						placeholder="評分後將自動產生草稿，您可直接編輯"
+					/>
+
+					<div className={styles.fieldLabel} style={{ marginTop: 14 }}>
+						總結摘要 <span className={styles.fieldLabelEn}>Summary（PDF 中會加底線）</span>
+					</div>
+					<input
+						className={styles.summaryInput}
+						value={summaryText}
+						onChange={(e) => setSummaryText(e.target.value)}
+						placeholder="總分變動時將自動更新"
 					/>
 				</section>
 			</div>

@@ -646,6 +646,27 @@
 	box-shadow: 0 0 0 3px rgba(201, 167, 92, 0.16);
 }
 
+/* Underlined on screen too, so it previews what actually prints
+   underlined in the PDF — a plain <textarea> can't do partial
+   underline, but a single-line <input> can via text-decoration. */
+.summaryInput {
+	width: 100%;
+	padding: 10px 2px;
+	border: none;
+	border-bottom: 1px solid rgba(201, 167, 92, 0.5);
+	background: transparent;
+	color: var(--cream);
+	font-family: "Noto Serif TC", serif;
+	font-size: 15px;
+	text-decoration: underline;
+	text-underline-offset: 4px;
+}
+
+.summaryInput:focus {
+	outline: none;
+	border-bottom-color: var(--gold);
+}
+
 /* ── Export dock — mirrors ETR's copyDock ────────────────────────────── */
 .exportDock {
 	position: fixed;

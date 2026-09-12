@@ -56,6 +56,15 @@ const SWITCH_HYSTERESIS = 4;
 // causing sync to fire mid-momentum instead of after it settles.
 const SCROLL_SETTLE_MS = 220;
 
+// Point-row sizing — MUST match .touchPointRow's height, .touchPointList's
+// gap, and .touchPointList's top+bottom padding in Map.module.css exactly.
+// Used to compute touchPointArea's exact height from the real point count,
+// so every point is guaranteed visible with zero scrolling regardless of
+// how many a region has — see the height calc near the JSX below.
+const POINT_ROW_HEIGHT = 48;
+const POINT_ROW_GAP = 7;
+const POINT_LIST_PADDING_Y = 20; // 10px top + 10px bottom
+
 const easeInOutCubic = (t) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);
 
 const TouchMap = ({ user, onScheduleOpen }) => {
@@ -262,6 +271,13 @@ const TouchMap = ({ user, onScheduleOpen }) => {
 		? (activeRegion?.tabletCy ?? 50)
 		: (activeRegion?.phoneCy ?? 50);
 
+	// Exact height for N points, so all of them are guaranteed visible
+	// without scrolling — see the constants above this component.
+	const pointCount = activeRegion?.points?.length ?? 0;
+	const pointAreaHeight = pointCount
+		? pointCount * POINT_ROW_HEIGHT + Math.max(0, pointCount - 1) * POINT_ROW_GAP + POINT_LIST_PADDING_Y
+		: undefined;
+
 	return (
 		<div className={styles.touchMapWrapper}>
 			<div className={styles.touchScroller} ref={scrollerRef}>
@@ -294,7 +310,7 @@ const TouchMap = ({ user, onScheduleOpen }) => {
 				})}
 			</div>
 
-			<div className={styles.touchPointArea}>
+			<div className={styles.touchPointArea} style={{ height: pointAreaHeight }}>
 				{activeRegion && !point && (
 					<div className={styles.touchPointList}>
 						{activeRegion.points.map((p) => {

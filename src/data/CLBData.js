@@ -502,6 +502,10 @@ export const CLB_STATUSES = [
 		zh: "腐蝕",
 		en: "CORRODED",
 	},
+		{
+		zh: "掉進窗框隔板中",
+		en: "FELL INTO WINDOW SHADE GAP",
+	},
 ];
 
 export const CLB_TIMES = [
