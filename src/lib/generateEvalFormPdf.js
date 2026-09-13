@@ -25,6 +25,23 @@ const TEMPLATE_PATHS = {
 
 const FONT_PATH = "/assets/ChenYuluoyan-2.0-Thin.ttf";
 
+// Experimental: header fields (員工編號/姓名/班型/etc.) render in a font
+// picked at random from this pool, ONE pick per generated PDF (not one
+// per field — every header value on a given form uses the same font).
+// Each font carries its OWN size — fonts vary a lot in apparent size at
+// the same point value, so this is the one place to tune that per font
+// rather than fighting a single shared FONT_SIZE. Placeholder filenames
+// since the actual font files don't exist yet — add real ones (and set
+// their size) as they're placed in /public/assets alongside tcfont.ttf.
+const HEADER_FONTS = [
+	{ path: "/assets/JasonHandwriting1.ttf", size: 12 },
+	{ path: "/assets/XianSheng-GaiZenMeChengNi-2.ttf", size: 12 },
+	{ path: "/assets/851tegaki.ttf", size: 12 },
+	{ path: "/assets/WoHuiBaNiJiaoZuoAiQing-2.ttf", size: 12 },
+	{ path: "/assets/XiangGeiNiYiGeWenXiangHai-2.ttf", size: 12 },
+];
+const pickRandomHeaderFont = () => HEADER_FONTS[Math.floor(Math.random() * HEADER_FONTS.length)];
+
 const FONT_SIZE = 16;
 const REMARKS_FONT_SIZE = 15;
 const REMARKS_LINE_HEIGHT_MM = 6.4; // ~18pt — one line of 12pt text plus leading
@@ -90,16 +107,28 @@ export async function generateEvalFormPdf({ formType, header, trainingType, sect
 	pdfDoc.registerFontkit(fontkit);
 	const font = await pdfDoc.embedFont(fontBytes, { subset: true });
 
+	// Header font — one random pick per PDF, fetched only after picking
+	// so this doesn't pull down every candidate file just to use one.
+	// If the fetch 404s (expected right now — the placeholder files don't
+	// exist yet), this throws and the whole export fails loudly rather
+	// than silently falling back to the main font, so it's obvious in
+	// testing whether a given font file is actually in place.
+	const headerFontChoice = pickRandomHeaderFont();
+	const headerFontBytes = await fetch(headerFontChoice.path).then((r) => r.arrayBuffer());
+	const headerFont = await pdfDoc.embedFont(headerFontBytes, { subset: true });
+	const headerFontSize = headerFontChoice.size;
+
 	const pages = pdfDoc.getPages();
 
-	// Left-aligned draw — xMm is where the text STARTS.
-	const draw = (pageIndex, text, xMm, topMm, size = FONT_SIZE) => {
+	// Left-aligned draw — xMm is where the text STARTS. useFont defaults
+	// to the main font; header fields pass headerFont explicitly.
+	const draw = (pageIndex, text, xMm, topMm, size = FONT_SIZE, useFont = font) => {
 		const page = pages[pageIndex];
 		page.drawText(String(text), {
 			x: mmToPt(xMm),
 			y: topMmToPdfY(page, topMm),
 			size,
-			font,
+			font: useFont,
 			color: rgb(0, 0, 0),
 		});
 	};
@@ -140,10 +169,10 @@ export async function generateEvalFormPdf({ formType, header, trainingType, sect
 		});
 	};
 
-	// ── Header fields — left-aligned ──
+	// ── Header fields — left-aligned, random experimental font + its own size ──
 	const hf = HEADER_FIELDS[formType];
 	for (const [key, val] of Object.entries(header || {})) {
-		if (hf[key] && val) draw(0, val, hf[key].xMm, hf[key].topMm + 5.6); // +5.6mm ≈ old +16pt drop below the label
+		if (hf[key] && val) draw(0, val, hf[key].xMm, hf[key].topMm + 5.6, headerFontSize, headerFont); // +5.6mm ≈ old +16pt drop below the label
 	}
 
 	// ── Training type — mark centers in the ☐ glyph's box ──
