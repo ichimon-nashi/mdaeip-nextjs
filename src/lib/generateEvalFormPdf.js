@@ -8,6 +8,7 @@ import { PDFDocument, rgb } from "pdf-lib";
 import fontkit from "@pdf-lib/fontkit";
 import {
 	mmToPt,
+	ptToMm,
 	HEADER_FIELDS,
 	TRAINING_TYPE,
 	SECTION_ROWS,
@@ -34,11 +35,11 @@ const FONT_PATH = "/assets/ChenYuluoyan-2.0-Thin.ttf";
 // since the actual font files don't exist yet — add real ones (and set
 // their size) as they're placed in /public/assets alongside tcfont.ttf.
 const HEADER_FONTS = [
-	{ path: "/assets/JasonHandwriting1.ttf", size: 12 },
-	{ path: "/assets/XianSheng-GaiZenMeChengNi-2.ttf", size: 12 },
-	{ path: "/assets/851tegaki.ttf", size: 12 },
-	{ path: "/assets/WoHuiBaNiJiaoZuoAiQing-2.ttf", size: 12 },
-	{ path: "/assets/XiangGeiNiYiGeWenXiangHai-2.ttf", size: 12 },
+	{ path: "/assets/fonta.ttf", size: 12 },
+	{ path: "/assets/fontb.ttf", size: 12 },
+	{ path: "/assets/fontc.ttf", size: 12 },
+	{ path: "/assets/fontd.ttf", size: 12 },
+	{ path: "/assets/fonte.ttf", size: 12 },
 ];
 const pickRandomHeaderFont = () => HEADER_FONTS[Math.floor(Math.random() * HEADER_FONTS.length)];
 
@@ -95,11 +96,11 @@ const SECTION_TAG_RE = /【[^】]*】/g;
  * @param {Object.<number,number[]>} params.quizSelections - { 9: [1-indexed item numbers chosen], 10: [...] } — reinstated per Eric, draws a "V" next to each selected 9.x/10.x line
  * @param {string} params.remarksText - single evaluator-owned block for 教師綜合評量及備註 (section 12). Section-name tags (【...】) are stripped before printing.
  * @param {string} params.summaryText - closing tiered-rating sentence (from getSummaryLine() in evalFormComments.js), printed underlined right after the main remarks block
- * @param {string} params.teacherName - printed on the "教師:" signature line
- * @param {string} params.generatedDate - printed right after teacherName on the same line (e.g. "2026/9/10")
+ * @param {Uint8Array} params.signatureImageBytes - raw PNG bytes of the teacher's drawn signature (from SignaturePadModal's canvas), embedded as an image on the "教師:" line instead of typed text
+ * @param {string} params.generatedDate - printed as text right after the signature image (e.g. "2026/9/10")
  * @returns {Promise<Uint8Array>}
  */
-export async function generateEvalFormPdf({ formType, header, trainingType, sectionScores, quizSelections, remarksText, summaryText, teacherName, generatedDate }) {
+export async function generateEvalFormPdf({ formType, header, trainingType, sectionScores, quizSelections, remarksText, summaryText, signatureImageBytes, generatedDate }) {
 	const templateBytes = await fetch(TEMPLATE_PATHS[formType]).then((r) => r.arrayBuffer());
 	const fontBytes = await fetch(FONT_PATH).then((r) => r.arrayBuffer());
 
@@ -223,16 +224,32 @@ export async function generateEvalFormPdf({ formType, header, trainingType, sect
 	const ts = TOTAL_SCORE[formType];
 	drawCentered(ts.page, total, ts.leftMm, ts.rightMm, ts.labelTopMm + 3.2);
 
-	// ── Teacher signature — auto-filled from the logged-in evaluator,
-	// followed by the PDF's generation date. Left-aligned since a name
-	// isn't something you'd want centered under a fixed-width label. ──
-	// The +12mm offset from the "教師:" label position is approximate
-	// (label width wasn't independently measured) — nudge it directly if
-	// it overlaps the label or runs into 空服科經理.
+	// ── Teacher signature — a real drawn signature now, not auto-filled
+	// from the account name. Embedded as a PNG image; generatedDate still
+	// prints as plain text right after it (a date isn't something anyone
+	// signs). ──
 	const sig = SIGNATURE_LABELS[formType];
-	if (teacherName) {
-		const line = generatedDate ? `${teacherName} ${generatedDate}` : teacherName;
-		draw(sig.page, line, sig.teacherXMm + 12, sig.topMm);
+	if (signatureImageBytes) {
+		const sigImage = await pdfDoc.embedPng(signatureImageBytes);
+		// const SIGNATURE_IMG_HEIGHT_MM = ptToMm(FONT_SIZE);
+		const SIGNATURE_IMG_HEIGHT_MM = 7.5;
+
+		const SIGNATURE_Y_NUDGE_MM = 1.2;
+		const drawHeightPt = mmToPt(SIGNATURE_IMG_HEIGHT_MM);
+		const scale = drawHeightPt / sigImage.height;
+		const drawWidthPt = sigImage.width * scale;
+		const page = pages[sig.page];
+		const xPt = mmToPt(sig.teacherXMm + 12);
+		// y is drawImage's BOTTOM-left corner, and the image extends
+		// upward by `height` from there — anchoring it at the same
+		// baseline y that draw()/drawText use, then nudging down slightly,
+		// is what makes it sit level with the "教師:" label.
+		const yPt = topMmToPdfY(page, sig.topMm) - mmToPt(SIGNATURE_Y_NUDGE_MM);
+		page.drawImage(sigImage, { x: xPt, y: yPt, width: drawWidthPt, height: drawHeightPt });
+		if (generatedDate) {
+			const dateXMm = sig.teacherXMm + 12 + ptToMm(drawWidthPt) + 3; // 3mm gap after the signature
+			draw(sig.page, generatedDate, dateXMm, sig.topMm);
+		}
 	}
 
 	// ── Consolidated remarks (section 12) — left-aligned wrapped block,

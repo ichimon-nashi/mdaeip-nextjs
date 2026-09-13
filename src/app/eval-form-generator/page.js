@@ -20,6 +20,7 @@ import { Calendar, Check, X } from "lucide-react";
 import toast from "react-hot-toast";
 import { hasAppAccess } from "../../lib/permissionHelpers";
 import { employeeList } from "../../lib/DataRoster";
+import SignaturePadModal from "./SignaturePadModal";
 import { getSectionBank, buildRemarksDraft, getSummaryLine } from "../../lib/evalFormComments";
 import { generateEvalFormPdf } from "../../lib/generateEvalFormPdf";
 import { QUIZ_ITEM_LABELS } from "../../lib/evalFormCoords";
@@ -113,6 +114,8 @@ export default function EvalFormGeneratorPage() {
 	const [summaryText, setSummaryText] = useState("");
 	const [isExporting, setIsExporting] = useState(false);
 	const [exportDone, setExportDone] = useState(false);
+	const [signatureDataUrl, setSignatureDataUrl] = useState(null);
+	const [showSignatureModal, setShowSignatureModal] = useState(false);
 
 	useEffect(() => {
 		if (!loading && (!user || !hasAppAccess(user, "evalform_generator"))) {
@@ -208,12 +211,26 @@ export default function EvalFormGeneratorPage() {
 			toast.error(`第 9、10 項各需至少勾選 ${MIN_QUIZ_ITEMS} 個抽問項目`);
 			return;
 		}
+		if (!signatureDataUrl) {
+			toast.error("請先完成教師簽名");
+			return;
+		}
 		setIsExporting(true);
 		try {
 			const now = new Date();
 			const printableDate = `${now.getFullYear()}/${now.getMonth() + 1}/${now.getDate()}`;
 			const compactDate = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, "0")}${String(now.getDate()).padStart(2, "0")}`;
+			// Filename still needs a plain text name — a drawn signature has
+			// no text to put in a filename, so this stays account-derived
+			// even though the printed form itself now shows the signature,
+			// not this string.
 			const teacherName = user?.name || "";
+
+			// Data URL → raw PNG bytes for pdf-lib's embedPng().
+			const base64 = signatureDataUrl.split(",")[1];
+			const binary = atob(base64);
+			const signatureImageBytes = new Uint8Array(binary.length);
+			for (let i = 0; i < binary.length; i++) signatureImageBytes[i] = binary.charCodeAt(i);
 
 			const header = {
 				employeeId,
@@ -234,14 +251,13 @@ export default function EvalFormGeneratorPage() {
 				quizSelections,
 				remarksText,
 				summaryText,
-				teacherName,
+				signatureImageBytes,
 				generatedDate: printableDate,
 			});
 			const blob = new Blob([bytes], { type: "application/pdf" });
 			const url = URL.createObjectURL(blob);
 			const a = document.createElement("a");
 			a.href = url;
-			// a.download = `${compactDate}_${trainingType.selected}_${teacherName || "evaluation"}.pdf`;
 			a.download = `${compactDate}_${trainingType.selected}_${name || "evaluation"}.pdf`;
 			a.click();
 			URL.revokeObjectURL(url);
@@ -599,7 +615,17 @@ export default function EvalFormGeneratorPage() {
 
 			<div className={styles.exportDock}>
 				<div className={styles.exportDockInner}>
-					<span className={styles.exportStatus}>{user?.name ? `教師：${user.name}` : ""}</span>
+					<button type="button" className={styles.sigTrigger} onClick={() => setShowSignatureModal(true)}>
+						{signatureDataUrl ? (
+							<>
+								{/* eslint-disable-next-line @next/next/no-img-element */}
+								<img src={signatureDataUrl} alt="教師簽名" className={styles.sigPreviewImg} />
+								<span className={styles.sigTriggerLabel}>重新簽名</span>
+							</>
+						) : (
+							<span className={styles.sigTriggerLabel}>點選簽名</span>
+						)}
+					</button>
 					<button
 						className={`${styles.exportButton} ${exportDone ? styles.exportButtonDone : ""}`}
 						onClick={handleExport}
@@ -613,6 +639,16 @@ export default function EvalFormGeneratorPage() {
 					</button>
 				</div>
 			</div>
+
+			{showSignatureModal && (
+				<SignaturePadModal
+					onConfirm={(dataUrl) => {
+						setSignatureDataUrl(dataUrl);
+						setShowSignatureModal(false);
+					}}
+					onCancel={() => setShowSignatureModal(false)}
+				/>
+			)}
 		</div>
 	);
 }
