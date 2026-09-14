@@ -1095,6 +1095,41 @@ const DatabaseManagement = () => {
 		}
 	};
 
+	// Toggle a user between active/inactive. Reuses the existing PUT /api/users
+	// endpoint — server side needs to accept `is_active` and, when it flips to
+	// false, null out the password hash so the account can't authenticate.
+	const handleToggleActive = async (userData) => {
+		const willDeactivate = userData.is_active !== false;
+		const confirmMsg = willDeactivate
+			? `確定要停用使用者 ${userData.name} (${userData.id}) 嗎？停用後將無法登入，密碼也會被清除。`
+			: `確定要重新啟用使用者 ${userData.name} (${userData.id}) 嗎？啟用後需要重新設定密碼。`;
+
+		if (!confirm(confirmMsg)) return;
+
+		try {
+			const response = await fetch("/api/users", {
+				method: "PUT",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({
+					userData: { ...userData, is_active: !willDeactivate },
+					userAccessLevel: user.access_level,
+				}),
+			});
+
+			const result = await response.json();
+
+			if (result.success) {
+				toast.success(willDeactivate ? "使用者已停用" : "使用者已啟用");
+				loadUsers();
+			} else {
+				toast.error((willDeactivate ? "停用" : "啟用") + "失敗: " + result.error);
+			}
+		} catch (error) {
+			console.error("Error toggling user active state:", error);
+			toast.error("處理錯誤: " + error.message);
+		}
+	};
+
 	if (loading) {
 		return (
 			<div className={styles.loadingScreen}>
@@ -1135,10 +1170,14 @@ const DatabaseManagement = () => {
 		].filter(({ key }) => userData.app_permissions?.[key]?.access === true);
 
 		const userGroup = getUserGroup(userData);
-		const cardModifier = userGroup === 'ground' ? styles.userCardGround
-			: userGroup === 'other' ? styles.userCardOther
-			: userGroup === 'admin' ? styles.userCardAdmin
-			: '';
+		const isInactive = userData.is_active === false;
+		const cardModifier = [
+			userGroup === 'ground' ? styles.userCardGround
+				: userGroup === 'other' ? styles.userCardOther
+				: userGroup === 'admin' ? styles.userCardAdmin
+				: '',
+			isInactive ? styles.userCardInactive : '',
+		].filter(Boolean).join(' ');
 
 		return (
 			<div key={userData.id} className={`${styles.userCard} ${cardModifier}`}>
@@ -1180,6 +1219,9 @@ const DatabaseManagement = () => {
 					<span className={`${styles.accessLevelBadge} ${styles[getAccessLevelClass(userData.access_level)]}`}>
 						Lv {userData.access_level}
 					</span>
+					{isInactive && (
+						<span className={styles.inactiveBadge}>已停用</span>
+					)}
 				</div>
 
 				{enabledPerms.length > 0 && (
@@ -1198,6 +1240,14 @@ const DatabaseManagement = () => {
 					>
 						<Edit size={15} />
 						編輯
+					</button>
+					<button
+						className={isInactive ? styles.activateButton : styles.deactivateButton}
+						onClick={() => handleToggleActive(userData)}
+						title={isInactive ? "啟用使用者" : "停用使用者"}
+					>
+						{isInactive ? <Eye size={15} /> : <EyeOff size={15} />}
+						{isInactive ? "啟用" : "停用"}
 					</button>
 					<button
 						className={styles.deleteButton}

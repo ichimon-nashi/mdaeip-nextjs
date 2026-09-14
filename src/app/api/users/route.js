@@ -1,5 +1,6 @@
 import { supabase } from "../../../lib/supabase";
 import bcrypt from "bcryptjs";
+import crypto from "crypto";
 import { NextResponse } from "next/server";
 
 const DEFAULT_PERMISSIONS = {
@@ -26,7 +27,7 @@ export async function GET(request) {
 
 		const { data, error } = await supabase
 			.from("mdaeip_users")
-			.select("id, name, rank, base, access_level, app_permissions, gender, avatar_gif")
+			.select("id, name, rank, base, access_level, app_permissions, gender, avatar_gif, is_active")
 			.order("id", { ascending: true });
 
 		if (error) {
@@ -131,7 +132,7 @@ export async function PUT(request) {
 			);
 		}
 
-		const { id, name, rank, base, access_level, password, app_permissions, gender, avatar_gif } = userData;
+		const { id, name, rank, base, access_level, password, app_permissions, gender, avatar_gif, is_active } = userData;
 
 		if (!id || !name) {
 			return NextResponse.json(
@@ -150,9 +151,24 @@ export async function PUT(request) {
 			avatar_gif: avatar_gif || null,
 		};
 
+		// Only touch is_active when the caller explicitly sent a boolean —
+		// ordinary edit-form saves don't include this field and must not
+		// silently flip an existing value.
+		if (typeof is_active === "boolean") {
+			updateData.is_active = is_active;
+		}
+
+		const saltRounds = 12;
 		if (password && password.trim() !== "") {
-			const saltRounds = 12;
+			// Explicit password wins regardless of active state — this is how
+			// an admin sets a fresh password when reactivating someone.
 			updateData.password = await bcrypt.hash(password, saltRounds);
+		} else if (is_active === false) {
+			// Deactivating with no explicit password: randomize the credential
+			// so the account can't authenticate even if is_active is ever
+			// missed by a login check. Nobody is told this password.
+			const randomPassword = crypto.randomBytes(24).toString("hex");
+			updateData.password = await bcrypt.hash(randomPassword, saltRounds);
 		}
 
 		const { error } = await supabase

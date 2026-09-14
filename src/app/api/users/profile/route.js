@@ -16,7 +16,7 @@ export async function GET(request) {
 
 		const { data, error } = await supabase
 			.from("mdaeip_users")
-			.select("id, name, rank, base, access_level, app_permissions, gender, avatar_gif")
+			.select("id, name, rank, base, access_level, app_permissions, gender, avatar_gif, is_active")
 			.eq("id", id)
 			.single();
 
@@ -24,6 +24,13 @@ export async function GET(request) {
 			return NextResponse.json(
 				{ success: false, error: "User not found" },
 				{ status: 404 }
+			);
+		}
+
+		if (data.is_active === false) {
+			return NextResponse.json(
+				{ success: false, error: "Account is deactivated" },
+				{ status: 403 }
 			);
 		}
 

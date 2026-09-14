@@ -40,7 +40,7 @@ export const employeeList = [
 	{ id: "22055", name: "李懿婷", rank: "PR", base: "TSA", typeRating: ["ATR", "B738"] },
 	{ id: "30444", name: "徐慧真", rank: "PR", base: "TSA", typeRating: ["ATR", "B738"] },
 
-	{ id: "21600", name: "林涵茵", rank: "LF", base: "TSA", typeRating: ["ATR", "B738"] },
+	{ id: "21600", name: "林涵茵", rank: "LF", base: "TSA", typeRating: ["ATR", "B738"], active: false },
 	{ id: "21650", name: "陳嘉珮", rank: "LF", base: "TSA", typeRating: ["ATR"] },
 	{ id: "21802", name: "粘瀞文", rank: "LF", base: "TSA", typeRating: ["ATR", "B738"] },
 	{ id: "21871", name: "陳懿華", rank: "LF", base: "TSA", typeRating: ["ATR", "B738"] },
@@ -51,7 +51,7 @@ export const employeeList = [
 	{ id: "30458", name: "林秀貞", rank: "LF", base: "TSA", typeRating: ["ATR", "B738"] },
 	{ id: "30513", name: "呂佳穎", rank: "LF", base: "TSA", typeRating: ["ATR", "B738"] },
 	{ id: "30628", name: "穆麗惠", rank: "LF", base: "TSA", typeRating: ["ATR", "B738"] },
-	{ id: "33939", name: "李宛芩", rank: "LF", base: "TSA", typeRating: ["ATR", "B738"] },
+	{ id: "33939", name: "李宛芩", rank: "LF", base: "TSA", typeRating: ["ATR", "B738"], active: false },
 	{ id: "34007", name: "羅芳青", rank: "LF", base: "TSA", typeRating: ["ATR", "B738"] },
 	{ id: "24465", name: "陳希瑀", rank: "LF", base: "TSA", typeRating: ["ATR", "B738"] },
 	{ id: "35164", name: "許瑞娟", rank: "LF", base: "TSA", typeRating: ["ATR", "B738"] },
@@ -73,7 +73,7 @@ export const employeeList = [
 	{ id: "53490", name: "陳珮真", rank: "LF", base: "TSA", typeRating: ["ATR", "B738"] },
 	{ id: "53540", name: "楊云馨", rank: "LF", base: "TSA", typeRating: ["ATR", "B738"] },
 	{ id: "55065", name: "王穎涵", rank: "FS", base: "TSA", typeRating: ["ATR", "B738"] },
-	{ id: "55079", name: "李佩儒", rank: "FS", base: "TSA", typeRating: ["ATR", "B738"] },
+	{ id: "55079", name: "李佩儒", rank: "FS", base: "TSA", typeRating: ["ATR", "B738"], active: false },
 	{ id: "55098", name: "王暄惠", rank: "LF", base: "TSA", typeRating: ["ATR", "B738"] },
 	{ id: "55084", name: "鄭杰如", rank: "FS", base: "TSA", typeRating: ["ATR", "B738"] },
 	{ id: "55134", name: "文詩艷", rank: "LF", base: "TSA", typeRating: ["ATR", "B738"] },
@@ -112,7 +112,7 @@ export const employeeList = [
 	{ id: "51837", name: "許惠芳", rank: "LF", base: "KHH", typeRating: ["ATR", "B738"] },
 	{ id: "53522", name: "楊豐成", rank: "LF", base: "KHH", typeRating: ["ATR", "B738"] },
 	{ id: "55120", name: "楊子翎", rank: "LF", base: "KHH", typeRating: ["ATR", "B738"] },
-	{ id: "56392", name: "許毓倫", rank: "LF", base: "KHH", typeRating: ["ATR", "B738"] },
+	{ id: "56392", name: "許毓倫", rank: "LF", base: "KHH", typeRating: ["ATR", "B738"], active: false },
 	{ id: "59161", name: "王儀珺", rank: "LF", base: "KHH", typeRating: ["ATR", "B738"] },
 	{ id: "59230", name: "葉容婷", rank: "FS", base: "KHH", typeRating: ["ATR", "B738"] },
 	{ id: "59262", name: "劉紋瑄", rank: "LF", base: "KHH", typeRating: ["ATR", "B738"] },
@@ -181,7 +181,7 @@ export const employeeList = [
 	{ id: "56410", name: "巫怡璇", rank: "FS", base: "RMQ", typeRating: ["ATR", "B738"] },
 	{ id: "59157", name: "陳嫆玟", rank: "FS", base: "RMQ", typeRating: ["ATR", "B738"] },
 	{ id: "59193", name: "鍾靜竺", rank: "FS", base: "RMQ", typeRating: ["ATR", "B738"] },
-	{ id: "59207", name: "陳怡庭", rank: "FS", base: "RMQ", typeRating: ["ATR", "B738"] },
+	{ id: "59207", name: "陳怡庭", rank: "FS", base: "RMQ", typeRating: ["ATR", "B738"], active: false },
 	{ id: "59211", name: "謝采妤", rank: "FS", base: "RMQ", typeRating: ["ATR", "B738"] },
 	{ id: "59226", name: "李侑蓁", rank: "FS", base: "RMQ", typeRating: ["ATR", "B738"] },
 	{ id: "59258", name: "郭雅婷", rank: "FS", base: "RMQ", typeRating: ["ATR", "B738"] },
@@ -198,6 +198,19 @@ const employeeMap = new Map(employeeList.map((emp) => [emp.id, emp]));
 export const getEmployeeById = (id) => {
 	return employeeMap.get(id) || null;
 };
+
+// ── Retired/resigned crew ─────────────────────────────────────────────────
+// An entry is active unless explicitly marked `active: false`. This means
+// none of the ~200 existing rows above need to change — retiring someone is
+// a one-line edit (add `active: false` to their entry), never a deletion.
+// Use getActiveEmployeeList() anywhere you're populating a picker for a NEW
+// assignment (duty change, dispatch, G-Day, eval form, account creation).
+// Keep using the raw employeeList for anything rendering EXISTING/historical
+// records (past schedules, MRT history, duty change review) — filtering
+// there would blank out real history for people who've since left, which is
+// the exact bug this exists to avoid.
+export const isActiveEmployee = (emp) => emp?.active !== false;
+export const getActiveEmployeeList = () => employeeList.filter(isActiveEmployee);
 
 // Get available months from database
 export const getAvailableMonths = async () => {

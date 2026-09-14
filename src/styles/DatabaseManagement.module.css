@@ -1388,6 +1388,65 @@
 	margin-top: 2px;
 }
 
+/* Inactive (retired/resigned) user state — grayed out, whole card dimmed */
+.userCardInactive {
+	opacity: 0.55;
+	filter: grayscale(0.6);
+}
+
+.userCardInactive:hover {
+	opacity: 0.8;
+}
+
+.inactiveBadge {
+	font-size: 0.7rem;
+	font-weight: 700;
+	padding: 2px 8px;
+	border-radius: 999px;
+	background: #fee2e2;
+	color: #991b1b;
+	border: 1px solid #fecaca;
+	white-space: nowrap;
+}
+
+.deactivateButton {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	padding: 6px 12px;
+	background: #f59e0b;
+	color: white;
+	border: none;
+	border-radius: 6px;
+	cursor: pointer;
+	font-size: 0.875rem;
+	font-weight: 500;
+	transition: all 0.2s ease;
+}
+
+.deactivateButton:hover {
+	background: #d97706;
+}
+
+.activateButton {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	padding: 6px 12px;
+	background: #16a34a;
+	color: white;
+	border: none;
+	border-radius: 6px;
+	cursor: pointer;
+	font-size: 0.875rem;
+	font-weight: 500;
+	transition: all 0.2s ease;
+}
+
+.activateButton:hover {
+	background: #15803d;
+}
+
 @media (max-width: 640px) {
 	.userCards {
 		grid-template-columns: 1fr;
