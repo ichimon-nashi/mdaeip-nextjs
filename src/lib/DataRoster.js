@@ -27,7 +27,7 @@ export const employeeList = [
 	{ id: "21701", name: "陳怡如", rank: "經理", base: "TSA", typeRating: ["ATR", "B738"] },
 	{ id: "20580", name: "陳秀英", rank: "組長", base: "TSA", typeRating: ["ATR", "B738"] },
 	{ id: "21986", name: "羅翔鴻", rank: "組長", base: "TSA", typeRating: ["ATR", "B738"] },
-	{ id: "22018", name: "凌志謙", rank: "FI", base: "TSA", typeRating: ["ATR", "B738"] },
+	{ id: "22018", name: "凌誌謙", rank: "FI", base: "TSA", typeRating: ["ATR", "B738"] },
 	{ id: "36639", name: "李盈瑤", rank: "FI", base: "TSA", typeRating: ["ATR", "B738"] },
 	{ id: "39426", name: "柯佳華", rank: "FI", base: "TSA", typeRating: ["ATR", "B738"] },
 	
