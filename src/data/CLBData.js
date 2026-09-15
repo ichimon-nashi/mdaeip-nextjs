@@ -110,7 +110,7 @@ export const CLB_ITEMS = [
 		group: "safetypin",
 	},
 	{
-		zh: "安全繩",
+		zh: "繩索",
 		en: "LANYARD",
 		group: "safetypin",
 	},
@@ -393,6 +393,10 @@ export const CLB_STATUSES = [
 		en: "FRAYED",
 	},
 	{
+		zh: "脫落",
+		en: "DISCONNECTED",
+	},
+	{
 		zh: "撕裂",
 		en: "RIPPED",
 	},
@@ -502,7 +506,7 @@ export const CLB_STATUSES = [
 		zh: "腐蝕",
 		en: "CORRODED",
 	},
-		{
+	{
 		zh: "掉進窗框隔板中",
 		en: "FELL INTO WINDOW SHADE GAP",
 	},
@@ -514,7 +518,7 @@ export const CLB_TIMES = [
 		zh: "滑行",
 		en: "DURING TAXI",
 	},
-		{
+	{
 		zh: "起飛",
 		en: "DURING TAKEOFF",
 	},
