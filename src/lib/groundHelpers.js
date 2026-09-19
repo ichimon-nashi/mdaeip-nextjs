@@ -36,15 +36,12 @@ export const groundEmployeeList = [
 		rank: "地勤經理",
 		base: "KHH",
 		typeRating: [],
-		// Restricted to ONLY these work codes (2026-06-22) — unlike most
-		// employees who can be assigned any valid work code, her role
-		// only ever uses these two shift types. Solver must respect this
-		// as a hard constraint, not just a UI hint.
 		allowedWorkCodes: ["0808D", "0838D"],
-		// Transferred to this base/role starting June 2026 (2026-06-22) —
-		// no schedule should exist or be generated for her before this
-		// date. See activeFrom/activeUntil handling throughout this file.
 		activeFrom: "2026-06-01",
+		// "有國定假日都要上班" — she actively wants to work on national
+		// holidays (HL dates), never take HL as rest. Solver skips her
+		// during HL rest allocation and instead assigns a work code.
+		noHlRest: true,
 	},
 	{
 		id: "59929",
@@ -71,15 +68,10 @@ export const groundEmployeeList = [
 		// part of the rotating rest-pair pool the solver assigns to
 		// everyone else. Weekday numbers: 0=Sun, 6=Sat.
 		fixedRestDays: [0, 6],
-		// BUG FOUND 2026-06-22: fixedRestDays only constrained her REST
-		// days — it said nothing about her WORK days, so Pass 3's
-		// day-centric balancer treated her like any unrestricted
-		// rotating employee once Sat/Sun were assigned, scattering her
-		// across the entire AM/PM work-code pool (confirmed via real log:
-		// she ended up with 1408A, 1508A, 1438A, 14B8A etc., zero 0808D,
-		// when her actual real-world schedule is always 0808D Mon-Fri).
-		// Same fix as 陳寶英's allowedWorkCodes, single-code set here.
 		allowedWorkCodes: ["0808D"],
+		// Fully excluded from headcount/coverage logic (2026-09-19):
+		// solver treats her as invisible for floor/coverage purposes.
+		excludeFromCoverage: true,
 	},
 	{
 		id: "25416",
@@ -774,13 +766,20 @@ export const checkGroundFatigue = (schedule) => {
 	// (confirmed: "monday-sunday, but need to take into consideration of
 	// previous month's schedule" — i.e. NOT reset to day-1-of-month,
 	// genuine ISO-style weeks that can straddle a month boundary).
+	// BUG FOUND 2026-09-18: new Date('YYYY-MM-DD') parses as UTC midnight,
+	// so getDay() returns the UTC weekday — in UTC+8 (Taiwan) this shifts
+	// every date forward by one day, producing wrong week boundaries for
+	// every date in the system. Fixed to parse components directly and
+	// construct in local time, with no UTC shift.
 	const getMondayOfWeek = (dateStr) => {
-		const d = new Date(dateStr);
-		const dow = d.getDay(); // 0=Sun..6=Sat
+		const [y, m, d] = dateStr.split("-").map(Number);
+		const date = new Date(y, m - 1, d); // local time — no timezone shift
+		const dow = date.getDay(); // 0=Sun..6=Sat
 		const daysSinceMonday = dow === 0 ? 6 : dow - 1;
-		const monday = new Date(d);
-		monday.setDate(monday.getDate() - daysSinceMonday);
-		return monday.toISOString().split("T")[0];
+		const monday = new Date(y, m - 1, d - daysSinceMonday);
+		const mm = String(monday.getMonth() + 1).padStart(2, "0");
+		const dd = String(monday.getDate()).padStart(2, "0");
+		return `${monday.getFullYear()}-${mm}-${dd}`;
 	};
 
 	const entriesByWeek = {};
@@ -1345,25 +1344,86 @@ export const autoAssignGroundMonth = (
 		return restDayIndices;
 	};
 
-	// Verifies the rolling-window Z/R rule for one employee's candidate
-	// rest-day set, using the SAME sequential-alternation method proven
-	// correct in the earlier redesign (chronological order, strict
-	// Z/R/Z/R flip — week-number-based formulas were tried and broke).
+	// REWRITTEN 2026-09-18: was checking every possible ROLLING 7-day
+	// window — confirmed wrong rule via direct verification against real
+	// June and October schedules. Real rule: one Z and one R per FIXED
+	// Monday-Sunday calendar week. Rolling windows are strictly stricter
+	// (a window straddling two valid fixed weeks can show zero Z even
+	// when both weeks are individually compliant), artificially restricting
+	// the candidate pool to ~24 valid patterns vs ~80 with the correct
+	// fixed-week rule — confirmed via direct count. This was the primary
+	// cause of rest-day clustering and headcount collapses.
+	//
+	// ADDED 2026-09-18: also validates the 5-consecutive-day cap here.
+	// Previously this was only checked in Pass 3 via violatesLocalRules —
+	// confirmed root cause of July 6 collapse: Pass 2 produced a pattern
+	// where 陳俊嘉 worked Jul 1-5 (5 days) with no rest on Jul 6, so
+	// ANY work code there triggered excessive_consecutive_days, all codes
+	// were rejected, and he fell back to R — collapsing the pool floor.
+	// The cap must be enforced at candidate-generation time, not
+	// discovered as an irrecoverable fallback failure in Pass 3.
+	const getMondayForIdx = (idx) => {
+		const [y, m, d] = days[idx].dateStr.split("-").map(Number);
+		const date = new Date(y, m - 1, d);
+		const dow = date.getDay();
+		const daysSinceMonday = dow === 0 ? 6 : dow - 1;
+		const monday = new Date(y, m - 1, d - daysSinceMonday);
+		const mm = String(monday.getMonth() + 1).padStart(2, "0");
+		const dd = String(monday.getDate()).padStart(2, "0");
+		return `${monday.getFullYear()}-${mm}-${dd}`;
+	};
+
 	const verifyRestRuleForCandidate = (restDayIndices) => {
 		const sorted = [...new Set(restDayIndices)].sort((a, b) => a - b);
 		const assigned = {};
 		sorted.forEach((idx, i) => { assigned[idx] = i % 2 === 0 ? "Z" : "R"; });
-		for (let start = 0; start <= days.length - 7; start++) {
-			const windowIndices = Array.from({ length: 7 }, (_, k) => start + k);
-			const hasZ = windowIndices.some((idx) => assigned[idx] === "Z");
-			const hasR = windowIndices.some((idx) => assigned[idx] === "R");
+
+		// Check 1: Fixed Mon-Sun calendar weeks — each must have one Z and one R
+		const indicesByWeek = {};
+		days.forEach((_, idx) => {
+			const weekKey = getMondayForIdx(idx);
+			(indicesByWeek[weekKey] = indicesByWeek[weekKey] || []).push(idx);
+		});
+
+		for (const indicesInWeek of Object.values(indicesByWeek)) {
+			if (indicesInWeek.length < 7) continue; // partial boundary week — skip
+			const hasZ = indicesInWeek.some((idx) => assigned[idx] === "Z");
+			const hasR = indicesInWeek.some((idx) => assigned[idx] === "R");
 			if (!hasZ || !hasR) return false;
 		}
+
+		// Check 2: No work stretch longer than 5 days OR shorter than 2 days.
+		// Rule 7: avoid 做一休一. Minimum = 2 days, Maximum = 5 days.
+		// Exception: boundary stretches at month start/end that continue into
+		// the adjacent month can't be fully judged here — excluded from the
+		// min-2 check. Cross-month stretches are caught by violatesLocalRules.
+		let consecutive = 0;
+		let isLeadingStretch = true; // true until first rest day is seen
+		for (let idx = 0; idx < days.length; idx++) {
+			if (assigned[idx]) { // rest day
+				if (consecutive === 1 && !isLeadingStretch) return false; // mid-month single-day stretch
+				consecutive = 0;
+				isLeadingStretch = false;
+			} else {
+				consecutive++;
+				if (consecutive > 5) return false;
+			}
+		}
+		// Trailing stretch: if it ends at month's last day and is length 1,
+		// it continues into next month — don't reject it.
+		// Only reject if it's a genuine mid-month single-day (caught above).
+
 		return { assigned, sorted };
 	};
 
 	const rotatingEmployees = employees.filter((e) => !e.fixedRestDays);
 	const fixedEmployees = employees.filter((e) => e.fixedRestDays);
+	// Employees visible to coverage/headcount logic — excludeFromCoverage
+	// employees (張小梅) are fully excluded from floor calculations.
+	// Hoisted to function scope so both the CSP backtrack AND the fallback
+	// path can reference the same value.
+	const coverageEmployees = employees.filter((e) => !e.excludeFromCoverage);
+	const totalEmployeeCount = coverageEmployees.length;
 
 	// Fixed-schedule employees (e.g. 25792): direct, unconditional
 	// assignment — not part of the search, since their pattern is fixed
@@ -1396,6 +1456,7 @@ export const autoAssignGroundMonth = (
 	if (rotatingEmployees.length > 0 && candidatePool.length > 0) {
 		const fixedRestingByDayIdx = new Array(days.length).fill(0);
 		fixedEmployees.forEach((emp) => {
+			if (emp.excludeFromCoverage) return; // invisible to floor checks
 			days.forEach((d, idx) => {
 				if (result[emp.id][d.dateStr] === "Z" || result[emp.id][d.dateStr] === "R") {
 					fixedRestingByDayIdx[idx] += 1;
@@ -1404,7 +1465,24 @@ export const autoAssignGroundMonth = (
 		});
 
 		const restingByDayIdx = new Array(days.length).fill(0);
-		const totalEmployeeCount = employees.length;
+		// (coverageEmployees and totalEmployeeCount are now function-scope —
+		// see declarations above rotatingEmployees/fixedEmployees.)
+		// Pre-populate with pre-filled rest from rotating coverage employees
+		// (accepted requests / Pass 1 locks that were in result[] BEFORE
+		// the CSP search runs). This lets the search avoid placing additional
+		// rest on days that are already request-locked, rather than
+		// discovering conflicts mid-search and falsely rejecting valid
+		// candidates. Only pre-fills count here — not the CSP's own output.
+		rotatingEmployees.forEach((emp) => {
+			if (emp.excludeFromCoverage) return;
+			days.forEach((day, idx) => {
+				const c = existingScheduleMap[emp.id]?.[day.dateStr] ||
+					(acceptedLeaveRequests.find(r => r.employee_id === emp.id && r.requested_date === day.dateStr)?.leave_type);
+				if (c && isGroundRestCode(c)) {
+					restingByDayIdx[idx] += 1;
+				}
+			});
+		});
 
 		// ADDED 2026-06-25 per explicit requirement: "there must be at
 		// least 2 out of the 4 ground staff everyday (one AM, one PM)".
@@ -1423,6 +1501,19 @@ export const autoAssignGroundMonth = (
 		// below, closing a gap where protecting only ONE of these two
 		// insertion points still left real shortage days.)
 		const poolRestingByDayIdx = new Array(days.length).fill(0);
+		// Pre-populate with pre-filled rest for pool members (from accepted
+		// requests / Pass 1 locks) so the CSP search treats request-locked
+		// pool-rest days as immovable and routes around them rather than
+		// falsely rejecting candidates that would otherwise be valid.
+		GROUND_AM_PM_POOL_IDS.forEach((poolId) => {
+			days.forEach((day, idx) => {
+				const c = existingScheduleMap[poolId]?.[day.dateStr] ||
+					(acceptedLeaveRequests.find(r => r.employee_id === poolId && r.requested_date === day.dateStr)?.leave_type);
+				if (c && isGroundRestCode(c)) {
+					poolRestingByDayIdx[idx] += 1;
+				}
+			});
+		});
 
 		// Scoring for the SECONDARY objective (quota-nudging + variety),
 		// applied only to choose AMONG already-headcount-valid solutions
@@ -1530,7 +1621,15 @@ export const autoAssignGroundMonth = (
 			rotatingEmployees.forEach((emp, i) => {
 				const candidate = bestResult[i];
 				candidate.restDayIndices.forEach((idx) => {
-					result[emp.id][days[idx].dateStr] = candidate.assigned[idx];
+					const dateStr = days[idx].dateStr;
+					// Never overwrite a pre-fill (Pass 1 locked cells) — if this
+					// rest-day index happens to land on a pre-filled date (e.g.
+					// an RL duty or a supervisor-assigned work code), skip it.
+					// The CSP search doesn't know about pre-fills so it may
+					// select rest patterns that overlap them; the pre-fill wins.
+					if (!isFixed(emp.id, dateStr)) {
+						result[emp.id][dateStr] = candidate.assigned[idx];
+					}
 				});
 			});
 		} else {
@@ -1560,41 +1659,110 @@ export const autoAssignGroundMonth = (
 			const fixedWeekdaysFallback = new Set(fixedEmployees.flatMap((e) => e.fixedRestDays));
 			const fallbackPairs = CONSECUTIVE_PAIRS.filter(([a,b]) => !fixedWeekdaysFallback.has(a) && !fixedWeekdaysFallback.has(b));
 			const pool = fallbackPairs.length > 0 ? fallbackPairs : CONSECUTIVE_PAIRS;
+			// Track per-day resting count to enforce the coverage floor —
+			// the fallback path previously had zero floor awareness, causing
+			// multiple employees' rest pairs to cluster on the same days and
+			// collapse headcount below GROUND_MIN_STAFF_REQUIRED.
+			const fallbackRestingByDay = {};
+			days.forEach((d) => { fallbackRestingByDay[d.dateStr] = 0; });
+			// Pre-populate with pre-filled rest and fixed-employee rest
+			employees.forEach((emp) => {
+				if (emp.excludeFromCoverage) return;
+				days.forEach((d) => {
+					const c = result[emp.id]?.[d.dateStr];
+					if (c && isGroundRestCode(c)) fallbackRestingByDay[d.dateStr]++;
+				});
+			});
 			rotatingEmployees.forEach((emp, i) => {
 				const [restDayA, restDayB] = pool[i % pool.length];
 				const occurrences = days.filter((d) => d.dow === restDayA || d.dow === restDayB);
-				occurrences.forEach((d, j) => { result[emp.id][d.dateStr] = j % 2 === 0 ? "Z" : "R"; });
+				for (let j = 0; j < occurrences.length; j++) {
+					const d = occurrences[j];
+					if (isFixed(emp.id, d.dateStr)) continue;
+					// Only assign if the floor is still satisfied after this rest
+					const wouldResting = (fallbackRestingByDay[d.dateStr] || 0) + 1;
+					const wouldWorking = totalEmployeeCount - wouldResting;
+					if (wouldWorking < GROUND_MIN_STAFF_REQUIRED) continue; // skip — would collapse headcount
+					result[emp.id][d.dateStr] = j % 2 === 0 ? "Z" : "R";
+					if (!emp.excludeFromCoverage) fallbackRestingByDay[d.dateStr]++;
+				}
 			});
 		}
 	}
 
-	// Safety net: the rolling-window validator is still the source of
-	// truth. With the CSP search above, this should essentially never
-	// fire for any employee whose candidate was accepted — kept only as
-	// a guard against truly unanticipated edge cases.
+	// Safety net — REWRITTEN 2026-09-18: was still using the OLD rolling-
+	// window rule even after checkGroundFatigue was fixed to use fixed
+	// Mon-Sun weeks. Confirmed root cause of headcount collapses: CSP
+	// search's candidate pool tripled after verifyRestRuleForCandidate
+	// was fixed above, so the search now succeeds far more often — but
+	// this safety net still ran the old rolling-window check against
+	// an already-correct CSP result, found a cross-week-boundary window
+	// that merely APPEARED to lack Z/R, and force-inserted an extra rest
+	// day with ZERO awareness of the 4-person pool floor, silently
+	// corrupting an already-correct Pass 2 result and reintroducing
+	// headcount collapses. Now uses fixed-week grouping (same as
+	// verifyRestRuleForCandidate above) and respects the pool floor.
 	employees.forEach((emp) => {
-		for (let i = 0; i < days.length; i++) {
-			const window = days.slice(i, i + 7);
-			if (window.length < 7) continue;
+		// Group days by their Mon-Sun calendar week
+		const weekGroups = {};
+		days.forEach((day, idx) => {
+			const weekKey = getMondayForIdx(idx);
+			(weekGroups[weekKey] = weekGroups[weekKey] || []).push({ dateStr: day.dateStr, idx });
+		});
 
-			const windowDates = window.map((d) => d.dateStr);
-			const hasZ = windowDates.some((d) => result[emp.id][d] === "Z");
-			const hasR = windowDates.some((d) => result[emp.id][d] === "R");
-			if (hasZ && hasR) continue;
+		const isPoolMember = GROUND_AM_PM_POOL_IDS.includes(emp.id);
 
-			const emptySlots = windowDates.filter((d) => !result[emp.id][d]);
+		Object.values(weekGroups).forEach((weekDays) => {
+			if (weekDays.length < 7) return; // boundary week — skip, can't fully judge
+
+			const hasZ = weekDays.some((d) => result[emp.id][d.dateStr] === "Z");
+			const hasR = weekDays.some((d) => result[emp.id][d.dateStr] === "R");
+			if (hasZ && hasR) return;
+
+			const emptySlots = weekDays.filter((d) => !result[emp.id][d.dateStr]);
 			if (emptySlots.length === 0) {
 				warnings.push({
 					employeeId: emp.id,
 					type: "weekly_rest_unfillable",
-					message: `${emp.name || emp.id}：${windowDates[0]} 起7天內無法排入例假/休假（已無空位）`,
+					message: `${emp.name || emp.id}：本週（${weekDays[0].dateStr} 起）無法排入例假/休假（已無空位）`,
 				});
-				continue;
+				return;
 			}
-			let remaining = [...emptySlots];
-			if (!hasZ && remaining.length > 0) result[emp.id][remaining.shift()] = "Z";
-			if (!hasR && remaining.length > 0) result[emp.id][remaining.shift()] = "R";
-		}
+
+			const tryInsert = (code) => {
+				for (const slot of emptySlots) {
+					if (result[emp.id][slot.dateStr]) continue; // might have been filled by earlier insert in this pass
+					// Roster-wide headcount floor (2026-09-19): inserting rest
+					// here must not drop coverage-eligible working employees
+					// below GROUND_MIN_STAFF_REQUIRED. Mirrors the same check
+					// in the fallback path — the safety net previously had
+					// pool-floor awareness but not this broader check, allowing
+					// it to undo the fallback's careful floor-protecting work.
+					if (!emp.excludeFromCoverage) {
+						const coverageWorkingNow = coverageEmployees.filter((e) => {
+							const c = result[e.id][slot.dateStr];
+							return !c || !isGroundRestCode(c); // unassigned counts as will-work
+						}).length;
+						if (coverageWorkingNow - 1 < GROUND_MIN_STAFF_REQUIRED) continue;
+					}
+					if (isPoolMember) {
+						// Don't drop pool below its own 2-person minimum
+						const poolWorkingNow = GROUND_AM_PM_POOL_IDS.filter((id) => {
+							const e = employees.find((e2) => e2.id === id);
+							const c = e ? result[e.id][slot.dateStr] : undefined;
+							return !c || !isGroundRestCode(c);
+						}).length;
+						if (poolWorkingNow - 1 < GROUND_AM_PM_POOL_MIN_REQUIRED) continue;
+					}
+					result[emp.id][slot.dateStr] = code;
+					return true;
+				}
+				return false;
+			};
+
+			if (!hasZ) tryInsert("Z");
+			if (!hasR) tryInsert("R");
+		});
 	});
 
 	// ── Pass 2.5: proactive HL/WL allocation ─────────────────────────────────
@@ -1749,10 +1917,31 @@ export const autoAssignGroundMonth = (
 				// happening for 陳寶英's WL pace-based placement).
 				if (result[emp.id][dateStr]) continue;
 
+				// Rule 7 (2026-09-18): don't create a single-day work stretch.
+				// Inserting HL/WL at this midpoint must not leave exactly one
+				// unassigned work day isolated on either side.
+				const _prevDate = midIdx > 0 ? days[midIdx - 1].dateStr : null;
+				const _nextDate = midIdx < days.length - 1 ? days[midIdx + 1].dateStr : null;
+				const _isEffectiveRest = (ds) => !ds || (!!result[emp.id][ds] && isGroundRestCode(result[emp.id][ds]));
+				// unassigned = will become work, not rest
+				const _prevIsWork = _prevDate && !_isEffectiveRest(_prevDate);
+				const _nextIsWork = _nextDate && !_isEffectiveRest(_nextDate);
+				if (_prevIsWork) {
+					const _ppDate = midIdx > 1 ? days[midIdx - 2].dateStr : null;
+					if (_isEffectiveRest(_ppDate)) continue; // would isolate prev day
+				}
+				if (_nextIsWork) {
+					const _nnDate = midIdx < days.length - 2 ? days[midIdx + 2].dateStr : null;
+					if (_isEffectiveRest(_nnDate)) continue; // would isolate next day
+				}
+
 				// Re-check headcount floor as it stands RIGHT NOW (accounting
 				// for any earlier insertions in this same pass, including
 				// earlier rounds for OTHER employees) before committing.
+				// Excludes employees with excludeFromCoverage (張小梅) per
+				// 2026-09-19 — she's invisible to all coverage/floor logic.
 				const workingNow = employees.filter((e) => {
+					if (e.excludeFromCoverage) return false;
 					const c = result[e.id][dateStr];
 					return c !== "Z" && c !== "R" && c !== "HL" && c !== "WL";
 				}).length;
@@ -1837,6 +2026,9 @@ export const autoAssignGroundMonth = (
 		// only considers eligible employees.
 		const hlEligibleEmployees = new Set();
 		rotatingEmployees.forEach((emp) => {
+			// Skip employees who explicitly want to work on HL days
+			// (noHlRest: true) — they should never receive HL as a rest day
+			if (emp.noHlRest) return;
 			const empYearData = yearScheduleByEmployee[emp.id] || [];
 
 			let empHlDebt = 0;
@@ -1946,36 +2138,31 @@ export const autoAssignGroundMonth = (
 		return violations.some((v) => v.date >= dateStr && (v.type === "insufficient_rest" || v.type === "excessive_consecutive_days"));
 	};
 
-	// REWRITE 2026-06-21: this loop was EMPLOYEE-CENTRIC (for each
-	// employee, fill all their empty days in WORK_CODES' fixed order) —
-	// meaning every employee independently converged on whichever code
-	// happened to come first in that fixed list (in practice, an early
-	// AM code) whenever it was valid, with zero awareness of what
-	// anyone ELSE was assigned that same day. Confirmed via the real
-	// validator: this produced up to 13 separate "missing PM coverage"
-	// days in one real run, even though plenty of valid PM codes existed
-	// for at least one of the working employees on every single one of
-	// those days (verified directly — see conversation history). Fix:
-	// restructure as DAY-CENTRIC — for each day, look at who's working,
-	// and deliberately alternate AM/PM preference based on the day's
-	// running count so far, instead of letting everyone pick the same
-	// "easiest" code independently.
+	// ── Pass 3: stretch-aware work-code assignment ────────────────────────────
+	// REWRITTEN 2026-09-18 — the previous day-centric approach (iterate
+	// across all days, pick AM or PM based on running roster count) was
+	// confirmed wrong via real-schedule analysis of June and October 2026:
+	// the actual rule is "within any work stretch (contiguous non-rest days),
+	// AM days come FIRST and PM days come LAST — one clean transition, no
+	// mixing." A day-centric loop with no stretch awareness inevitably
+	// produces mid-stretch AM→PM→AM patterns, violating Rule 9.
+	//
+	// New approach: iterate per-employee, per-stretch. For each stretch
+	// (contiguous empty days between Z/R/HL/WL boundaries), determine how
+	// many days should be AM and how many PM based on this employee's monthly
+	// type assignment, then fill AM from the LEFT edge and PM from the RIGHT
+	// edge of the stretch. Specific codes (0608A, 14B8A, 0908A) are assigned
+	// afterwards in Pass 4.5, which already handles code-level specifics.
+	//
+	// Monthly type assignment (AM-lead vs PM-lead): each pool employee has a
+	// monthly dominant type, which rotates. For a given month M (1-12), the
+	// seed is derived from the employee's ordinal position in the pool and
+	// the month number so the rotation is deterministic and spreads load.
+	// Supervisors can override via scheduling_preferences (future feature).
+	// 陳俊嘉 (59790) is always AM-dominant per confirmed October pattern.
+	// 陳寶英/張小梅 use allowedWorkCodes so they skip this logic entirely.
 	const WORK_CODES_AM = WORK_CODES.filter((c) => isAmDuty(c));
 	const WORK_CODES_PM = WORK_CODES.filter((c) => isPmDuty(c));
-
-	// BUG FOUND 2026-06-22: the previous fix for "1238A overused" simply
-	// put 14B8A FIRST in a fixed-priority list — but since this loop
-	// always tries the primary pool in the SAME order every time, that
-	// meant 14B8A became the unconditional first choice for nearly every
-	// PM assignment roster-wide (confirmed via direct count: 82 of ~190
-	// total work-code assignments were 14B8A in one test run — a worse
-	// concentration than the original 1238A problem it was meant to
-	// fix). Fix: track how many times each work code has been used SO
-	// FAR this month, and always pick whichever valid candidate has been
-	// used LEAST — this naturally spreads usage across the whole pool
-	// instead of fixating on one code. 14B8A only wins as a tie-breaker
-	// against 1238A specifically when usage counts are otherwise equal,
-	// preserving the original soft preference without the runaway effect.
 	const codeUsageCount = {};
 	WORK_CODES.forEach((c) => { codeUsageCount[c] = 0; });
 
@@ -1986,65 +2173,105 @@ export const autoAssignGroundMonth = (
 		let bestCount = Infinity;
 		for (const c of valid) {
 			const count = codeUsageCount[c];
-			if (count < bestCount) {
-				bestCount = count;
-				best = c;
-			} else if (count === bestCount && best === "1238A" && c === "14B8A") {
-				best = c; // tie-break: prefer 14B8A over 1238A specifically, per 2026-06-21 request
-			}
+			if (count < bestCount) { bestCount = count; best = c; }
+			else if (count === bestCount && best === "1238A" && c === "14B8A") best = c;
 		}
 		return best;
 	};
 
-	days.forEach(({ dateStr }) => {
-		// Which employees still need a code assigned today (not already
-		// fixed/Z/R from earlier passes).
-		const employeesNeedingCodeToday = employees.filter((emp) => !result[emp.id][dateStr]);
-		if (employeesNeedingCodeToday.length === 0) return;
-
-		let amCountToday = employees.filter((emp) => isAmDuty(result[emp.id][dateStr])).length;
-		let pmCountToday = employees.filter((emp) => isPmDuty(result[emp.id][dateStr])).length;
-
-		employeesNeedingCodeToday.forEach((emp) => {
-			// Prefer whichever type is currently behind for today, so the
-			// roster naturally balances instead of everyone picking
-			// independently. Ties (or PM=0 with multiple people left to
-			// assign) lean PM, since AM tends to be the "easier" default
-			// every employee's rest schedule allows, and that bias is
-			// exactly what caused the original gap.
-			const preferPm = pmCountToday <= amCountToday;
-			const primaryPool = restrictToAllowedCodes(emp, preferPm ? WORK_CODES_PM : WORK_CODES_AM);
-			const fallbackPool = restrictToAllowedCodes(emp, preferPm ? WORK_CODES_AM : WORK_CODES_PM);
-
-			// PREFERRED DEFAULT CODE (2026-06-22) — for employees with
-			// defaultAmCode/defaultPmCode set (e.g. 林妍蓓/陳俊嘉/張芷菱/
-			// 盧詠薇 → 0608A AM, 14B8A PM), try that specific code FIRST,
-			// before falling through to the usage-balanced pool logic
-			// below. This is a soft preference, not allowedWorkCodes'
-			// hard restriction — if the default code doesn't work for
-			// this employee today (rest-rule conflict, etc.), every
-			// other code in the normal pool remains a valid fallback,
-			// and the manual picker still shows every code regardless.
-			const defaultCode = preferPm ? emp.defaultPmCode : emp.defaultAmCode;
-			let chosen = null;
-			if (defaultCode && primaryPool.includes(defaultCode) && !violatesLocalRules(emp.id, dateStr, defaultCode)) {
-				chosen = defaultCode;
+	// Find all unassigned work stretches for one employee (contiguous days
+	// that have no code yet — i.e. not Z/R/HL/WL/leave from Pass 1/2/2.5).
+	const findWorkStretches = (empId) => {
+		const stretches = [];
+		let curStart = null;
+		days.forEach((day, idx) => {
+			const code = result[empId][day.dateStr];
+			// Unassigned cells (undefined/null) OR leave codes that are NOT
+			// Z/R/HL/WL count as work days — employees on RL/AL etc. still
+			// need a work code (Rule 6: everything except Z/R is a work day).
+			// But for STRETCH purposes, Z/R/HL/WL break the stretch since
+			// they represent genuine rest/leave in the schedule logic.
+			const isRestBoundary = code === "Z" || code === "R" || code === "HL" || code === "WL";
+			if (!isRestBoundary && !result[empId][day.dateStr]) {
+				// Unassigned — part of a work stretch
+				if (curStart === null) curStart = idx;
+			} else {
+				if (curStart !== null) {
+					stretches.push({ startIdx: curStart, endIdx: idx - 1 });
+					curStart = null;
+				}
 			}
-
-			if (!chosen) chosen = pickLeastUsedValidCode(primaryPool, emp.id, dateStr);
-			if (!chosen) chosen = pickLeastUsedValidCode(fallbackPool, emp.id, dateStr);
-
-			if (chosen) {
-				result[emp.id][dateStr] = chosen;
-				codeUsageCount[chosen] += 1;
-				if (isPmDuty(chosen)) pmCountToday++; else amCountToday++;
-			}
-			// If genuinely no code works for this employee today (rest-rule
-			// conflict on every option), leave it empty here — the
-			// existing backtrack-and-fallback-to-R logic below will catch
-			// and resolve it on a second pass over remaining gaps.
 		});
-	});
+		if (curStart !== null) stretches.push({ startIdx: curStart, endIdx: days.length - 1 });
+		return stretches;
+	};
+
+	// Monthly AM/PM type assignment per pool employee.
+	// - 陳俊嘉 (59790): always AM-dominant (confirmed from real schedule)
+	// - Others: rotate by (monthIndex + poolPosition) % 2
+	//   Even = PM-lead this month (PM days dominate, AM days appear in
+	//   first part of stretch as required by Rule 9's AM-first constraint)
+	//   Odd  = AM-lead this month (AM days dominate)
+	const poolOrderForRotation = ["59929", "60090", "54762"]; // excluding 59790 (always AM)
+	const getMonthlyPmRatio = (empId) => {
+		if (empId === "59790") return 0.3; // 陳俊嘉: mostly AM (confirmed October: ~20%)
+		const pos = poolOrderForRotation.indexOf(empId);
+		if (pos === -1) return 0.5; // unknown — default balanced
+		const isPmLead = ((targetMonth || 0) + pos) % 2 === 0;
+		return isPmLead ? 0.6 : 0.4; // PM-lead: ~60% PM; AM-lead: ~40% PM
+	};
+
+	// Assign work codes to all unassigned days for one employee,
+	// stretch by stretch, AM from left, PM from right.
+	const assignStretchCodes = (emp) => {
+		const stretches = findWorkStretches(emp.id);
+		const pmRatio = getMonthlyPmRatio(emp.id);
+
+		stretches.forEach((stretch) => {
+			const { startIdx, endIdx } = stretch;
+			const length = endIdx - startIdx + 1;
+			if (length === 0) return;
+
+			// How many PM days in this stretch?
+			// For length-1 stretches: always AM (can't do AM+PM in a single day)
+			// For length-2+: at least 1 PM if employee has PM duty in their set
+			let pmCount = length === 1 ? 0 : Math.min(Math.max(1, Math.round(length * pmRatio)), length - 1);
+			const amCount = length - pmCount;
+
+			// Check if this employee can even use PM codes (e.g. 陳寶英 can't)
+			const hasPmCodes = restrictToAllowedCodes(emp, WORK_CODES_PM).length > 0;
+			if (!hasPmCodes) pmCount = 0;
+
+			// AM from left edge, PM from right edge
+			for (let i = 0; i < length; i++) {
+				const idx = startIdx + i;
+				const dateStr = days[idx].dateStr;
+				if (result[emp.id][dateStr]) continue; // already assigned (safety check)
+
+				const isAmDay = i < amCount;
+				const primaryPool = restrictToAllowedCodes(emp, isAmDay ? WORK_CODES_AM : WORK_CODES_PM);
+				const fallbackPool = restrictToAllowedCodes(emp, isAmDay ? WORK_CODES_PM : WORK_CODES_AM);
+
+				// Try default code first (0608A for AM, 14B8A for PM)
+				const defaultCode = isAmDay ? emp.defaultAmCode : emp.defaultPmCode;
+				let chosen = null;
+				if (defaultCode && primaryPool.includes(defaultCode) && !violatesLocalRules(emp.id, dateStr, defaultCode)) {
+					chosen = defaultCode;
+				}
+				if (!chosen) chosen = pickLeastUsedValidCode(primaryPool, emp.id, dateStr);
+				if (!chosen) chosen = pickLeastUsedValidCode(fallbackPool, emp.id, dateStr);
+
+				if (chosen) {
+					result[emp.id][dateStr] = chosen;
+					codeUsageCount[chosen] = (codeUsageCount[chosen] || 0) + 1;
+				}
+				// If still null, second pass below catches it
+			}
+		});
+	};
+
+	// Run stretch-aware assignment for all employees
+	employees.forEach((emp) => assignStretchCodes(emp));
 
 	// Second pass: catch anything the day-centric pass above couldn't
 	// resolve (rare — only when EVERY code violates that employee's rest
@@ -2133,46 +2360,21 @@ export const autoAssignGroundMonth = (
 	// AM/PM is technically covered.
 	days.forEach(({ dateStr }) => {
 		const isWorkingThatDay = (emp) => {
+			if (emp.excludeFromCoverage) return false; // invisible to coverage logic
 			const code = result[emp.id][dateStr];
 			return code && !isGroundRestCode(code);
 		};
 
 		const repairOne = (predicate, codePickerFn, failureType, failureLabel, protectRest = false) => {
 			const eligible = employees.find((emp) => {
-				if (predicate(emp)) return false; // already satisfies what we're checking, skip
-				if (isFixed(emp.id, dateStr) && existingScheduleMap[emp.id]?.[dateStr]) return false; // manually locked
-				// BUG FOUND 2026-06-21: the headcount repair (4b below) had NO
-				// protection against overwriting a Z/R that Pass 2 deliberately
-				// placed to satisfy the weekly rolling-window rule. Since every
-				// employee's schedule is mostly Z/R immediately after Pass 2/3,
-				// `isWorkingThatDay` was false for nearly everyone on nearly
-				// every day — triggering this repair to fire repeatedly across
-				// the WHOLE month, converting one person's Z/R to a work code
-				// each time it ran, which is exactly why 陳寶英 (sorted first,
-				// always the first eligible match) ended up with her entire
-				// month overwritten to 1238A with almost no Z or R left. Fix:
-				// when protectRest is true (headcount repair only — AM/PM type
-				// repair in 4a doesn't need this, since it already requires the
-				// candidate to take an AM/PM-type CODE, which by definition
-				// isn't Z/R), never select someone whose current day is Z or R.
+				if (emp.excludeFromCoverage) return false; // never recruit invisible employees
+				if (predicate(emp)) return false;
+				if (isFixed(emp.id, dateStr) && existingScheduleMap[emp.id]?.[dateStr]) return false;
 				if (protectRest) {
 					const currentCode = result[emp.id][dateStr];
 					const isFallback = fallbackRestCells.has(`${emp.id}|${dateStr}`);
-					// FIX 2026-06-22: fallback-R cells (Pass 3 couldn't find a
-					// valid work code, defaulted to R as a last resort) are
-					// NOT a deliberate rest commitment the way Pass 2's Z/R
-					// are — they should be RECLAIMABLE by headcount repair.
-					// Confirmed via real reproduction: several employees'
-					// fallback-R's clustering near a month boundary collapsed
-					// headcount to 2, and the old blanket protectRest check
-					// made that unrecoverable since it treated every R
-					// identically regardless of how it was assigned.
 					if ((currentCode === 'Z' || currentCode === 'R') && !isFallback) return false;
 				}
-				// Restrict the candidate pool to THIS employee's
-				// allowedWorkCodes (2026-06-22) — e.g. 陳寶英 should never
-				// be selected for a code outside her restricted set, even
-				// during reactive repair.
 				const codes = restrictToAllowedCodes(emp, codePickerFn());
 				return codes.some((c) => !violatesLocalRules(emp.id, dateStr, c));
 			});
@@ -2188,19 +2390,10 @@ export const autoAssignGroundMonth = (
 			return false;
 		};
 
-		// 4a: AM/PM type coverage
-		let hasAm = employees.some((emp) => isAmDuty(result[emp.id][dateStr]));
-		let hasPm = employees.some((emp) => isPmDuty(result[emp.id][dateStr]));
+		// 4a: AM/PM type coverage — only count non-excluded employees
+		let hasAm = employees.some((emp) => !emp.excludeFromCoverage && isAmDuty(result[emp.id][dateStr]));
+		let hasPm = employees.some((emp) => !emp.excludeFromCoverage && isPmDuty(result[emp.id][dateStr]));
 
-		// BUG FOUND 2026-06-21 (round 2): the first protectRest fix only
-		// covered 4b's call site — 4a's two calls were left with the
-		// default protectRest=false, so THEY were the ones actually
-		// overwriting Z/R on nearly every day (since hasAm/hasPm are false
-		// whenever someone's on Z/R, which is most days right after
-		// Pass 2). Confirmed via direct before/after instrumentation: Pass
-		// 2 and Pass 3 both correctly preserved 13 Z / 13 R for 陳寶英;
-		// the count only collapsed after Pass 4 ran. Both 4a calls now
-		// pass protectRest=true too.
 		if (!hasAm) {
 			repairOne(
 				(emp) => isAmDuty(result[emp.id][dateStr]),
@@ -2213,26 +2406,25 @@ export const autoAssignGroundMonth = (
 		if (!hasPm) {
 			repairOne(
 				(emp) => isPmDuty(result[emp.id][dateStr]),
-				() => WORK_CODES_PM, // reuses the same 14B8A-preferred order from Pass 3, for consistency
+				() => WORK_CODES_PM,
 				"coverage_unfillable",
 				"無法找到可排入晚班且不違反休息規則的人員",
 				true,
 			);
 		}
 
-		// 4b: minimum headcount — even if AM/PM type is technically covered,
-		// re-check and pull in MORE people if too few are working overall.
+		// 4b: minimum headcount among coverage-eligible employees only
 		let workingCount = employees.filter(isWorkingThatDay).length;
-		let guard = 0; // safety bound — never loop more times than there are employees
+		let guard = 0;
 		while (workingCount < GROUND_MIN_STAFF_REQUIRED && guard < employees.length) {
 			const filledOneMore = repairOne(
 				isWorkingThatDay,
-				() => WORK_CODES, // any work code is acceptable for a pure headcount repair
+				() => WORK_CODES,
 				"insufficient_headcount",
 				`當日上班人數不足（最低需求 ${GROUND_MIN_STAFF_REQUIRED} 人），且無法找到可調整的人員`,
-				true, // protectRest — never overwrite a Z/R Pass 2 placed deliberately
+				true,
 			);
-			if (!filledOneMore) break; // no eligible person found — stop trying, warning already logged
+			if (!filledOneMore) break;
 			workingCount = employees.filter(isWorkingThatDay).length;
 			guard += 1;
 		}
@@ -2298,20 +2490,27 @@ export const autoAssignGroundMonth = (
 			for (const empId of PAPERWORK_PRIORITY_IDS) {
 				if (assignedPaperwork.length >= numExtra) break;
 				const emp = poolWorkingToday.find((e) => e.id === empId);
-				if (emp && !violatesLocalRules(emp.id, dateStr, "0908A")) {
+				// Never overwrite a pre-filled cell (2026-09-18) — e.g. a
+				// supervisor who pre-filled 0608A for 妍蓓 on a specific day
+				// specifically to override paperwork duty must be respected.
+				if (emp && !isFixed(emp.id, dateStr) && !violatesLocalRules(emp.id, dateStr, "0908A")) {
 					result[emp.id][dateStr] = "0908A";
+					assignedPaperwork.push(emp.id);
+				} else if (emp && isFixed(emp.id, dateStr)) {
+					// Pre-filled — treat as already assigned (skip for paperwork,
+					// but still count as "assigned" so they don't get 0608A/14B8A
+					// overwrite below if the pre-fill is already a valid work code)
 					assignedPaperwork.push(emp.id);
 				}
 			}
 			// Fallback: if the priority list couldn't fill every extra slot
-			// (e.g. 59790 is the only "extra" person and isn't on the
-			// priority list at all), assign remaining extras paperwork too,
-			// in whatever order they appear.
 			for (const emp of poolWorkingToday) {
 				if (assignedPaperwork.length >= numExtra) break;
 				if (assignedPaperwork.includes(emp.id)) continue;
-				if (!violatesLocalRules(emp.id, dateStr, "0908A")) {
+				if (!isFixed(emp.id, dateStr) && !violatesLocalRules(emp.id, dateStr, "0908A")) {
 					result[emp.id][dateStr] = "0908A";
+					assignedPaperwork.push(emp.id);
+				} else if (isFixed(emp.id, dateStr)) {
 					assignedPaperwork.push(emp.id);
 				}
 			}
