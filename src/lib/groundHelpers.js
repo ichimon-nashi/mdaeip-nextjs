@@ -36,7 +36,8 @@ export const groundEmployeeList = [
 		rank: "地勤經理",
 		base: "KHH",
 		typeRating: [],
-		allowedWorkCodes: ["0808D", "0838D"],
+		// Corrected 2026-09-19: real October data shows 0838D + 1238A only (0808D never appears)
+		allowedWorkCodes: ["0838D", "1238A"],
 		activeFrom: "2026-06-01",
 		// "有國定假日都要上班" — she actively wants to work on national
 		// holidays (HL dates), never take HL as rest. Solver skips her
@@ -56,7 +57,7 @@ export const groundEmployeeList = [
 		// and the manual picker still shows every code as an option for
 		// supervisor adjustment.
 		defaultAmCode: "0608A",
-		defaultPmCode: "14B8A",
+		defaultPmCode: "1408A",
 	},
 	{
 		id: "25792",
@@ -97,7 +98,7 @@ export const groundEmployeeList = [
 		// above for the full explanation of how this differs from a hard
 		// allowedWorkCodes restriction.
 		defaultAmCode: "0608A",
-		defaultPmCode: "14B8A",
+		defaultPmCode: "1408A",
 	},
 	{
 		id: "60090",
@@ -107,7 +108,7 @@ export const groundEmployeeList = [
 		typeRating: [],
 		// Preferred default work codes (2026-06-22) — see 張芷菱's comment above.
 		defaultAmCode: "0608A",
-		defaultPmCode: "14B8A",
+		defaultPmCode: "1408A",
 	},
 
 	{
@@ -118,7 +119,7 @@ export const groundEmployeeList = [
 		typeRating: [],
 		// Preferred default work codes (2026-06-22) — see 張芷菱's comment above.
 		defaultAmCode: "0608A",
-		defaultPmCode: "14B8A",
+		defaultPmCode: "1408A",
 	},
 ];
 
@@ -1255,17 +1256,148 @@ export const autoAssignGroundMonth = (
 	// relying solely on the caller.
 	employees = employees.filter((e) => isEmployeeActiveForMonth(e, monthLabel));
 
+	// ── Pass 0: conflict pre-detection and minimum-denial resolution ─────────
+	// Runs BEFORE Pass 1 locks requests in. Identifies days where the
+	// combination of accepted requests + pre-fills would make coverage
+	// mathematically impossible regardless of how the solver assigns the
+	// remaining free days, then denies the minimum necessary set of requests
+	// (softest first) to restore viability — recording every denial as an
+	// explicit warning so the supervisor sees exactly what was overridden
+	// and why.
+	//
+	// Denial priority (lower = denied first = softest):
+	//   1. Fixed-weekday Z/R preference (e.g. 陳俊嘉 Thu/Sun) — softest,
+	//      a scheduling preference not a formal entitlement
+	//   2. Specific rest-date requests (non-AL/WL pre-fills)
+	//   3. WL (welfare leave)
+	//   4. AL (annual leave) — hardest, absolute last resort
+	//   RL = never denied (mandatory work duty, not a rest request)
+	//
+	// "Minimum necessary" = stop the moment the day becomes viable; don't
+	// also deny harder requests if the soft one already fixed it.
+	const DENIAL_PRIORITY = { weekday_preference: 1, R: 2, Z: 2, WL: 3, AL: 4 };
+	const denialPriority = (source, code) => {
+		if (source === "weekday_preference") return 1;
+		if (code === "RL") return 99; // never denied
+		return DENIAL_PRIORITY[code] ?? 2;
+	};
+
+	// Collect all deniable requests (pre-fills + leave requests that are rest)
+	const GROUND_REST_CODES_SET = new Set(["Z", "R", "HL", "WL", "AL", "SL", "ML", "FL", "LL", "BL", "PL"]);
+	const deniableRequests = [];
+
+	// From existingScheduleMap (supervisor pre-fills)
+	Object.entries(existingScheduleMap).forEach(([empId, dates]) => {
+		Object.entries(dates).forEach(([dateStr, code]) => {
+			if (!GROUND_REST_CODES_SET.has(code)) return;
+			if (code === "RL") return; // never deny
+			// Detect if this pre-fill is from a weekday preference — if the
+			// employee has a fixedWeekdayRest setting and this date's weekday
+			// matches, mark as preference-sourced.
+			const emp = employees.find((e) => e.id === empId);
+			const [y, m, d] = dateStr.split("-").map(Number);
+			const dow = new Date(y, m - 1, d).getDay(); // 0=Sun..6=Sat
+			const isWeekdayPref = emp?.fixedWeekdayRest &&
+				(emp.fixedWeekdayRest[0] === dow || emp.fixedWeekdayRest[1] === dow);
+			deniableRequests.push({
+				empId, dateStr, code,
+				source: isWeekdayPref ? "weekday_preference" : "prefill",
+				priority: denialPriority(isWeekdayPref ? "weekday_preference" : "prefill", code),
+			});
+		});
+	});
+
+	// From acceptedLeaveRequests
+	acceptedLeaveRequests.forEach((req) => {
+		if (!GROUND_REST_CODES_SET.has(req.leave_type)) return;
+		if (req.leave_type === "RL") return;
+		deniableRequests.push({
+			empId: req.employee_id, dateStr: req.requested_date, code: req.leave_type,
+			source: "leave_request",
+			priority: denialPriority("leave_request", req.leave_type),
+		});
+	});
+
+	// Sort softest first (stable sort by priority then dateStr for determinism)
+	deniableRequests.sort((a, b) => a.priority - b.priority || a.dateStr.localeCompare(b.dateStr));
+
+	// Build day → Set<empId> of who's locked into rest
+	const lockedRestByDay = {};
+	deniableRequests.forEach(({ empId, dateStr }) => {
+		(lockedRestByDay[dateStr] = lockedRestByDay[dateStr] || new Set()).add(empId);
+	});
+
+	const coverageEmpIds = new Set(employees.filter((e) => !e.excludeFromCoverage).map((e) => e.id));
+	const poolEmpIds = new Set(GROUND_AM_PM_POOL_IDS);
+
+	const isDayViable = (dateStr) => {
+		const resting = lockedRestByDay[dateStr] || new Set();
+		const coverageWorking = [...coverageEmpIds].filter((id) => !resting.has(id)).length;
+		const poolWorking = [...poolEmpIds].filter((id) => !resting.has(id)).length;
+		return coverageWorking >= GROUND_MIN_STAFF_REQUIRED && poolWorking >= GROUND_AM_PM_POOL_MIN_REQUIRED;
+	};
+
+	// For each day with pre-locked requests, check viability and deny minimally
+	const deniedRequestKeys = new Set(); // `${empId}|${dateStr}` of denied requests
+	[...new Set(deniableRequests.map((r) => r.dateStr))].sort().forEach((dateStr) => {
+		if (isDayViable(dateStr)) return; // fine as-is
+		// Deny requests softest-first until the day becomes viable
+		for (const req of deniableRequests) {
+			if (req.dateStr !== dateStr) continue;
+			if (deniedRequestKeys.has(`${req.empId}|${req.dateStr}`)) continue;
+			if (!(lockedRestByDay[dateStr] || new Set()).has(req.empId)) continue; // already removed
+			const emp = employees.find((e) => e.id === req.empId);
+			// Remove from the locked-rest count for this day
+			lockedRestByDay[dateStr].delete(req.empId);
+			deniedRequestKeys.add(`${req.empId}|${req.dateStr}`);
+			const reasonType = req.priority === 1 ? "weekday_preference" :
+				req.code === "WL" ? "WL" : req.code === "AL" ? "AL" : "rest_request";
+			warnings.push({
+				employeeId: req.empId,
+				date: req.dateStr,
+				type: "request_denied",
+				deniedCode: req.code,
+				deniedSource: req.source,
+				message: `${emp?.name || req.empId}：${req.dateStr} 的${req.code}申請因當日人力不足（${isDayViable(dateStr) ? "已解決" : "仍待解決"}）而無法批准，已改由系統自動排班`,
+			});
+			if (isDayViable(dateStr)) break; // minimum achieved — stop denying
+		}
+		if (!isDayViable(dateStr)) {
+			warnings.push({
+				date: dateStr,
+				type: "request_conflict_unresolvable",
+				message: `${dateStr}：即使否決所有可否決申請，當日人力仍不足，請聯絡主管手動調整`,
+			});
+		}
+	});
+
+	// Apply denials: remove denied entries from existingScheduleMap and
+	// acceptedLeaveRequests so Pass 1 never sees them
+	const cleanedScheduleMap = {};
+	Object.entries(existingScheduleMap).forEach(([empId, dates]) => {
+		cleanedScheduleMap[empId] = {};
+		Object.entries(dates).forEach(([dateStr, code]) => {
+			if (!deniedRequestKeys.has(`${empId}|${dateStr}`)) {
+				cleanedScheduleMap[empId][dateStr] = code;
+			}
+		});
+	});
+	const cleanedLeaveRequests = acceptedLeaveRequests.filter(
+		(req) => !deniedRequestKeys.has(`${req.employee_id}|${req.requested_date}`)
+	);
+
+	// Replace inputs with cleaned versions for all downstream passes
+	existingScheduleMap = cleanedScheduleMap;
+	// (acceptedLeaveRequests is used by name in Pass 1 below — reassign)
+	const effectiveLeaveRequests = cleanedLeaveRequests;
+
 	// Working copy — { employeeId: { dateStr: duty_code } }
 	const result = {};
 	employees.forEach((emp) => { result[emp.id] = { ...(existingScheduleMap[emp.id] || {}) }; });
 
 	// ── Pass 1: lock in accepted leave requests (never overwritten) ──────────
-	acceptedLeaveRequests.forEach((req) => {
+	effectiveLeaveRequests.forEach((req) => {
 		if (!result[req.employee_id]) return;
-		// Only set if not already manually filled with something else —
-		// a manual pre-fill takes precedence visually, but in practice an
-		// accepted leave request should already match whatever's there
-		// from the 指定休假 flow, so this is mostly a safety no-op.
 		if (!result[req.employee_id][req.requested_date]) {
 			result[req.employee_id][req.requested_date] = req.leave_type;
 		}
@@ -1477,7 +1609,7 @@ export const autoAssignGroundMonth = (
 			if (emp.excludeFromCoverage) return;
 			days.forEach((day, idx) => {
 				const c = existingScheduleMap[emp.id]?.[day.dateStr] ||
-					(acceptedLeaveRequests.find(r => r.employee_id === emp.id && r.requested_date === day.dateStr)?.leave_type);
+					(effectiveLeaveRequests.find(r => r.employee_id === emp.id && r.requested_date === day.dateStr)?.leave_type);
 				if (c && isGroundRestCode(c)) {
 					restingByDayIdx[idx] += 1;
 				}
@@ -1508,7 +1640,7 @@ export const autoAssignGroundMonth = (
 		GROUND_AM_PM_POOL_IDS.forEach((poolId) => {
 			days.forEach((day, idx) => {
 				const c = existingScheduleMap[poolId]?.[day.dateStr] ||
-					(acceptedLeaveRequests.find(r => r.employee_id === poolId && r.requested_date === day.dateStr)?.leave_type);
+					(effectiveLeaveRequests.find(r => r.employee_id === poolId && r.requested_date === day.dateStr)?.leave_type);
 				if (c && isGroundRestCode(c)) {
 					poolRestingByDayIdx[idx] += 1;
 				}
@@ -2174,7 +2306,7 @@ export const autoAssignGroundMonth = (
 		for (const c of valid) {
 			const count = codeUsageCount[c];
 			if (count < bestCount) { bestCount = count; best = c; }
-			else if (count === bestCount && best === "1238A" && c === "14B8A") best = c;
+			else if (count === bestCount && best === "1238A" && c === "1408A") best = c;
 		}
 		return best;
 	};
@@ -2470,8 +2602,8 @@ export const autoAssignGroundMonth = (
 			// covered, since the OTHER one is necessarily left uncovered.
 			if (!violatesLocalRules(emp.id, dateStr, "0608A")) {
 				result[emp.id][dateStr] = "0608A";
-			} else if (!violatesLocalRules(emp.id, dateStr, "14B8A")) {
-				result[emp.id][dateStr] = "14B8A";
+			} else if (!violatesLocalRules(emp.id, dateStr, "1408A")) {
+				result[emp.id][dateStr] = "1408A";
 			}
 			warnings.push({
 				date: dateStr,
@@ -2534,23 +2666,23 @@ export const autoAssignGroundMonth = (
 		if (remaining.length >= 2) {
 			const [a, b] = remaining;
 			const aCanAm = !violatesLocalRules(a.id, dateStr, "0608A");
-			const bCanPm = !violatesLocalRules(b.id, dateStr, "14B8A");
-			const aCanPm = !violatesLocalRules(a.id, dateStr, "14B8A");
+			const bCanPm = !violatesLocalRules(b.id, dateStr, "1408A");
+			const aCanPm = !violatesLocalRules(a.id, dateStr, "1408A");
 			const bCanAm = !violatesLocalRules(b.id, dateStr, "0608A");
 
 			if (aCanAm && bCanPm) {
 				result[a.id][dateStr] = "0608A";
-				result[b.id][dateStr] = "14B8A";
+				result[b.id][dateStr] = "1408A";
 			} else if (aCanPm && bCanAm) {
-				result[a.id][dateStr] = "14B8A";
+				result[a.id][dateStr] = "1408A";
 				result[b.id][dateStr] = "0608A";
 			} else {
 				// Neither ordering works for both — place whichever single
 				// assignment IS valid, and flag the genuine shortage
 				// instead of leaving a silent duplicate.
 				if (aCanAm) result[a.id][dateStr] = "0608A";
-				else if (aCanPm) result[a.id][dateStr] = "14B8A";
-				if (bCanPm) result[b.id][dateStr] = "14B8A";
+				else if (aCanPm) result[a.id][dateStr] = "1408A";
+				if (bCanPm) result[b.id][dateStr] = "1408A";
 				else if (bCanAm) result[b.id][dateStr] = "0608A";
 				warnings.push({
 					date: dateStr,
@@ -2562,8 +2694,8 @@ export const autoAssignGroundMonth = (
 			const emp = remaining[0];
 			if (!violatesLocalRules(emp.id, dateStr, "0608A")) {
 				result[emp.id][dateStr] = "0608A";
-			} else if (!violatesLocalRules(emp.id, dateStr, "14B8A")) {
-				result[emp.id][dateStr] = "14B8A";
+			} else if (!violatesLocalRules(emp.id, dateStr, "1408A")) {
+				result[emp.id][dateStr] = "1408A";
 			}
 		}
 	});

@@ -56,7 +56,7 @@ const DUTY_CODE_CLASS_MAP = {
 };
 // Most commonly-used work codes (2026-06-22), given a subtle background
 // to help the scheduler's eye distinguish them at a glance.
-const COMMON_WORK_CODES = ['0608A', '0908A', '14B8A'];
+const COMMON_WORK_CODES = ['0608A', '0908A', '1408A']; // updated 2026-09-19: 14B8A → 1408A per real schedule analysis
 
 const getDutyCellClass = (code) => {
   if (!code || code === '-') return '';
@@ -200,7 +200,7 @@ const DutyPicker = ({ currentCode, onSelect, onClose }) => {
                 {workCodes.map(([code, times]) => (
                   <button
                     key={code}
-                    className={`${rStyles.pickerOption} ${['0608A', '14B8A'].includes(code) ? rStyles.pickerOptionDefaultWork : ''} ${currentCode === code ? rStyles.pickerOptionActive : ''}`}
+                    className={`${rStyles.pickerOption} ${['0608A', '1408A'].includes(code) ? rStyles.pickerOptionDefaultWork : ''} ${currentCode === code ? rStyles.pickerOptionActive : ''}`}
                     onClick={() => onSelect(code)}
                   >
                     <span className={rStyles.pickerCode}>{code}</span>
