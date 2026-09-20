@@ -22,7 +22,7 @@ import { hasAppAccess } from "../../lib/permissionHelpers";
 import { employeeList } from "../../lib/DataRoster";
 import SignaturePadModal from "./SignaturePadModal";
 import { getSectionBank, buildRemarksDraft, getSummaryLine } from "../../lib/evalFormComments";
-import { generateEvalFormPdf } from "../../lib/generateEvalFormPdf";
+import { generateEvalFormPdf, HEADER_FONTS } from "../../lib/generateEvalFormPdf";
 import { QUIZ_ITEM_LABELS } from "../../lib/evalFormCoords";
 import styles from "../../styles/EvalFormGenerator.module.css";
 
@@ -115,6 +115,7 @@ export default function EvalFormGeneratorPage() {
 	const [isExporting, setIsExporting] = useState(false);
 	const [exportDone, setExportDone] = useState(false);
 	const [signatureDataUrl, setSignatureDataUrl] = useState(null);
+	const [headerFontIndex, setHeaderFontIndex] = useState(""); // "" = random (default); numeric string index = explicit pick
 	const [showSignatureModal, setShowSignatureModal] = useState(false);
 
 	useEffect(() => {
@@ -253,12 +254,13 @@ export default function EvalFormGeneratorPage() {
 				summaryText,
 				signatureImageBytes,
 				generatedDate: printableDate,
+				headerFontOverride: headerFontIndex === "" ? undefined : HEADER_FONTS[Number(headerFontIndex)],
 			});
 			const blob = new Blob([bytes], { type: "application/pdf" });
 			const url = URL.createObjectURL(blob);
 			const a = document.createElement("a");
 			a.href = url;
-			a.download = `${compactDate}_${trainingType.selected}_${name || "evaluation"}.pdf`;
+			a.download = `${compactDate}_${trainingType.selected}_${teacherName || "evaluation"}.pdf`;
 			a.click();
 			URL.revokeObjectURL(url);
 
@@ -623,9 +625,26 @@ export default function EvalFormGeneratorPage() {
 								<span className={styles.sigTriggerLabel}>重新簽名</span>
 							</>
 						) : (
-							<span className={styles.sigTriggerLabel}>點選簽名</span>
+							<span className={styles.sigTriggerLabel}>點擊簽名</span>
 						)}
 					</button>
+
+					<label className={styles.fontSelectWrap}>
+						<span className={styles.fontSelectLabel}>頁首字體</span>
+						<select
+							className={styles.fontSelect}
+							value={headerFontIndex}
+							onChange={(e) => setHeaderFontIndex(e.target.value)}
+						>
+							<option value="">隨機（預設）</option>
+							{HEADER_FONTS.map((f, i) => (
+								<option key={f.path} value={i}>
+									字體 {String.fromCharCode(65 + i)}
+								</option>
+							))}
+						</select>
+					</label>
+
 					<button
 						className={`${styles.exportButton} ${exportDone ? styles.exportButtonDone : ""}`}
 						onClick={handleExport}

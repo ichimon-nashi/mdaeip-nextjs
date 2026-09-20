@@ -734,7 +734,10 @@ export function getDraftComment(formType, sectionNumber, score) {
 }
 
 // Builds the full 教師綜合評量及備註 draft as ONE block, one line per
-// section that needs explanation (11.3: scores of 8-9 are exempt).
+// scored section. Previously skipped scores of 8-9 per the form's own
+// 11.3 exemption ("8、9分無須說明") — per Eric, that's reversed now:
+// every section gets a comment regardless of score, using the b8/b9
+// variant pools that were already written but sitting unused.
 // Sections 9/10 get exactly one comment each too, same as every other
 // section, regardless of how many quiz sub-items were checked — per
 // Eric, the subitem selection no longer surfaces here at all (it used to
@@ -743,7 +746,7 @@ export function buildRemarksDraft(formType, sectionScores) {
 	const lines = [];
 	for (let section = 1; section <= 10; section++) {
 		const score = sectionScores?.[section];
-		if (score == null || score === 8 || score === 9) continue;
+		if (score == null) continue;
 		const bank = getSectionBank(formType, section);
 		const title = bank?.title || `第${section}項`;
 		const comment = getDraftComment(formType, section, score);

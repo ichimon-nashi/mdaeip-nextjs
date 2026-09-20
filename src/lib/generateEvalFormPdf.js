@@ -34,7 +34,7 @@ const FONT_PATH = "/assets/ChenYuluoyan-2.0-Thin.ttf";
 // rather than fighting a single shared FONT_SIZE. Placeholder filenames
 // since the actual font files don't exist yet — add real ones (and set
 // their size) as they're placed in /public/assets alongside tcfont.ttf.
-const HEADER_FONTS = [
+export const HEADER_FONTS = [
 	{ path: "/assets/fonta.ttf", size: 12 },
 	{ path: "/assets/fontb.ttf", size: 12 },
 	{ path: "/assets/fontc.ttf", size: 12 },
@@ -98,9 +98,10 @@ const SECTION_TAG_RE = /【[^】]*】/g;
  * @param {string} params.summaryText - closing tiered-rating sentence (from getSummaryLine() in evalFormComments.js), printed underlined right after the main remarks block
  * @param {Uint8Array} params.signatureImageBytes - raw PNG bytes of the teacher's drawn signature (from SignaturePadModal's canvas), embedded as an image on the "教師:" line instead of typed text
  * @param {string} params.generatedDate - printed as text right after the signature image (e.g. "2026/9/10")
+ * @param {{path: string, size: number}} [params.headerFontOverride] - explicit header-font choice from the UI selector; omit/undefined to fall back to the random pick (the original behavior)
  * @returns {Promise<Uint8Array>}
  */
-export async function generateEvalFormPdf({ formType, header, trainingType, sectionScores, quizSelections, remarksText, summaryText, signatureImageBytes, generatedDate }) {
+export async function generateEvalFormPdf({ formType, header, trainingType, sectionScores, quizSelections, remarksText, summaryText, signatureImageBytes, generatedDate, headerFontOverride }) {
 	const templateBytes = await fetch(TEMPLATE_PATHS[formType]).then((r) => r.arrayBuffer());
 	const fontBytes = await fetch(FONT_PATH).then((r) => r.arrayBuffer());
 
@@ -108,13 +109,16 @@ export async function generateEvalFormPdf({ formType, header, trainingType, sect
 	pdfDoc.registerFontkit(fontkit);
 	const font = await pdfDoc.embedFont(fontBytes, { subset: true });
 
-	// Header font — one random pick per PDF, fetched only after picking
-	// so this doesn't pull down every candidate file just to use one.
-	// If the fetch 404s (expected right now — the placeholder files don't
-	// exist yet), this throws and the whole export fails loudly rather
-	// than silently falling back to the main font, so it's obvious in
-	// testing whether a given font file is actually in place.
-	const headerFontChoice = pickRandomHeaderFont();
+	// Header font — an explicit UI choice wins if given; otherwise one
+	// random pick per PDF, same as before. Fetched only after the choice
+	// is settled so this doesn't pull down every candidate file just to
+	// use one. If the fetch 404s (expected right now for any placeholder
+	// file that doesn't actually exist), this throws and the whole export
+	// fails loudly rather than silently falling back to the main font —
+	// that's deliberate: it makes it obvious in testing whether a given
+	// font file is actually in place, which also answers the "always the
+	// same font" question directly once you can pick each one by hand.
+	const headerFontChoice = headerFontOverride || pickRandomHeaderFont();
 	const headerFontBytes = await fetch(headerFontChoice.path).then((r) => r.arrayBuffer());
 	const headerFont = await pdfDoc.embedFont(headerFontBytes, { subset: true });
 	const headerFontSize = headerFontChoice.size;
@@ -231,9 +235,14 @@ export async function generateEvalFormPdf({ formType, header, trainingType, sect
 	const sig = SIGNATURE_LABELS[formType];
 	if (signatureImageBytes) {
 		const sigImage = await pdfDoc.embedPng(signatureImageBytes);
-		// const SIGNATURE_IMG_HEIGHT_MM = ptToMm(FONT_SIZE);
-		const SIGNATURE_IMG_HEIGHT_MM = 7.5;
-
+		// Sized off FONT_SIZE (the same size generatedDate prints at right
+		// next to it) rather than an arbitrary constant, so the signature's
+		// vertical span matches the surrounding text instead of overshooting
+		// it — that mismatch (a fixed 8mm regardless of text size) was
+		// exactly why it looked too tall/high before.
+		const SIGNATURE_IMG_HEIGHT_MM = ptToMm(FONT_SIZE);
+		// Small downward nudge per Eric's "lower a bit" feedback — separate
+		// constant so it's obvious what to tweak if it still needs more.
 		const SIGNATURE_Y_NUDGE_MM = 1.2;
 		const drawHeightPt = mmToPt(SIGNATURE_IMG_HEIGHT_MM);
 		const scale = drawHeightPt / sigImage.height;
