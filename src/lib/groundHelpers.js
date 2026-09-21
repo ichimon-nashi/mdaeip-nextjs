@@ -206,6 +206,32 @@ export const isEmployeeActiveForMonth = (emp, monthLabel) => {
 	return true;
 };
 
+// Returns true if this employee has a temporary absence record covering
+// any part of the given month — meaning they should be excluded from
+// schedule generation for that month. Absences are stored in the
+// ground_employee_absences Supabase table and passed in from the page;
+// this function is called BEFORE filtering the employee list for the solver.
+//
+// An absence "covers" a month if it overlaps with any day in that month,
+// i.e. absent_from <= monthEnd AND absent_until >= monthStart.
+// The optional `base` parameter filters to absences at a specific base —
+// an employee dispatched to TSA should still appear in KHH's schedule.
+export const isEmployeeAbsentForMonth = (empId, monthLabel, absences = [], base = null) => {
+	if (!absences || absences.length === 0) return false;
+	const match = monthLabel.match(/(\d{4})年(\d{2})月/);
+	if (!match) return false;
+	const monthStart = `${match[1]}-${match[2]}-01`;
+	const lastDay = new Date(parseInt(match[1], 10), parseInt(match[2], 10), 0).getDate();
+	const monthEnd = `${match[1]}-${match[2]}-${String(lastDay).padStart(2, "0")}`;
+	return absences.some(
+		(a) =>
+			a.employee_id === empId &&
+			(!base || !a.base || a.base === base) && // base filter — null means any base
+			a.absent_from <= monthEnd &&
+			a.absent_until >= monthStart
+	);
+};
+
 export const getGroundEmployeesByBase = (base, monthLabel = null) => {
 	let filtered = base === "ALL" ? groundEmployeeList : groundEmployeeList.filter((e) => e.base === base);
 	if (monthLabel) filtered = filtered.filter((e) => isEmployeeActiveForMonth(e, monthLabel));
@@ -361,7 +387,13 @@ export const groundScheduleHelpers = {
 			results.forEach(({ data }) => {
 				(data || []).forEach((row) => {
 					if (!merged[row.employee_id]) merged[row.employee_id] = [];
-					(row.schedule || []).forEach((entry) => {
+					const sched = row.schedule || [];
+					// schedule may be stored as {date:code,...} object (inserted via SQL)
+					// or as [{date,duty_code},...] array (written by the app)
+					const entries = Array.isArray(sched)
+						? sched
+						: Object.entries(sched).map(([date, duty_code]) => ({ date, duty_code }));
+					entries.forEach((entry) => {
 						merged[row.employee_id].push(entry);
 					});
 				});
@@ -385,7 +417,6 @@ export const groundScheduleHelpers = {
 						month_label: monthLabel,
 						base,
 						schedule,
-						updated_at: new Date().toISOString(),
 					},
 					{ onConflict: "employee_id,month_label" },
 				)
@@ -421,7 +452,6 @@ export const groundScheduleHelpers = {
 				month_label: monthLabel,
 				base,
 				schedule: s.schedule,
-				updated_at: new Date().toISOString(),
 			}));
 
 			const { data, error } = await supabase
@@ -888,7 +918,7 @@ export const checkGroundFatigue = (schedule) => {
 // Floor set at "no more than 3 off per day" (≥3 must remain working),
 // confirmed default — no specific number was mandated, this is a starting
 // point and can be adjusted if it proves too strict/loose in practice.
-const GROUND_MIN_STAFF_REQUIRED = 3;
+const GROUND_MIN_STAFF_REQUIRED = 2; // confirmed from real Oct 2026: floor is 2, drops to 1 on holidays
 // The 4 employees who rotate covering 0608A (AM) and 14B8A (PM) every
 // day (2026-06-22/25) — 陳寶英 and 張小梅 are explicitly excluded since
 // they have their own separate fixed/restricted schedules. At least 2 of
@@ -1403,8 +1433,21 @@ export const autoAssignGroundMonth = (
 		}
 	});
 
+	// isFixed: true only when a supervisor explicitly pre-filled this cell
+	// (existingScheduleMap) or Pass 1 locked it from an accepted leave request.
+	// Intentionally does NOT check result[] — Pass 3 work-code assignments
+	// must be overwritable by Pass 4.5 which enforces the 0608A/1408A split.
+	// Adding result[] to this check caused Pass 4.5 to treat every Pass-3
+	// assignment as a "locked pre-fill", blocking the AM/PM enforcement on
+	// days where Pass 3's stretch logic assigned the wrong type (confirmed
+	// root cause of November 2026 Wednesday noAM gaps).
 	const isFixed = (empId, dateStr) =>
-		!!(existingScheduleMap[empId]?.[dateStr] || result[empId][dateStr]);
+		!!(existingScheduleMap[empId]?.[dateStr]);
+
+	// Tracks rest cells placed by the CSP fallback path — these are softer
+	// than CSP-committed rest days and can be reclaimed by Pass 4.5 to fix
+	// AM/PM coverage gaps that only become visible after Pass 3 assigns codes.
+	const pass2FallbackRestCells = new Set();
 
 	// ── Pass 2: CSP-based rest-day assignment ────────────────────────────────
 	// FULL REWRITE 2026-06-21, replacing the pattern-generator approach
@@ -1674,7 +1717,12 @@ export const autoAssignGroundMonth = (
 			return uniqueSeqCount * 10 + mixedCount * 5 - duplicatePenalty * 20 + quotaScore;
 		};
 
-		// Backtracking search: assign rotating employees one at a time,
+		// Count how many pool members are actually in rotatingEmployees
+		// (some may be absent/inactive). The CSP floor check must use
+		// this count, not GROUND_AM_PM_POOL_IDS.length which is always 4.
+		const activePoolMemberCount = rotatingEmployees.filter((e) =>
+			GROUND_AM_PM_POOL_IDS.includes(e.id)
+		).length;
 		// maintaining a running per-day resting count, rejecting any
 		// candidate that would drop ANY day below GROUND_MIN_STAFF_REQUIRED.
 		// Explores the full candidate pool per employee (shuffled, so
@@ -1729,7 +1777,7 @@ export const autoAssignGroundMonth = (
 					// Pool-specific floor: at least 2 of the 4 named
 					// employees must be working every day, checked
 					// alongside (not instead of) the roster-wide floor.
-					const poolWorking = GROUND_AM_PM_POOL_IDS.length - poolRestingByDayIdx[idx];
+					const poolWorking = activePoolMemberCount - poolRestingByDayIdx[idx];
 					if (poolWorking < GROUND_AM_PM_POOL_MIN_REQUIRED) { ok = false; break; }
 				}
 
@@ -1777,7 +1825,7 @@ export const autoAssignGroundMonth = (
 			// alarm, since nothing is actually wrong with the result.
 			// NOTE 2026-06-25: this fallback's round-robin distribution
 			// does NOT go through the backtracking search above, so it has
-			// no awareness of the 4-person 0608A/14B8A pool floor added
+			// no awareness of the 4-person 0608A/1408A pool floor added
 			// that day (GROUND_AM_PM_POOL_MIN_REQUIRED) — Pass 4.5's own
 			// shortage warnings (and 驗證班表) remain the real safety net
 			// if this fallback's simpler distribution happens to violate
@@ -1787,17 +1835,209 @@ export const autoAssignGroundMonth = (
 				type: "csp_uniform_fallback",
 				message: `${monthLabel}：本月排班使用較簡單的固定班別模式（而非多樣化班別）；基本排班規則仍符合，但4人輪值組覆蓋情況請參考下方驗證結果`,
 			});
-			const CONSECUTIVE_PAIRS = [[0,1],[1,2],[2,3],[3,4],[4,5],[5,6],[6,0]];
-			const fixedWeekdaysFallback = new Set(fixedEmployees.flatMap((e) => e.fixedRestDays));
-			const fallbackPairs = CONSECUTIVE_PAIRS.filter(([a,b]) => !fixedWeekdaysFallback.has(a) && !fixedWeekdaysFallback.has(b));
-			const pool = fallbackPairs.length > 0 ? fallbackPairs : CONSECUTIVE_PAIRS;
-			// Track per-day resting count to enforce the coverage floor —
-			// the fallback path previously had zero floor awareness, causing
-			// multiple employees' rest pairs to cluster on the same days and
-			// collapse headcount below GROUND_MIN_STAFF_REQUIRED.
+			console.log("[groundHelpers v2026-09-21-POOL_SLOT_TABLE] fallback fired for", monthLabel);
+
+			// Fallback two-phase planner — replaces the sequential week-by-week
+			// loop which had a fundamental look-ahead blindness: when employee A's
+			// rest was placed, employee B wasn't yet processed, so the pool-floor
+			// check couldn't see that B would also rest on the same day.
+			// Confirmed root cause of Nov 14/21 headcount collapses.
+			//
+			// Phase 1: compute preferred rest positions for all employees without
+			//   writing to result[] — build a global "planned rest" map
+			// Phase 2: resolve conflicts (days where too many employees planned
+			//   rest simultaneously) by bumping the softest conflicts
+			// Phase 3: write the resolved plan to result[]
+
+			// Group month days into Mon-Sun calendar weeks
+			const fallbackWeekGroups = {};
+			days.forEach((day) => {
+				const [y, m, d] = day.dateStr.split("-").map(Number);
+				const date = new Date(y, m - 1, d);
+				const dow = date.getDay();
+				const daysSinceMon = dow === 0 ? 6 : dow - 1;
+				const mon = new Date(y, m - 1, d - daysSinceMon);
+				const mm = String(mon.getMonth() + 1).padStart(2, "0");
+				const dd = String(mon.getDate()).padStart(2, "0");
+				const wk = `${mon.getFullYear()}-${mm}-${dd}`;
+				(fallbackWeekGroups[wk] = fallbackWeekGroups[wk] || []).push(day);
+			});
+			const fullWeeks = Object.values(fallbackWeekGroups)
+				.filter((wd) => wd.length === 7)
+				.sort((a, b) => a[0].dateStr.localeCompare(b[0].dateStr));
+
+			// PHASE 1: Assign preferred rest positions using a collision-free
+			// slot table. The table is built dynamically based on how many
+			// pool members are actually in rotatingEmployees (varies when
+			// someone is marked absent). With N pool members each needing
+			// 2 rest days in a 7-day week, we guarantee no day has more
+			// than 1 pool member resting (pool_working ≥ N-1 ≥ floor of 2
+			// as long as N ≥ 3 — confirmed safe with 3 or 4 pool members).
+			//
+			// Slot pairs are spread evenly across the 7 weekdays:
+			//   N=4: [0,4],[1,5],[2,6],[3,0]  → max 2 collide on day 0
+			//   N=3: [0,4],[2,5],[4,2]         → no collisions (7 slots, 6 used)
+			//   N=2: [0,4],[2,5]               → no collisions
+			const poolRotating = rotatingEmployees.filter((e) => GROUND_AM_PM_POOL_IDS.includes(e.id));
+			const nonPoolRotating = rotatingEmployees.filter((e) => !GROUND_AM_PM_POOL_IDS.includes(e.id));
+			const nPool = poolRotating.length;
+			// Build slot pairs: each pair is 3-4 days apart, spread by stride=7/nPool
+			const stride = nPool > 0 ? Math.floor(7 / nPool) : 2;
+			const POOL_SLOT_TABLE = poolRotating.map((_, i) => [
+				(i * stride) % 7,
+				(i * stride + 3) % 7,
+			]);
+
+			let plannedRest = {};
+			rotatingEmployees.forEach((emp) => { plannedRest[emp.id] = {}; });
+
+			fullWeeks.forEach((weekDays, weekIdx) => {
+				const weekKey = weekDays[0].dateStr;
+
+				// Assign pool members using the collision-free slot table,
+				// rotating the table offset each week for variety
+				poolRotating.forEach((emp, poolEmpIdx) => {
+					const slots = POOL_SLOT_TABLE[poolEmpIdx];
+					const slot1 = (slots[0] + weekIdx) % 7;
+					const slot2 = (slots[1] + weekIdx) % 7;
+					const day1 = weekDays[slot1];
+					const day2 = weekDays[slot2];
+					const [zDay, rDay] = day1.dateStr < day2.dateStr ? [day1, day2] : [day2, day1];
+					const plan = [];
+					if (!isFixed(emp.id, zDay.dateStr) && !isGroundRestCode(result[emp.id]?.[zDay.dateStr])) {
+						plan.push({ dateStr: zDay.dateStr, code: "Z" });
+					}
+					if (!isFixed(emp.id, rDay.dateStr) && !isGroundRestCode(result[emp.id]?.[rDay.dateStr])) {
+						plan.push({ dateStr: rDay.dateStr, code: "R" });
+					}
+					plannedRest[emp.id][weekKey] = plan;
+				});
+
+				// Non-pool employees (陳寶英) get slots not used by pool members
+				nonPoolRotating.forEach((emp, i) => {
+					const slot1 = (4 + i * 2 + weekIdx) % 7;
+					const slot2 = (slot1 + 3) % 7;
+					const day1 = weekDays[slot1];
+					const day2 = weekDays[slot2];
+					const [zDay, rDay] = day1.dateStr < day2.dateStr ? [day1, day2] : [day2, day1];
+					const plan = [];
+					if (!isFixed(emp.id, zDay.dateStr) && !isGroundRestCode(result[emp.id]?.[zDay.dateStr])) {
+						plan.push({ dateStr: zDay.dateStr, code: "Z" });
+					}
+					if (!isFixed(emp.id, rDay.dateStr) && !isGroundRestCode(result[emp.id]?.[rDay.dateStr])) {
+						plan.push({ dateStr: rDay.dateStr, code: "R" });
+					}
+					plannedRest[emp.id][weekKey] = plan;
+				});
+			});
+
+			// PHASE 2: resolve conflicts — for each day, count how many employees
+			// planned rest. If the plan would violate the roster floor or pool floor,
+			// bump the softest planned rest (non-pool members first, then pool members
+			// with the most flexibility remaining) to an alternative day in their week.
+			// Iterate until no conflicts remain (or no more moves possible).
+			const getPlannedRestCount = (dateStr) => {
+				let count = 0;
+				rotatingEmployees.forEach((emp) => {
+					if (emp.excludeFromCoverage) return;
+					// Count pre-existing rest in result[] (Pass 1 locks: HL/WL/AL/etc.)
+					if (isGroundRestCode(result[emp.id]?.[dateStr])) { count++; return; }
+					// Count planned rest from Phase 1
+					Object.values(plannedRest[emp.id] || {}).forEach((plans) => {
+						if (plans.some((p) => p.dateStr === dateStr)) count++;
+					});
+				});
+				return count;
+			};
+			const getPlannedPoolRestCount = (dateStr) => {
+				let count = 0;
+				GROUND_AM_PM_POOL_IDS.forEach((poolId) => {
+					// Count pre-existing rest in result[] (Pass 1 locks)
+					if (isGroundRestCode(result[poolId]?.[dateStr])) { count++; return; }
+					const emp = rotatingEmployees.find((e) => e.id === poolId);
+					if (!emp) return;
+					// Count planned rest from Phase 1
+					Object.values(plannedRest[emp.id] || {}).forEach((plans) => {
+						if (plans.some((p) => p.dateStr === dateStr)) count++;
+					});
+				});
+				return count;
+			};
+
+			// Find conflicts and resolve by bumping to alternative week days
+			let conflictResolved = true;
+			let maxIterations = 20;
+			while (conflictResolved && maxIterations-- > 0) {
+				conflictResolved = false;
+				const allPlannedDates = new Set();
+				rotatingEmployees.forEach((emp) => {
+					Object.values(plannedRest[emp.id] || {}).forEach((plans) => {
+						plans.forEach((p) => allPlannedDates.add(p.dateStr));
+					});
+				});
+
+				for (const dateStr of [...allPlannedDates].sort()) {
+					const totalResting = getPlannedRestCount(dateStr);
+					const poolResting = getPlannedPoolRestCount(dateStr);
+					const totalViolation = totalEmployeeCount - totalResting < GROUND_MIN_STAFF_REQUIRED;
+					const poolViolation = activePoolMemberCount - poolResting < GROUND_AM_PM_POOL_MIN_REQUIRED;
+
+					if (!totalViolation && !poolViolation) continue;
+
+					// Find the softest planned rest on this day to bump
+					// Priority for bumping: non-pool members first, then pool members
+					let bumped = false;
+					const bumpOrder = [
+						...rotatingEmployees.filter((e) => !GROUND_AM_PM_POOL_IDS.includes(e.id)),
+						...rotatingEmployees.filter((e) => GROUND_AM_PM_POOL_IDS.includes(e.id)),
+					];
+
+					for (const emp of bumpOrder) {
+						// Find if this employee has planned rest on this day
+						const weekKey = Object.keys(plannedRest[emp.id] || {}).find((wk) =>
+							plannedRest[emp.id][wk].some((p) => p.dateStr === dateStr)
+						);
+						if (!weekKey) continue;
+
+						const weekDays = fullWeeks.find((wd) => wd[0].dateStr === weekKey);
+						if (!weekDays) continue;
+
+						const planEntry = plannedRest[emp.id][weekKey].find((p) => p.dateStr === dateStr);
+						if (!planEntry) continue;
+
+						// Try alternative days in the same week
+						const altDays = weekDays.filter((wd) => wd.dateStr !== dateStr);
+						let moved = false;
+						for (const alt of altDays) {
+							const altDateStr = alt.dateStr;
+							if (isFixed(emp.id, altDateStr)) continue;
+							if (isGroundRestCode(result[emp.id]?.[altDateStr])) continue;
+							if (plannedRest[emp.id][weekKey].some((p) => p.dateStr === altDateStr)) continue;
+							// Check if moving here would itself cause a new conflict
+							const altTotal = getPlannedRestCount(altDateStr);
+							const altPool = getPlannedPoolRestCount(altDateStr);
+							const altTotalOk = totalEmployeeCount - altTotal - 1 >= GROUND_MIN_STAFF_REQUIRED;
+							const altPoolOk = !GROUND_AM_PM_POOL_IDS.includes(emp.id) ||
+								activePoolMemberCount - altPool - 1 >= GROUND_AM_PM_POOL_MIN_REQUIRED;
+							if (!altTotalOk || !altPoolOk) continue;
+
+							// Move the planned rest to this alternative day
+							plannedRest[emp.id][weekKey] = plannedRest[emp.id][weekKey].filter(
+								(p) => p.dateStr !== dateStr
+							);
+							plannedRest[emp.id][weekKey].push({ dateStr: altDateStr, code: planEntry.code });
+							moved = true;
+							conflictResolved = true;
+							break;
+						}
+						if (moved) break;
+					}
+				}
+			}
+
+			// PHASE 3: write resolved plan to result[]
 			const fallbackRestingByDay = {};
 			days.forEach((d) => { fallbackRestingByDay[d.dateStr] = 0; });
-			// Pre-populate with pre-filled rest and fixed-employee rest
 			employees.forEach((emp) => {
 				if (emp.excludeFromCoverage) return;
 				days.forEach((d) => {
@@ -1805,19 +2045,99 @@ export const autoAssignGroundMonth = (
 					if (c && isGroundRestCode(c)) fallbackRestingByDay[d.dateStr]++;
 				});
 			});
-			rotatingEmployees.forEach((emp, i) => {
-				const [restDayA, restDayB] = pool[i % pool.length];
-				const occurrences = days.filter((d) => d.dow === restDayA || d.dow === restDayB);
-				for (let j = 0; j < occurrences.length; j++) {
-					const d = occurrences[j];
-					if (isFixed(emp.id, d.dateStr)) continue;
-					// Only assign if the floor is still satisfied after this rest
-					const wouldResting = (fallbackRestingByDay[d.dateStr] || 0) + 1;
-					const wouldWorking = totalEmployeeCount - wouldResting;
-					if (wouldWorking < GROUND_MIN_STAFF_REQUIRED) continue; // skip — would collapse headcount
-					result[emp.id][d.dateStr] = j % 2 === 0 ? "Z" : "R";
-					if (!emp.excludeFromCoverage) fallbackRestingByDay[d.dateStr]++;
-				}
+
+			rotatingEmployees.forEach((emp) => {
+				// Collect all planned rest entries, sort chronologically
+				const allPlanned = Object.values(plannedRest[emp.id] || {}).flat()
+					.sort((a, b) => a.dateStr.localeCompare(b.dateStr));
+				// Alternate Z/R: first occurrence = Z, second = R, third = Z, etc.
+				let assignedCount = 0;
+				allPlanned.forEach(({ dateStr }) => {
+					if (isFixed(emp.id, dateStr)) return;
+					if (isGroundRestCode(result[emp.id]?.[dateStr])) return;
+					// Final floor check before writing
+					const wouldResting = (fallbackRestingByDay[dateStr] || 0) + 1;
+					if (totalEmployeeCount - wouldResting < GROUND_MIN_STAFF_REQUIRED) return;
+					if (GROUND_AM_PM_POOL_IDS.includes(emp.id)) {
+						const poolAfter = GROUND_AM_PM_POOL_IDS.filter((id) => {
+							if (id === emp.id) return false;
+							const c = result[id]?.[dateStr];
+							if (c && isGroundRestCode(c)) return false; // pre-existing rest
+							// Check if this pool member has planned rest on this day
+							const otherEmp = rotatingEmployees.find((e) => e.id === id);
+							const hasPlannedRest = otherEmp
+								? Object.values(plannedRest[otherEmp.id] || {}).flat().some((p) => p.dateStr === dateStr)
+								: false;
+							return !hasPlannedRest;
+						}).length;
+						if (poolAfter < GROUND_AM_PM_POOL_MIN_REQUIRED) return;
+					}
+					result[emp.id][dateStr] = assignedCount % 2 === 0 ? "Z" : "R";
+					fallbackRestingByDay[dateStr]++;
+					pass2FallbackRestCells.add(`${emp.id}|${dateStr}`);
+					assignedCount++;
+				});
+
+				// Ensure each full week has Z and R — scan for any week still missing one
+				fullWeeks.forEach((weekDays) => {
+					const weekDateStrs = weekDays.map((d) => d.dateStr);
+					const hasZ = weekDateStrs.some((d) => result[emp.id]?.[d] === "Z");
+					const hasR = weekDateStrs.some((d) => result[emp.id]?.[d] === "R");
+					const missing = [];
+					if (!hasZ) missing.push("Z");
+					if (!hasR) missing.push("R");
+					for (const code of missing) {
+						// First pass: find any empty slot
+						let placed = false;
+						for (const day of weekDays) {
+							const dateStr = day.dateStr;
+							if (isFixed(emp.id, dateStr)) continue;
+							if (result[emp.id]?.[dateStr]) continue; // already assigned
+							const wouldResting = (fallbackRestingByDay[dateStr] || 0) + 1;
+							if (totalEmployeeCount - wouldResting < GROUND_MIN_STAFF_REQUIRED) continue;
+							if (GROUND_AM_PM_POOL_IDS.includes(emp.id)) {
+								const poolAfter = GROUND_AM_PM_POOL_IDS.filter((id) => {
+									if (id === emp.id) return false;
+									const c = result[id]?.[dateStr];
+									return !c || !isGroundRestCode(c);
+								}).length;
+								if (poolAfter < GROUND_AM_PM_POOL_MIN_REQUIRED) continue;
+							}
+							result[emp.id][dateStr] = code;
+							fallbackRestingByDay[dateStr]++;
+							pass2FallbackRestCells.add(`${emp.id}|${dateStr}`);
+							placed = true;
+							break;
+						}
+						// Second pass: if no empty slot, displace a non-pre-fill work code.
+						// This happens when the entire week was filled by prior passes
+						// (e.g. WL placed by Pass 2.5 after fallback ran) leaving no
+						// empty cells for the sweep to use. Must displace to satisfy
+						// the mandatory weekly Z+R requirement.
+						if (!placed) {
+							for (const day of weekDays) {
+								const dateStr = day.dateStr;
+								if (isFixed(emp.id, dateStr)) continue;
+								const existing = result[emp.id]?.[dateStr];
+								if (!existing || isGroundRestCode(existing)) continue; // empty or already rest
+								const wouldResting = (fallbackRestingByDay[dateStr] || 0) + 1;
+								if (totalEmployeeCount - wouldResting < GROUND_MIN_STAFF_REQUIRED) continue;
+								if (GROUND_AM_PM_POOL_IDS.includes(emp.id)) {
+									const poolAfter = GROUND_AM_PM_POOL_IDS.filter((id) => {
+										if (id === emp.id) return false;
+										const c = result[id]?.[dateStr];
+										return !c || !isGroundRestCode(c);
+									}).length;
+									if (poolAfter < GROUND_AM_PM_POOL_MIN_REQUIRED) continue;
+								}
+								result[emp.id][dateStr] = code;
+								fallbackRestingByDay[dateStr]++;
+								pass2FallbackRestCells.add(`${emp.id}|${dateStr}`);
+								break;
+							}
+						}
+					}
+				});
 			});
 		}
 	}
@@ -2032,7 +2352,35 @@ export const autoAssignGroundMonth = (
 				if (!stretch) continue; // no meaningful stretch left for this employee this round
 
 				const midIdx = Math.floor((stretch.start + stretch.end) / 2);
-				const dateStr = days[midIdx].dateStr;
+				let dateStr = days[midIdx].dateStr;
+
+				// Prefer a day where 3+ pool members are working — one would get
+				// 0908A paperwork anyway, so HL/WL costs nothing coverage-wise.
+				const poolWorkingCount = (ds) => GROUND_AM_PM_POOL_IDS.filter((id) => {
+					const e = employees.find((e2) => e2.id === id);
+					if (!e) return false;
+					const c = result[e.id][ds];
+					return !c || !isGroundRestCode(c);
+				}).length;
+				const preferredDay = days.slice(stretch.start, stretch.end + 1).find((d) => {
+					if (result[emp.id][d.dateStr]) return false;
+					if (poolWorkingCount(d.dateStr) < 3) return false;
+					// Also ensure it won't create a single-day stretch
+					const dIdx = days.findIndex(day => day.dateStr === d.dateStr);
+					const prev = dIdx > 0 ? days[dIdx - 1].dateStr : null;
+					const next = dIdx < days.length - 1 ? days[dIdx + 1].dateStr : null;
+					const isRest = (ds) => !ds || (!!result[emp.id][ds] && isGroundRestCode(result[emp.id][ds]));
+					if (prev && !isRest(prev)) {
+						const pp = dIdx > 1 ? days[dIdx - 2].dateStr : null;
+						if (isRest(pp)) return false;
+					}
+					if (next && !isRest(next)) {
+						const nn = dIdx < days.length - 2 ? days[dIdx + 2].dateStr : null;
+						if (isRest(nn)) return false;
+					}
+					return true;
+				});
+				if (preferredDay) dateStr = preferredDay.dateStr;
 
 				// BUG FOUND 2026-06-22: pickBalancedStretch's chosen midpoint
 				// can become stale by the time we actually go to write —
@@ -2080,7 +2428,7 @@ export const autoAssignGroundMonth = (
 				if (workingNow - 1 < GROUND_MIN_STAFF_REQUIRED) continue; // skip this employee this round, try others
 
 				// BUG FOUND 2026-06-25: this only checked the ROSTER-WIDE
-				// floor — the 4-person 0608A/14B8A pool floor (added in
+				// floor — the 4-person 0608A/1408A pool floor (added in
 				// Pass 2's CSP search above) had no equivalent protection
 				// here, so an HL/WL insertion could independently push a
 				// pool member's day below the pool's own 2-person minimum
@@ -2421,7 +2769,7 @@ export const autoAssignGroundMonth = (
 	// rest commitment — unlike Pass 2's deliberate Z/R, which must stay
 	// protected (that protection is what fixed the EARLIER corruption
 	// bug from 2026-06-21 and must not be re-broken).
-	const fallbackRestCells = new Set();
+	const fallbackRestCells = new Set(pass2FallbackRestCells); // merge CSP-fallback reclaimable rest
 
 	employees.forEach((emp) => {
 		const emptyDates = days.map((d) => d.dateStr).filter((d) => !result[emp.id][d]);
@@ -2480,6 +2828,10 @@ export const autoAssignGroundMonth = (
 		}
 	});
 
+	// Tracks rest cells displaced by Pass 4 coverage repair — these need
+	// to be re-placed by the post-Pass-4 week sweep to maintain weekly Z/R.
+	const displacedRestCells = new Set();
+
 	// ── Pass 4: daily coverage repair (AM/PM type + minimum headcount) ────────
 	// BUG FOUND 2026-06-19: this pass only checked the AM/PM binary (at
 	// least 1 person on an AM-type duty, at least 1 on PM-type) — it never
@@ -2514,6 +2866,11 @@ export const autoAssignGroundMonth = (
 			if (eligible) {
 				const codes = restrictToAllowedCodes(eligible, codePickerFn());
 				const code = codes.find((c) => !violatesLocalRules(eligible.id, dateStr, c));
+				// Track if we displaced a fallback rest cell so the sweep can re-place it
+				const prevCode = result[eligible.id][dateStr];
+				if ((prevCode === 'Z' || prevCode === 'R') && fallbackRestCells.has(`${eligible.id}|${dateStr}`)) {
+					displacedRestCells.add(`${eligible.id}|${prevCode}|${dateStr}`);
+				}
 				result[eligible.id][dateStr] = code;
 				return true;
 			}
@@ -2562,7 +2919,51 @@ export const autoAssignGroundMonth = (
 		}
 	});
 
-	// ── Pass 4.5: specific 0608A/14B8A coverage from the 4-person pool ──────
+	// Post-Pass-4 sweep: re-place any Z/R that Pass 4 displaced from fallback
+	// rest cells to cover AM/PM shortages. Find the week each displaced rest
+	// belonged to and try to insert it elsewhere in that week.
+	if (displacedRestCells.size > 0) {
+		const getWeekKey = (dateStr) => {
+			const [y, m, d] = dateStr.split("-").map(Number);
+			const date = new Date(y, m - 1, d);
+			const dow = date.getDay();
+			const daysSinceMon = dow === 0 ? 6 : dow - 1;
+			const mon = new Date(y, m - 1, d - daysSinceMon);
+			return mon.toISOString().slice(0, 10);
+		};
+		displacedRestCells.forEach((entry) => {
+			const [empId, code, dateStr] = entry.split("|");
+			const wk = getWeekKey(dateStr);
+			// Check if the week still has the code
+			const weekDays2 = days.filter((d) => getWeekKey(d.dateStr) === wk);
+			const alreadyHas = weekDays2.some((d) => result[empId]?.[d.dateStr] === code);
+			if (alreadyHas) return;
+			const emp = employees.find((e) => e.id === empId);
+			if (!emp) return;
+			// Try to find a slot in the week to re-place the rest
+			for (const day of weekDays2) {
+				const ds = day.dateStr;
+				if (isFixed(empId, ds)) continue;
+				if (result[empId]?.[ds] && isGroundRestCode(result[empId][ds])) continue;
+				const restingCount = employees.filter((e) => {
+					if (e.excludeFromCoverage) return false;
+					return isGroundRestCode(result[e.id]?.[ds]);
+				}).length;
+				if (employees.filter((e) => !e.excludeFromCoverage).length - restingCount - 1 < GROUND_MIN_STAFF_REQUIRED) continue;
+				if (GROUND_AM_PM_POOL_IDS.includes(empId)) {
+					const poolAfter = GROUND_AM_PM_POOL_IDS.filter((id) => {
+						if (id === empId) return false;
+						return !isGroundRestCode(result[id]?.[ds]);
+					}).length;
+					if (poolAfter < GROUND_AM_PM_POOL_MIN_REQUIRED) continue;
+				}
+				result[empId][ds] = code;
+				break;
+			}
+		});
+	}
+
+	// ── Pass 4.5: specific 0608A/1408A coverage from the 4-person pool ──────
 	// ADDED 2026-06-22 — confirmed gap: the existing AM/PM coverage check
 	// (4a above) only verifies "someone is on an AM-type code, someone is
 	// on a PM-type code" using TIME OF DAY, not specific codes. 陳寶英
@@ -2573,7 +2974,7 @@ export const autoAssignGroundMonth = (
 	// (54762, 59790, 59929, 60090 — GROUND_AM_PM_POOL_IDS, module-level
 	// constant, see top of file). If more than 2 of those 4 are working
 	// a given day, the extra person(s) get 0908A ("paperwork duty")
-	// instead of a duplicate 0608A/14B8A — chosen by priority order
+	// instead of a duplicate 0608A/1408A — chosen by priority order
 	// (54762, then 59929, then 60090; 59790 only as a last resort if the
 	// other three aren't available that day).
 	const PAPERWORK_PRIORITY_IDS = ["54762", "59929", "60090"]; // 59790 deliberately excluded from preferential paperwork assignment
@@ -2589,7 +2990,7 @@ export const autoAssignGroundMonth = (
 			warnings.push({
 				date: dateStr,
 				type: "am_pm_pool_shortage",
-				message: `${dateStr}：4人輪值組（林妍蓓/陳俊嘉/張芷菱/盧詠薇）當日無人上班，無法安排0608A/14B8A`,
+				message: `${dateStr}：4人輪值組（林妍蓓/陳俊嘉/張芷菱/盧詠薇）當日無人上班，無法安排0608A/1408A`,
 			});
 			return;
 		}
@@ -2608,7 +3009,7 @@ export const autoAssignGroundMonth = (
 			warnings.push({
 				date: dateStr,
 				type: "am_pm_pool_shortage",
-				message: `${dateStr}：4人輪值組當日僅 1 人上班，無法同時涵蓋0608A與14B8A`,
+				message: `${dateStr}：4人輪值組當日僅 1 人上班，無法同時涵蓋0608A與1408A`,
 			});
 			return;
 		}
@@ -2617,38 +3018,47 @@ export const autoAssignGroundMonth = (
 		const assignedPaperwork = [];
 
 		if (numExtra > 0) {
-			// Assign paperwork (0908A) FIRST, in priority order, to
-			// whoever's working today and highest on the priority list.
-			for (const empId of PAPERWORK_PRIORITY_IDS) {
+			// Assign paperwork (0908A) in priority order, but prefer candidates
+			// who are currently on an AM code over PM-coded candidates.
+			// This preserves Pass 3's stretch-aware PM tail assignments —
+			// if 林妍蓓 was given 1408A as the PM tail of a stretch, don't
+			// overwrite her with 0908A when someone else on AM can take paperwork.
+			const preferAmForPaperwork = (candidates) => {
+				const amFirst = candidates.filter((e) => isAmDuty(result[e.id][dateStr]));
+				const pmCoded = candidates.filter((e) => isPmDuty(result[e.id][dateStr]));
+				return [...amFirst, ...pmCoded];
+			};
+
+			const orderedByPriority = PAPERWORK_PRIORITY_IDS
+				.map((id) => poolWorkingToday.find((e) => e.id === id))
+				.filter(Boolean);
+			const orderedAmFirst = preferAmForPaperwork(orderedByPriority);
+
+			for (const emp of orderedAmFirst) {
 				if (assignedPaperwork.length >= numExtra) break;
-				const emp = poolWorkingToday.find((e) => e.id === empId);
-				// Never overwrite a pre-filled cell (2026-09-18) — e.g. a
-				// supervisor who pre-filled 0608A for 妍蓓 on a specific day
-				// specifically to override paperwork duty must be respected.
-				if (emp && !isFixed(emp.id, dateStr) && !violatesLocalRules(emp.id, dateStr, "0908A")) {
-					result[emp.id][dateStr] = "0908A";
+				if (isFixed(emp.id, dateStr)) {
 					assignedPaperwork.push(emp.id);
-				} else if (emp && isFixed(emp.id, dateStr)) {
-					// Pre-filled — treat as already assigned (skip for paperwork,
-					// but still count as "assigned" so they don't get 0608A/14B8A
-					// overwrite below if the pre-fill is already a valid work code)
+				} else if (!violatesLocalRules(emp.id, dateStr, "0908A")) {
+					result[emp.id][dateStr] = "0908A";
 					assignedPaperwork.push(emp.id);
 				}
 			}
-			// Fallback: if the priority list couldn't fill every extra slot
-			for (const emp of poolWorkingToday) {
+			// Fallback: if priority list couldn't fill every extra slot
+			const remainingCandidates = preferAmForPaperwork(
+				poolWorkingToday.filter((e) => !assignedPaperwork.includes(e.id))
+			);
+			for (const emp of remainingCandidates) {
 				if (assignedPaperwork.length >= numExtra) break;
-				if (assignedPaperwork.includes(emp.id)) continue;
-				if (!isFixed(emp.id, dateStr) && !violatesLocalRules(emp.id, dateStr, "0908A")) {
-					result[emp.id][dateStr] = "0908A";
+				if (isFixed(emp.id, dateStr)) {
 					assignedPaperwork.push(emp.id);
-				} else if (isFixed(emp.id, dateStr)) {
+				} else if (!violatesLocalRules(emp.id, dateStr, "0908A")) {
+					result[emp.id][dateStr] = "0908A";
 					assignedPaperwork.push(emp.id);
 				}
 			}
 		}
 
-		// Whoever's left (not assigned paperwork) splits 0608A/14B8A.
+		// Whoever's left (not assigned paperwork) splits 0608A/1408A.
 		// BUG FOUND 2026-06-22: the original version only ever tried
 		// remaining[0]→0608A and remaining[1]→14B8A in that fixed order —
 		// if EITHER assignment violated that specific person's rest
@@ -2671,24 +3081,44 @@ export const autoAssignGroundMonth = (
 			const bCanAm = !violatesLocalRules(b.id, dateStr, "0608A");
 
 			if (aCanAm && bCanPm) {
-				result[a.id][dateStr] = "0608A";
-				result[b.id][dateStr] = "1408A";
+				if (!isFixed(a.id, dateStr)) result[a.id][dateStr] = "0608A";
+				if (!isFixed(b.id, dateStr)) result[b.id][dateStr] = "1408A";
 			} else if (aCanPm && bCanAm) {
-				result[a.id][dateStr] = "1408A";
-				result[b.id][dateStr] = "0608A";
+				if (!isFixed(a.id, dateStr)) result[a.id][dateStr] = "1408A";
+				if (!isFixed(b.id, dateStr)) result[b.id][dateStr] = "0608A";
 			} else {
-				// Neither ordering works for both — place whichever single
-				// assignment IS valid, and flag the genuine shortage
-				// instead of leaving a silent duplicate.
-				if (aCanAm) result[a.id][dateStr] = "0608A";
-				else if (aCanPm) result[a.id][dateStr] = "1408A";
-				if (bCanPm) result[b.id][dateStr] = "1408A";
-				else if (bCanAm) result[b.id][dateStr] = "0608A";
-				warnings.push({
-					date: dateStr,
-					type: "am_pm_pool_shortage",
-					message: `${dateStr}：無法同時為${a.name}與${b.name}安排0608A/14B8A（休息規則衝突）`,
-				});
+				// Neither ordering works — try pulling in a currently-resting
+				// pool member who CAN take 0608A (fallback-R cells are
+				// reclaimable; Pass-2-assigned Z/R are not).
+				const restingPool = employees.filter((e) =>
+					GROUND_AM_PM_POOL_IDS.includes(e.id) &&
+					!poolWorkingToday.some((w) => w.id === e.id) &&
+					!isFixed(e.id, dateStr) &&
+					fallbackRestCells.has(`${e.id}|${dateStr}`) &&
+					!violatesLocalRules(e.id, dateStr, "0608A")
+				);
+				if (restingPool.length > 0) {
+					const rescuer = restingPool[0];
+					result[rescuer.id][dateStr] = "0608A";
+					// Assign 1408A to whichever remaining worker can take it
+					const pmWorker = remaining.find((e) => !violatesLocalRules(e.id, dateStr, "1408A"));
+					if (pmWorker && !isFixed(pmWorker.id, dateStr)) result[pmWorker.id][dateStr] = "1408A";
+				} else {
+					// Genuine unresolvable shortage — place what we can and flag
+					if (!isFixed(a.id, dateStr)) {
+						if (aCanAm) result[a.id][dateStr] = "0608A";
+						else if (aCanPm) result[a.id][dateStr] = "1408A";
+					}
+					if (!isFixed(b.id, dateStr)) {
+						if (bCanPm) result[b.id][dateStr] = "1408A";
+						else if (bCanAm) result[b.id][dateStr] = "0608A";
+					}
+					warnings.push({
+						date: dateStr,
+						type: "am_pm_pool_shortage",
+						message: `${dateStr}：無法同時為${a.name}與${b.name}安排0608A/1408A（休息規則衝突）`,
+					});
+				}
 			}
 		} else if (remaining.length === 1) {
 			const emp = remaining[0];
@@ -2699,6 +3129,56 @@ export const autoAssignGroundMonth = (
 			}
 		}
 	});
+
+	// ── Pass 4.6: replace 0908A with HL/WL where quota still needed ─────────
+	// Pass 2.5 runs before Pass 4.5 so it can't see which days will have 0908A.
+	// This pass runs after Pass 4.5 when 0908A assignments are final, and
+	// replaces them with HL or WL for employees who still need quota filled.
+	// Safe because 0908A is the "extra" worker on a 3-person day — replacing
+	// it with HL/WL leaves 0608A + 1408A coverage unchanged.
+	if (targetMonth) {
+		rotatingEmployees.forEach((emp) => {
+			if (emp.excludeFromCoverage) return;
+			const yearSched = yearScheduleByEmployee[emp.id] || [];
+			const monthlyTarget = GROUND_MONTHLY_QUOTA[targetMonth] || {};
+
+			for (const code of ["HL", "WL"]) {
+				// How many more does this employee need this month?
+				const alreadyThisMonth = Object.values(result[emp.id]).filter((c) => c === code).length;
+				const yearSoFar = yearSched.filter((d) => d.duty_code === code).length;
+				const yearCeiling = GROUND_YEARLY_QUOTA[code] || 0;
+				const remaining = Math.min(
+					(monthlyTarget[code] || 0) - alreadyThisMonth,
+					yearCeiling - yearSoFar - alreadyThisMonth
+				);
+				if (remaining <= 0) continue;
+
+				// Find days where this employee has 0908A — safe to replace
+				let placed = 0;
+				for (const day of days) {
+					if (placed >= remaining) break;
+					const ds = day.dateStr;
+					if (result[emp.id][ds] !== "0908A") continue;
+					if (isFixed(emp.id, ds)) continue;
+					// Check single-day stretch rule
+					const dIdx = days.findIndex((d) => d.dateStr === ds);
+					const prev = dIdx > 0 ? days[dIdx - 1].dateStr : null;
+					const next = dIdx < days.length - 1 ? days[dIdx + 1].dateStr : null;
+					const isRest = (d2) => !d2 || isGroundRestCode(result[emp.id]?.[d2]);
+					if (prev && !isRest(prev)) {
+						const pp = dIdx > 1 ? days[dIdx - 2].dateStr : null;
+						if (isRest(pp)) continue;
+					}
+					if (next && !isRest(next)) {
+						const nn = dIdx < days.length - 2 ? days[dIdx + 2].dateStr : null;
+						if (isRest(nn)) continue;
+					}
+					result[emp.id][ds] = code;
+					placed++;
+				}
+			}
+		});
+	}
 
 	// ── Pass 5: yearly quota ceiling check (HL/WL only — R/Z ceilings are
 	// far less operationally strict and not worth forcing swaps over) ────────
@@ -2721,7 +3201,18 @@ export const autoAssignGroundMonth = (
 		});
 	}
 
-	return { schedulesByEmployee: result, warnings };
+	// Post-solve: remove coverage_unfillable false alarms — Pass 4 fires these
+	// when it can't find PM/AM at its time, but Pass 4.5 may fix them afterward.
+	// If the final schedule actually has coverage, suppress the warning.
+	const filteredWarnings = warnings.filter((w) => {
+		if (w.type !== "coverage_unfillable" || !w.date) return true;
+		const ds = w.date;
+		const hasAm = employees.some((e) => !e.excludeFromCoverage && isAmDuty(result[e.id]?.[ds]));
+		const hasPm = employees.some((e) => !e.excludeFromCoverage && isPmDuty(result[e.id]?.[ds]));
+		return !hasAm || !hasPm; // keep warning only if coverage is still missing
+	});
+
+	return { schedulesByEmployee: result, warnings: filteredWarnings };
 };
 
 // ── Excel import (地勤排班) ───────────────────────────────────────────────────

@@ -30,6 +30,7 @@ import {
   GROUND_DUTY_TIME_LOOKUP,
   getQuotaProgress,
   isEmployeeActiveForMonth,
+  isEmployeeAbsentForMonth,
   GROUND_YEARLY_QUOTA,
 } from '../../lib/groundHelpers';
 import { supabase } from '../../lib/supabase';
@@ -255,6 +256,11 @@ export default function GroundRosterPage() {
   // the value is identical — this counter exists purely to give the
   // effect a changing dependency).
   const [refreshCounter, setRefreshCounter] = useState(0);
+  // Temporary absences from ground_employee_absences table — employees
+  // dispatched to training at another base are excluded from schedule
+  // generation while absent. Fetched once on mount and after changes.
+  const [absences, setAbsences] = useState([]);
+  const [settingsLoading, setSettingsLoading] = useState(false);
 
   // Excel import (2026-06-21) — explicitly designed as a "reset to
   // experiment" tool, not just an initial bulk-load: re-import is
@@ -336,11 +342,17 @@ export default function GroundRosterPage() {
     load();
   }, [currentMonth, user, refreshCounter]);
 
-  // Filtered to whoever was actually active for the SELECTED month
-  // (2026-06-22) — e.g. 楊晴雯 shouldn't appear for June onward, and
-  // 陳寶英 shouldn't appear before June, since she transferred in then.
-  const employees = sortGroundEmployees(
-    groundEmployeeList.filter((e) => e.base === 'KHH' && isEmployeeActiveForMonth(e, currentMonth))
+  // All employees active for this month regardless of absence status —
+  // used for the schedule grid so absent employees show as grayed-out rows.
+  const allDisplayEmployees = sortGroundEmployees(
+    groundEmployeeList.filter((e) =>
+      e.base === 'KHH' && isEmployeeActiveForMonth(e, currentMonth)
+    )
+  );
+  // Absence-filtered list — passed to the solver and used everywhere that
+  // should treat absent employees as genuinely not present.
+  const employees = allDisplayEmployees.filter(
+    (e) => !isEmployeeAbsentForMonth(e.id, currentMonth, absences, e.base)
   );
   const days = getDaysInMonth(currentMonth);
   const todayStr = getTodayStr();
@@ -431,6 +443,56 @@ export default function GroundRosterPage() {
     });
     return map;
   }, [violations, autoAssignWarnings]);
+
+  // Fetch temporary absences from Supabase — runs once on mount and
+  // whenever settingsLoading changes (after a save/delete operation).
+  useEffect(() => {
+    if (!user) return;
+    supabase
+      .from('ground_employee_absences')
+      .select('*')
+      .order('absent_from', { ascending: true })
+      .then(({ data, error }) => {
+        if (error) { console.error('Failed to fetch absences:', error); return; }
+        setAbsences(data || []);
+      });
+  }, [user, settingsLoading]);
+
+  // Toggle an employee's absence for the currently viewed month.
+  // If they're already absent → remove the record (re-enable).
+  // If they're active → insert a record covering the full month (disable).
+  // Clicking their name in the schedule grid calls this.
+  const handleToggleAbsence = useCallback(async (emp) => {
+    const match = currentMonth.match(/(\d{4})年(\d{2})月/);
+    if (!match) return;
+    const [, y, m] = match;
+    const absent_from = `${y}-${m}-01`;
+    const lastDay = new Date(parseInt(y, 10), parseInt(m, 10), 0).getDate();
+    const absent_until = `${y}-${m}-${String(lastDay).padStart(2, '0')}`;
+
+    const existing = absences.find(
+      (a) => a.employee_id === emp.id &&
+        a.absent_from <= absent_until && a.absent_until >= absent_from
+    );
+
+    if (existing) {
+      // Already absent — remove to re-enable
+      const { error } = await supabase
+        .from('ground_employee_absences').delete().eq('id', existing.id);
+      if (error) { toast.error('操作失敗：' + error.message); return; }
+      toast.success(`${emp.name} 已恢復排班（${currentMonth}）`);
+    } else {
+      // Currently active — disable for this month
+      const { error } = await supabase
+        .from('ground_employee_absences').insert({
+          employee_id: emp.id, absent_from, absent_until,
+          reason: '外派/受訓', base: emp.base, created_by: user?.id,
+        });
+      if (error) { toast.error('操作失敗：' + error.message); return; }
+      toast.success(`${emp.name} 已暫停排班（${currentMonth}）`);
+    }
+    setSettingsLoading((v) => !v); // trigger re-fetch
+  }, [absences, currentMonth, user]);
 
   const buildViolationContextWindow = useCallback((empId, centerDateStr) => {
     if (!empId || !centerDateStr) return [];
@@ -605,7 +667,7 @@ export default function GroundRosterPage() {
   // already handles the Dec/Jan year-boundary fetch) — no need to
   // re-fetch it here.
   const handleAutoAssign = useCallback(async () => {
-    if (!window.confirm(`即將自動排班 ${currentMonth}，這會直接寫入班表讓所有人即時看到進度。已手動填入的班別不會被覆蓋。確定繼續？`)) return;
+    if (!window.confirm(`確定要自動產生班表嗎？`)) return;
 
     setAutoAssigning(true);
     const toastId = toast.loading('自動排班中，請稍候...');
@@ -748,8 +810,7 @@ export default function GroundRosterPage() {
   // only the duty schedule itself, since 指定休假 is a separate concern
   // staff submitted independently.
   const handleResetMonth = useCallback(async () => {
-    if (!window.confirm(`確定要清空 ${currentMonth} 所有人員的班表嗎？此操作無法復原。`)) return;
-    if (!window.confirm('再次確認：這會清除資料庫中已儲存的班表資料，所有地勤人員都會看到變更。')) return;
+    if (!window.confirm(`確定要刪除本月班表嗎？`)) return;
 
     setAutoAssigning(true); // reuse the same loading flag to disable other actions during this
     const toastId = toast.loading('清除班表中...');
@@ -867,8 +928,7 @@ export default function GroundRosterPage() {
       return;
     }
 
-    if (!window.confirm(`即將匯入 ${sheetsToImport.length} 個月份，這會覆蓋資料庫中對應月份「目前」已儲存的班表資料。確定繼續？`)) return;
-    if (!window.confirm('再次確認：此操作無法復原，所有地勤人員都會看到變更後的班表。')) return;
+    if (!window.confirm(`確定要匯入並覆蓋班表嗎？`)) return;
 
     setImporting(true);
     const toastId = toast.loading('匯入中，請稍候...');
@@ -1215,10 +1275,10 @@ export default function GroundRosterPage() {
                 weekly_rest_unfillable: '無法排入例假/休假',
                 yearly_quota_exceeded: '全年額度超標',
               };
-              const sortedWarnings = [...autoAssignWarnings].sort((a, b) => (a.date || '').localeCompare(b.date || ''));
+              const sortedWarnings = [...autoAssignWarnings].filter(w => w.type !== 'csp_uniform_fallback').sort((a, b) => (a.date || '').localeCompare(b.date || ''));
               return (
                 <div className={rStyles.violationsList}>
-                  <div className={rStyles.violationsListHeader}>自動排班提醒（共 {autoAssignWarnings.length} 項）</div>
+                  <div className={rStyles.violationsListHeader}>自動排班提醒（共 {sortedWarnings.length} 項）</div>
                   {sortedWarnings.map((w, i) => {
                     const empName = w.employeeId
                       ? (employees.find((e) => e.id === w.employeeId)?.name || w.employeeId)
@@ -1329,20 +1389,42 @@ export default function GroundRosterPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {employees.map((emp) => (
-                    <tr key={emp.id}>
-                      <td className={`${styles.employeeIdCell} ${styles.stickyCol} ${styles.employeeId}`}>
+                  {allDisplayEmployees.map((emp) => {
+                    const isAbsent = isEmployeeAbsentForMonth(emp.id, currentMonth, absences, emp.base);
+                    return (
+                    <tr key={emp.id} style={isAbsent ? { opacity: 0.38, pointerEvents: 'none' } : undefined}>
+                      <td className={`${styles.employeeIdCell} ${styles.stickyCol} ${styles.employeeId}`}
+                        style={isAbsent ? { pointerEvents: 'auto' } : undefined}>
                         <span style={{ fontSize: '0.75rem', color: '#111827' }}>{emp.id}</span>
                       </td>
-                      <td className={`${styles.employeeNameCell} ${styles.stickyCol} ${styles.employeeName}`}>
+                      <td
+                        className={`${styles.employeeNameCell} ${styles.stickyCol} ${styles.employeeName}`}
+                        style={{
+                          cursor: 'pointer',
+                          pointerEvents: 'auto',
+                          userSelect: 'none',
+                        }}
+                        onClick={() => handleToggleAbsence(emp)}
+                        title={isAbsent ? `點擊恢復 ${emp.name} 的排班` : `點擊暫停 ${emp.name} 的排班（${currentMonth}）`}
+                      >
                         <div className={styles.nameContainer}>
-                          <div className={styles.employeeName}>{emp.name}</div>
+                          <div className={styles.employeeName} style={isAbsent ? { textDecoration: 'line-through', color: '#9ca3af' } : undefined}>
+                            {emp.name}
+                          </div>
                           <div className={styles.badgeContainer}>
                             <span className={styles.rankBadge}>{emp.rank}</span>
                           </div>
                         </div>
                       </td>
                       {days.map(({ dateStr, dow }) => {
+                        if (isAbsent) {
+                          return (
+                            <td key={dateStr}
+                              className={styles.dutyCell}
+                              style={{ background: '#f9fafb' }}
+                            />
+                          );
+                        }
                         const dutyCode = scheduleMap[emp.id]?.[dateStr] || '';
                         const flags = flaggedCellKeys[`${emp.id}|${dateStr}`];
                         return (
@@ -1359,7 +1441,8 @@ export default function GroundRosterPage() {
                         );
                       })}
                     </tr>
-                  ))}
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
@@ -1375,7 +1458,7 @@ export default function GroundRosterPage() {
                 {autoAssigning ? '排班中...' : <><BsRobot style={{ marginRight: 6 }} /> 自動排班</>}
               </button>
               <p className={rStyles.autoAssignHint}>
-                自動排班所有地勤人員可即時看到進度。已手動排的班不會被覆蓋。
+                所有人可看到排班進度。<br />手動排班不會被覆蓋。
               </p>
             </div>
           </>

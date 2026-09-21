@@ -2225,13 +2225,7 @@
 	box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
 }
 
-/* ── Manual entry modal: mobile/tablet responsive ──────────────────────────
-   Follows the project's existing 768px breakpoint (see the main
-   @media (max-width: 768px) block above, ~line 904). That block already
-   caps .modalContent at max-width:500px/width:90% on mobile, but
-   .entryModalContent's unconditional max-width:920px comes later in file
-   order and would otherwise win on equal specificity — this block
-   restates the cap so it actually applies to this modal too. */
+/* ── Manual entry modal: mobile/tablet responsive ──────────────────────────*/
 @media (max-width: 768px) {
 	.entryModalContent {
 		max-width: 100%;
