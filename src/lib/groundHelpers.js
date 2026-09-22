@@ -865,7 +865,7 @@ export const checkGroundFatigue = (schedule) => {
 				type: "insufficient_rest",
 				date: next.date,
 				dutyCode: next.duty_code,
-				message: `${next.date} (${next.duty_code}) 距上次勤務休息不足11小時（${restHours.toFixed(1)}小時）`,
+				message: `${next.date} (${next.duty_code}) 距上次任務休息不足11小時（${restHours.toFixed(1)}小時）`,
 			});
 		}
 	}
@@ -898,7 +898,7 @@ export const checkGroundFatigue = (schedule) => {
 				type: "excessive_consecutive_days",
 				date: day.date,
 				dutyCode: day.duty_code,
-				message: `${consecutiveStart} 起已連續上班 ${consecutiveCount} 天（上限5天），${day.date} 仍排有勤務`,
+				message: `${consecutiveStart} 起已連續上班 ${consecutiveCount} 天（上限5天），${day.date} 仍排有任務`,
 			});
 		}
 

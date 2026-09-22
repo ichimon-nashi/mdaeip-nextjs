@@ -1111,7 +1111,7 @@ export default function GroundRosterPage() {
             className={isFinalized ? rStyles.finalizedBadgeFinal : rStyles.finalizedBadgeWip}
             onClick={handleToggleFinalized}
             disabled={togglingFinalized || dataLoading}
-            title="點擊切換狀態"
+            title="點選切換狀態"
           >
             {togglingFinalized ? '更新中...' : isFinalized ? '正式' : '暫定'}
           </button>
@@ -1405,7 +1405,7 @@ export default function GroundRosterPage() {
                           userSelect: 'none',
                         }}
                         onClick={() => handleToggleAbsence(emp)}
-                        title={isAbsent ? `點擊恢復 ${emp.name} 的排班` : `點擊暫停 ${emp.name} 的排班（${currentMonth}）`}
+                        title={isAbsent ? `點選恢復 ${emp.name} 的排班` : `點選暫停 ${emp.name} 的排班（${currentMonth}）`}
                       >
                         <div className={styles.nameContainer}>
                           <div className={styles.employeeName} style={isAbsent ? { textDecoration: 'line-through', color: '#9ca3af' } : undefined}>
@@ -1458,7 +1458,7 @@ export default function GroundRosterPage() {
                 {autoAssigning ? '排班中...' : <><BsRobot style={{ marginRight: 6 }} /> 自動排班</>}
               </button>
               <p className={rStyles.autoAssignHint}>
-                所有人可看到排班進度。<br />手動排班不會被覆蓋。
+                所有人看到排班進度。<br />手動排班不會被自動排班覆蓋。
               </p>
             </div>
           </>

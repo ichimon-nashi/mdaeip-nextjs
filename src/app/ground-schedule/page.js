@@ -729,12 +729,12 @@ const SwapModal = ({
 							<div className={gStyles.swapRow}>
 								<div className={gStyles.swapParty}>
 									<div className={gStyles.swapPartyLabel}>
-										你的勤務
+										你的任務
 									</div>
 									<div className={gStyles.swapDuty}>
 										{s.userDuty || (
 											<span className={gStyles.noDuty}>
-												無勤務
+												無任務
 											</span>
 										)}
 									</div>
@@ -747,7 +747,7 @@ const SwapModal = ({
 									<div className={gStyles.swapDuty}>
 										{s.targetDuty || (
 											<span className={gStyles.noDuty}>
-												無勤務
+												無任務
 											</span>
 										)}
 									</div>
