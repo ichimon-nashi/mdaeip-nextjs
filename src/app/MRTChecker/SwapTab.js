@@ -677,6 +677,32 @@ export default function SwapTab() {
 				),
 			]);
 
+			// ── Audit trail so the schedule page shows the green "approved" border ──
+			// (a cold swap here creates no duty_change_requests row otherwise, unlike
+			// the imported/approved path in handleApproveImported)
+			try {
+				const toIso = (key) => {
+					const [y, mIdx, d] = key.split("-").map(Number);
+					return `${y}-${String(mIdx + 1).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+				};
+				const changedKeys = Array.from(new Set([...selA, ...selB]));
+				await supabase.from("duty_change_requests").insert({
+					person_a_id: crewA.id,
+					person_a_name: crewA.name,
+					person_b_id: crewB.id,
+					person_b_name: crewB.name,
+					month: monthStr,
+					selected_dates: changedKeys.map(toIso),
+					all_duties: changedKeys.map(k => ({ date: toIso(k), duty: schedB[k]?.code || "" })),
+					person_a_duties: changedKeys.map(k => ({ date: toIso(k), duty: schedA[k]?.code || "" })),
+					status: "approved",
+					submitted_at: new Date().toISOString(),
+					reviewed_at: new Date().toISOString(),
+				});
+			} catch (auditErr) {
+				console.error("saveSwap: audit row failed (swap itself still saved):", auditErr);
+			}
+
 			// Clear cache
 			const { clearScheduleCache } = await import("../../lib/DataRoster");
 			clearScheduleCache(monthStr);

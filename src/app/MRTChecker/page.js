@@ -9,6 +9,7 @@ import globalStyles from "../../styles/GlobalLoading.module.css";
 import { getEmployeeSchedule, employeeList } from "../../lib/DataRoster";
 import FleetTab from "./FleetTab";
 import SwapTab from "./SwapTab";
+import DutyChangeImport from "./DutyChangeImport";
 import { getFlightDutiesForMRTByMonth } from "../../lib/pdxHelpers";
 import {
 	timeToMinutes,
@@ -35,7 +36,7 @@ import { hasAppAccess } from "../../lib/permissionHelpers";
 import toast from "react-hot-toast";
 
 const MRTChecker = () => {
-	const { user, loading: authLoading } = useAuth();
+	const { user, loading: authLoading, isSpecialAdmin } = useAuth();
 	const router = useRouter();
 
 	// Auth guard — requires mrt_checker permission
@@ -2978,6 +2979,11 @@ const MRTChecker = () => {
 									確認無誤後點選「儲存班表」，或「取消」還原
 								</div>
 							)}
+
+						{/* Duty-change notice paste tool — dispatch + special admin only */}
+						{(hasAppAccess(user, "dispatch") || isSpecialAdmin) && (
+							<DutyChangeImport />
+						)}
 
 						{/* ── Validation banner ── */}
 						{validationErrors.length > 0 && (

@@ -1,0 +1,229 @@
+/* src/styles/DutyChangeImport.module.css
+   Olympus "night" theme — tokens and card/input/button treatment
+   taken directly from EvalFormGenerator.module.css (考核表產生器),
+   the already-reskinned reference for this palette, not reinvented.
+   Cinzel (the theme's English-caption face) is intentionally not
+   used here: this component's text is entirely Chinese, and Cinzel
+   has no CJK glyphs. Noto Serif TC carries labels/prose; JetBrains
+   Mono carries the duty codes, employee IDs, and dates. */
+@import url('https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@500;700;900&family=JetBrains+Mono:wght@400;500;600&display=swap');
+
+.container {
+	--gold: #c9a75c;
+	--gold-hi: #ecd49a;
+	--cream: #f4ecd8;
+	--mute: #93a0bc;
+	--fail: #e2836b;
+	--fail-hi: #f3a98f;
+	--glass-a: rgba(24, 33, 66, 0.44);
+	--glass-b: rgba(10, 15, 34, 0.58);
+
+	position: relative;
+	padding: 20px;
+	margin-bottom: 1.25rem;
+	border-radius: 6px;
+	border: 1px solid rgba(201, 167, 92, 0.3);
+	border-top: 2px solid var(--gold);
+	background: linear-gradient(155deg, var(--glass-a), var(--glass-b));
+	backdrop-filter: blur(18px) saturate(1.15);
+	-webkit-backdrop-filter: blur(18px) saturate(1.15);
+	box-shadow: 0 20px 54px rgba(0, 0, 0, 0.35),
+		inset 0 1px 0 rgba(255, 255, 255, 0.13),
+		inset 0 0 0 1px rgba(255, 255, 255, 0.035);
+	font-family: "Noto Serif TC", serif;
+	color: var(--cream);
+}
+
+.header {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	width: 100%;
+	background: none;
+	border: none;
+	padding: 0;
+	margin-bottom: 0;
+	cursor: pointer;
+	text-align: left;
+	font-family: "Noto Serif TC", serif;
+	font-size: 14px;
+	font-weight: 700;
+	letter-spacing: 0.1em;
+	color: var(--gold-hi);
+}
+.header svg:first-child { color: var(--gold); flex-shrink: 0; }
+.headerChevron {
+	margin-left: auto;
+	color: var(--mute);
+	flex-shrink: 0;
+}
+
+.monthRow {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	margin-top: 16px;
+	margin-bottom: 14px;
+}
+.monthLabel {
+	font-size: 13px;
+	letter-spacing: 0.05em;
+	color: var(--mute);
+}
+.monthInput {
+	height: 34px;
+	padding: 0 10px;
+	border-radius: 4px;
+	border: 1px solid rgba(201, 167, 92, 0.32);
+	background: rgba(9, 14, 32, 0.55);
+	color: var(--cream);
+	font-family: "JetBrains Mono", monospace;
+	font-size: 13px;
+	color-scheme: dark;
+}
+.monthInput:focus {
+	outline: none;
+	border-color: var(--gold);
+	box-shadow: 0 0 0 3px rgba(201, 167, 92, 0.16);
+}
+
+.textarea {
+	width: 100%;
+	padding: 14px;
+	border-radius: 4px;
+	border: 1px solid rgba(201, 167, 92, 0.32);
+	background: rgba(9, 14, 32, 0.5);
+	backdrop-filter: blur(6px);
+	-webkit-backdrop-filter: blur(6px);
+	color: var(--cream);
+	font-family: "JetBrains Mono", monospace;
+	font-size: 13px;
+	line-height: 1.7;
+	resize: vertical;
+	box-sizing: border-box;
+}
+.textarea::placeholder { color: var(--mute); }
+.textarea:focus {
+	outline: none;
+	border-color: var(--gold);
+	box-shadow: 0 0 0 3px rgba(201, 167, 92, 0.16);
+}
+
+.actions {
+	display: flex;
+	gap: 10px;
+	margin-top: 14px;
+	flex-wrap: wrap;
+}
+.parseBtn, .applyBtn {
+	height: 38px;
+	padding: 0 20px;
+	border-radius: 4px;
+	font-family: "Noto Serif TC", serif;
+	font-size: 13px;
+	font-weight: 700;
+	letter-spacing: 0.04em;
+	cursor: pointer;
+	transition: all 0.22s ease;
+}
+.parseBtn {
+	border: 1px solid rgba(201, 167, 92, 0.32);
+	background: transparent;
+	color: var(--mute);
+}
+.parseBtn:hover:not(:disabled) {
+	border-color: var(--gold);
+	color: var(--cream);
+	background: rgba(201, 167, 92, 0.1);
+}
+.applyBtn {
+	border: 1px solid var(--gold);
+	background: linear-gradient(180deg, var(--gold-hi), var(--gold));
+	color: #1a1408;
+	box-shadow: 0 0 18px rgba(201, 167, 92, 0.32), inset 0 1px 0 rgba(255, 255, 255, 0.4);
+}
+.applyBtn:hover:not(:disabled) {
+	transform: translateY(-1px);
+	box-shadow: 0 0 24px rgba(201, 167, 92, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.4);
+}
+.parseBtn:disabled, .applyBtn:disabled {
+	opacity: 0.4;
+	cursor: not-allowed;
+	transform: none;
+}
+
+.resultOk, .resultFail {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	margin-top: 14px;
+	padding: 10px 14px;
+	border-radius: 4px;
+	font-size: 13px;
+	font-weight: 600;
+	border: 1px solid;
+}
+.resultOk {
+	background: linear-gradient(180deg, rgba(168, 216, 180, 0.16), rgba(111, 168, 125, 0.1));
+	color: #a8d8b4;
+	border-color: rgba(127, 176, 138, 0.4);
+}
+.resultFail {
+	background: rgba(226, 131, 107, 0.12);
+	color: var(--fail-hi);
+	border-color: rgba(226, 131, 107, 0.4);
+}
+
+.tableWrap {
+	overflow-x: auto;
+	margin-top: 16px;
+	border-radius: 4px;
+	border: 1px solid rgba(201, 167, 92, 0.24);
+}
+.table {
+	width: 100%;
+	border-collapse: collapse;
+	font-size: 12.5px;
+	white-space: nowrap;
+}
+.table th {
+	padding: 8px 12px;
+	text-align: left;
+	font-size: 11px;
+	font-weight: 700;
+	letter-spacing: 0.06em;
+	color: var(--mute);
+	border-bottom: 1px solid rgba(201, 167, 92, 0.24);
+	background: rgba(9, 14, 32, 0.4);
+}
+.table td {
+	padding: 9px 12px;
+	border-bottom: 1px solid rgba(201, 167, 92, 0.12);
+	color: var(--cream);
+	font-family: "JetBrains Mono", monospace;
+}
+.rowIssue td { background: rgba(226, 131, 107, 0.08); }
+.statusCell { white-space: normal; }
+.statusOk {
+	display: inline-flex;
+	align-items: center;
+	gap: 5px;
+	color: #a8d8b4;
+	font-weight: 600;
+	font-family: "Noto Serif TC", serif;
+}
+.statusIssue {
+	display: inline-flex;
+	align-items: center;
+	gap: 5px;
+	color: var(--fail-hi);
+	font-weight: 600;
+	font-family: "Noto Serif TC", serif;
+	white-space: normal;
+}
+
+.issueNote {
+	margin-top: 10px;
+	font-size: 12.5px;
+	color: var(--fail-hi);
+}

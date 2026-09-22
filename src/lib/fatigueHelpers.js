@@ -592,19 +592,27 @@ export function parseScheduleEntry(rawCode) {
 
 	// Rest code wins (G\例 → 例)
 	const restSeg = segments.find(s => REST.includes(s));
-	if (restSeg) return { dutyCode: restSeg, flightNums: [], isInspection: false };
+	if (restSeg) return { dutyCode: restSeg, flightNums: [], isInspection: false, hsr: null };
 
 	// G alone → G
 	if (segments.length === 1 && dutyCode0 === 'G')
-		return { dutyCode: 'G', flightNums: [], isInspection: false };
+		return { dutyCode: 'G', flightNums: [], isInspection: false, hsr: null };
+
+	// T prefix (HSR *before* the duty, e.g. "T\H2" — crew travels to the duty's
+	// base first). Mirrors the G-prefix pattern above: leading flag segment,
+	// real duty code is the next one.
+	const isTPrefix = dutyCode0 === 'T' && segments.length > 1;
 
 	// G + non-rest → use second segment as duty code
-	const dutyCode = (dutyCode0 === 'G' && segments.length > 1) ? segments[1] : dutyCode0;
+	const dutyCode = (dutyCode0 === 'G' && segments.length > 1) ? segments[1]
+		: isTPrefix ? segments[1]
+		: dutyCode0;
 
 	const flightNums = [];
 	let isInspection = false;
+	let hsr = isTPrefix ? 'before' : null;
 
-	const startIdx = (dutyCode0 === 'G') ? 2 : 1;
+	const startIdx = (dutyCode0 === 'G' || isTPrefix) ? 2 : 1;
 	for (let i = startIdx; i < segments.length; i++) {
 		const seg = segments[i].trim();
 		const segUp = seg.toUpperCase();
@@ -612,6 +620,8 @@ export function parseScheduleEntry(rawCode) {
 		// Pure flag
 		if (['S', 'T', 'ACM', 'S/T', 'OT', ' S'].includes(segUp) || segUp === 'S') {
 			if (segUp.includes('S')) isInspection = true;
+			// Trailing T = HSR *after* the duty (crew travels on from here)
+			if (segUp === 'T') hsr = 'after';
 			continue;
 		}
 		// Time segment (HH:MM)
@@ -623,7 +633,7 @@ export function parseScheduleEntry(rawCode) {
 		if (nums.length) flightNums.push(...nums);
 	}
 
-	return { dutyCode, flightNums, isInspection };
+	return { dutyCode, flightNums, isInspection, hsr };
 }
 
 /**
@@ -795,7 +805,7 @@ export function buildDroppedItemsFromSchedule(scheduleData, pdxDutyMap, year, mo
 			continue;
 		}
 
-		const { dutyCode, flightNums } = entry;
+		const { dutyCode, flightNums, hsr } = entry;
 		const isRestDay = REST_CODES.includes(dutyCode) || dutyCode === "G" || LEAVE_CODES_SET.has(dutyCode);
 
 		// Look up PDX row for date-accurate times and sectors
@@ -833,6 +843,7 @@ export function buildDroppedItemsFromSchedule(scheduleData, pdxDutyMap, year, mo
 			aircraft_type: pdxRow?.aircraft_type ?? null,
 			extra_sectors: override?.extra_sectors ?? [],
 			isOverride:    !!override,
+			hsr:           hsr || null,
 			isFromSchedule: true,
 		};
 	}
