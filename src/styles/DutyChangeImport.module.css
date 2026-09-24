@@ -203,6 +203,7 @@
 	font-family: "JetBrains Mono", monospace;
 }
 .rowIssue td { background: rgba(226, 131, 107, 0.08); }
+.rowInfo td { background: rgba(201, 167, 92, 0.08); }
 .statusCell { white-space: normal; }
 .statusOk {
 	display: inline-flex;
@@ -221,9 +222,58 @@
 	font-family: "Noto Serif TC", serif;
 	white-space: normal;
 }
+.statusMismatch {
+	display: inline-flex;
+	align-items: center;
+	flex-wrap: wrap;
+	gap: 5px;
+	color: var(--fail-hi);
+	font-weight: 600;
+	font-family: "Noto Serif TC", serif;
+	white-space: normal;
+}
+.forceBtn {
+	padding: 2px 8px;
+	border-radius: 3px;
+	border: 1px solid rgba(201, 167, 92, 0.4);
+	background: transparent;
+	color: var(--mute);
+	font-size: 11px;
+	font-weight: 600;
+	font-family: "Noto Serif TC", serif;
+	cursor: pointer;
+	white-space: nowrap;
+}
+.forceBtn:hover { border-color: var(--gold); color: var(--cream); }
+.forceBtnActive {
+	padding: 2px 8px;
+	border-radius: 3px;
+	border: 1px solid var(--gold);
+	background: rgba(201, 167, 92, 0.16);
+	color: var(--gold-hi);
+	font-size: 11px;
+	font-weight: 700;
+	font-family: "Noto Serif TC", serif;
+	cursor: pointer;
+	white-space: nowrap;
+}
+.statusInfo {
+	display: inline-flex;
+	align-items: center;
+	gap: 5px;
+	color: var(--gold-hi);
+	font-weight: 600;
+	font-family: "Noto Serif TC", serif;
+	white-space: normal;
+}
 
 .issueNote {
 	margin-top: 10px;
 	font-size: 12.5px;
 	color: var(--fail-hi);
+}
+.infoNote {
+	margin-top: 10px;
+	font-size: 12.5px;
+	color: var(--gold-hi);
 }
