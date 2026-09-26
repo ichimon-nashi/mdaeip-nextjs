@@ -1,9 +1,5 @@
-import { createClient } from "@supabase/supabase-js";
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL,
-  process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY
-);
+import { supabaseAdmin as supabase } from "../../../lib/supabaseAdmin";
+import { requireAuth } from "../../../lib/requireAuth";
 
 function calcFlightMinutes(takeoff, landing) {
   const parse = (t) => {
@@ -36,8 +32,11 @@ function routeKey(origin, dest) {
 //   ],
 //   ...
 // }
-export async function GET() {
+export async function GET(request) {
   try {
+    const auth = await requireAuth(request);
+    if (auth.error) return auth.error;
+
     const { data, error } = await supabase
       .from("turtle_flights")
       .select("pilot_id, pilot_name, base, origin, destination, flight_minutes")
@@ -97,8 +96,12 @@ export async function GET() {
 // Body: { submitted_by, pilot_id, pilot_name, base, flight_date?, legs[] }
 export async function POST(request) {
   try {
+    const auth = await requireAuth(request);
+    if (auth.error) return auth.error;
+
     const body = await request.json();
-    const { submitted_by, pilot_id, pilot_name, base, flight_date, legs } = body;
+    const { pilot_id, pilot_name, base, flight_date, legs } = body;
+    const submitted_by = auth.user.id; // from the verified token, not the browser
 
     if (!submitted_by || !pilot_id || !legs?.length) {
       return Response.json({ success: false, error: "Missing required fields" }, { status: 400 });
@@ -156,9 +159,8 @@ export async function DELETE(request) {
     const body = await request.json();
     const { pilot_id, destination, userAccessLevel } = body;
 
-    if (!userAccessLevel || userAccessLevel < 99) {
-      return Response.json({ success: false, error: "管理員權限才能刪除" }, { status: 403 });
-    }
+    const auth = await requireAuth(request, { admin: true });
+    if (auth.error) return auth.error;
     if (!pilot_id) {
       return Response.json({ success: false, error: "pilot_id required" }, { status: 400 });
     }

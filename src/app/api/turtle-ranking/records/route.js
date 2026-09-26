@@ -1,9 +1,5 @@
-import { createClient } from "@supabase/supabase-js";
-
-const supabase = createClient(
-	process.env.NEXT_PUBLIC_SUPABASE_URL,
-	process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY,
-);
+import { supabaseAdmin as supabase } from "../../../../lib/supabaseAdmin";
+import { requireAuth } from "../../../../lib/requireAuth";
 
 const SUPER_USERS = ["51892"]; // non-admin users with full edit/delete privileges
 
@@ -13,8 +9,11 @@ function isPrivileged(userId, accessLevel) {
 
 // ── GET /api/turtle-ranking/records ─────────────────────────────────────
 // Returns all records — everyone can view, but edit/delete enforced per-row.
-export async function GET() {
+export async function GET(request) {
 	try {
+		const auth = await requireAuth(request);
+		if (auth.error) return auth.error;
+
 		const { data, error } = await supabase
 			.from("turtle_flights")
 			.select(
@@ -40,6 +39,9 @@ export async function GET() {
 // Body: { id, submitted_by, isPrivileged, origin, destination, takeoff_time, landing_time, flight_minutes }
 export async function PATCH(request) {
 	try {
+		const auth = await requireAuth(request);
+		if (auth.error) return auth.error;
+
 		const body = await request.json();
 		const {
 			id,
@@ -73,8 +75,10 @@ export async function PATCH(request) {
 			);
 		}
 
+		// Privilege and ownership from the verified token + DB, not the browser
 		const canEdit =
-			clientPrivileged || existing.submitted_by === submitted_by;
+			isPrivileged(auth.user.id, auth.user.access_level) ||
+			existing.submitted_by === auth.user.id;
 		if (!canEdit) {
 			return Response.json(
 				{ success: false, error: "無權限編輯此記錄" },
@@ -123,8 +127,11 @@ export async function PATCH(request) {
 // Body: { id, submitted_by, isPrivileged }
 export async function DELETE(request) {
 	try {
+		const auth = await requireAuth(request);
+		if (auth.error) return auth.error;
+
 		const body = await request.json();
-		const { id, submitted_by, isPrivileged: clientPrivileged } = body;
+		const { id } = body;
 
 		if (!id) {
 			return Response.json(
@@ -147,8 +154,10 @@ export async function DELETE(request) {
 			);
 		}
 
+		// Privilege and ownership from the verified token + DB, not the browser
 		const canDelete =
-			clientPrivileged || existing.submitted_by === submitted_by;
+			isPrivileged(auth.user.id, auth.user.access_level) ||
+			existing.submitted_by === auth.user.id;
 		if (!canDelete) {
 			return Response.json(
 				{ success: false, error: "無權限刪除此記錄" },

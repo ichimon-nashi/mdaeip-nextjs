@@ -418,7 +418,7 @@ function PilotGridPicker({ value, onChange }) {
 
 // ── Main page ──────────────────────────────────────────────────────────────
 export default function TurtleRanking() {
-  const { user, loading } = useAuth();
+  const { user, loading, token } = useAuth();
   const router = useRouter();
 
   const isPrivileged = user && (user.access_level >= 99 || SUPER_USERS.includes(user.id));
@@ -457,9 +457,12 @@ export default function TurtleRanking() {
 
   // ── load chart data ───────────────────────────────────────────────────
   const loadChartData = useCallback(async () => {
+    if (!token) return; // wait until the login token is loaded
     setIsLoading(true);
     try {
-      const res = await fetch("/api/turtle-ranking");
+      const res = await fetch("/api/turtle-ranking", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
       const result = await res.json();
       if (result.success) {
         setRouteData(result.data);
@@ -474,16 +477,18 @@ export default function TurtleRanking() {
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [token]);
 
   useEffect(() => { loadChartData(); }, [loadChartData]);
 
   // ── load records ──────────────────────────────────────────────────────
   const loadMyRecords = useCallback(async () => {
-    if (!user) return;
+    if (!user || !token) return;
     setIsLoadingRec(true);
     try {
-      const res = await fetch("/api/turtle-ranking/records");
+      const res = await fetch("/api/turtle-ranking/records", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
       const result = await res.json();
       if (result.success) setMyRecords(result.data);
       else toast.error("載入記錄失敗: " + result.error);
@@ -492,7 +497,7 @@ export default function TurtleRanking() {
     } finally {
       setIsLoadingRec(false);
     }
-  }, [user]);
+  }, [user, token]);
 
   useEffect(() => {
     if (activeTab === "records") loadMyRecords();
@@ -641,7 +646,7 @@ export default function TurtleRanking() {
           );
           return fetch("/api/turtle-ranking", {
             method: "POST",
-            headers: { "Content-Type": "application/json" },
+            headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
             body: JSON.stringify({
               submitted_by: user.id,
               pilot_id:     seg.pilotName,
@@ -678,7 +683,7 @@ export default function TurtleRanking() {
     try {
       const res = await fetch("/api/turtle-ranking/records", {
         method: "DELETE",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
         body: JSON.stringify({ id: record.id, submitted_by: user.id, isPrivileged }),
       });
       const result = await res.json();
@@ -711,7 +716,7 @@ export default function TurtleRanking() {
     try {
       const res = await fetch("/api/turtle-ranking/records", {
         method: "PATCH",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
         body: JSON.stringify({
           id:             editingRecord.id,
           submitted_by:   user.id,
