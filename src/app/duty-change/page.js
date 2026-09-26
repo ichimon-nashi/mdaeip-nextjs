@@ -18,7 +18,7 @@ const formTemplateImage = "/assets/form-template.png";
 function DutyChangeContent() {
 	const router = useRouter();
 	const searchParams = useSearchParams();
-	const { user, logout } = useAuth();
+	const { user, logout, token } = useAuth();
 
 	const [formData, setFormData] = useState({
 		firstID: "",
@@ -1067,7 +1067,7 @@ function DutyChangeContent() {
 			try {
 				const emailResponse = await fetch("/api/send-duty-change-email", {
 					method: "POST",
-					headers: { "Content-Type": "application/json" },
+					headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
 					body: JSON.stringify({
 						pdfData: pdfBase64,
 						formData: {

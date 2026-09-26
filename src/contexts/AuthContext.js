@@ -16,6 +16,7 @@ export const useAuth = () => {
 
 export const AuthProvider = ({ children }) => {
 	const [user, setUser] = useState(null);
+	const [token, setToken] = useState(null);
 	const [loading, setLoading] = useState(true);
 	const router = useRouter();
 	const pathname = usePathname();
@@ -27,17 +28,25 @@ export const AuthProvider = ({ children }) => {
 		const initAuth = async () => {
 			try {
 				if (typeof window !== 'undefined') {
+					const savedToken = localStorage.getItem('mdaeip_token');
+					setToken(savedToken);
 					const savedUser = localStorage.getItem('mdaeip_user');
 					console.log("💾 Checking localStorage:", !!savedUser);
 
-					if (savedUser) {
+					if (savedUser && !savedToken) {
+						// Logged in before login tokens existed — sign in once
+						// more to get a token (API routes will require it)
+						localStorage.removeItem('mdaeip_user');
+					} else if (savedUser) {
 						const parsedUser = JSON.parse(savedUser);
 						console.log("✅ Found saved user:", parsedUser.name || parsedUser.id);
 
 						// Re-fetch fresh profile from DB so new columns (e.g. avatar_gif)
 						// are always up-to-date without requiring a re-login
 						try {
-							const response = await fetch(`/api/users/profile?id=${parsedUser.id}`);
+							const response = await fetch(`/api/users/profile?id=${parsedUser.id}`, {
+								headers: { Authorization: `Bearer ${savedToken}` },
+							});
 							if (response.ok) {
 								const result = await response.json();
 								if (result.success && result.data) {
@@ -131,6 +140,10 @@ export const AuthProvider = ({ children }) => {
 				
 				if (typeof window !== 'undefined') {
 					localStorage.setItem('mdaeip_user', JSON.stringify(result.user));
+					if (result.token) {
+						localStorage.setItem('mdaeip_token', result.token);
+						setToken(result.token);
+					}
 				}
 				
 				return { success: true };
@@ -146,8 +159,10 @@ export const AuthProvider = ({ children }) => {
 	const logout = () => {
 		console.log("👋 Logout called");
 		setUser(null);
+		setToken(null);
 		if (typeof window !== 'undefined') {
 			localStorage.removeItem('mdaeip_user');
+			localStorage.removeItem('mdaeip_token');
 		}
 		router.replace("/");
 	};
@@ -175,6 +190,7 @@ export const AuthProvider = ({ children }) => {
 
 	const value = {
 		user,
+		token,
 		loading, // Simplified - no combining with redirect state
 		login,
 		logout,

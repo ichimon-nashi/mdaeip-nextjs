@@ -76,7 +76,7 @@ const GIF_KEYS = {
 };
 
 const DatabaseManagement = () => {
-	const { user, loading } = useAuth();
+	const { user, loading, token } = useAuth();
 	const router = useRouter();
 
 	const [activeTab, setActiveTab] = useState("schedules");
@@ -201,7 +201,9 @@ const DatabaseManagement = () => {
 	const loadUsers = async () => {
 		try {
 			setIsLoadingUsers(true);
-			const response = await fetch(`/api/users?userAccessLevel=${user.access_level}`);
+			const response = await fetch(`/api/users?userAccessLevel=${user.access_level}`, {
+				headers: { Authorization: `Bearer ${token}` },
+			});
 			const result = await response.json();
 
 			if (result.success) {
@@ -243,7 +245,7 @@ const DatabaseManagement = () => {
 
 			const response = await fetch(endpoint, {
 				method: "POST",
-				headers: { "Content-Type": "application/json" },
+				headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
 				body: JSON.stringify({
 					scheduleData: data,
 					flightDutyData: data,
@@ -313,7 +315,7 @@ const DatabaseManagement = () => {
 
 			const response = await fetch("/api/schedule/upload", {
 				method: "POST",
-				headers: { "Content-Type": "application/json" },
+				headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
 				body: JSON.stringify({
 					scheduleData: pendingUploadData,
 					userId: user.id,
@@ -523,7 +525,7 @@ const DatabaseManagement = () => {
 			setIsSavingEntry(true);
 			const response = await fetch("/api/schedule/employee", {
 				method: "POST",
-				headers: { "Content-Type": "application/json" },
+				headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
 				body: JSON.stringify({
 					month: entryMonth,
 					employeeId: entryEmployeeId,
@@ -573,7 +575,7 @@ const DatabaseManagement = () => {
 
 			const response = await fetch(endpoint, {
 				method: "DELETE",
-				headers: { "Content-Type": "application/json" },
+				headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
 				body: JSON.stringify({
 					month,
 					userId: user.id,
@@ -624,7 +626,7 @@ const DatabaseManagement = () => {
 
 			const response = await fetch(endpoint, {
 				method: "POST",
-				headers: { "Content-Type": "application/json" },
+				headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
 				body: JSON.stringify({
 					userId: user.id,
 					userAccessLevel: user.access_level,
@@ -992,7 +994,8 @@ const DatabaseManagement = () => {
 		try {
 			setIsLookingUp(true);
 			const response = await fetch(
-				`/api/users/lookup?employeeId=${userFormData.id}&userAccessLevel=${user.access_level}`
+				`/api/users/lookup?employeeId=${userFormData.id}&userAccessLevel=${user.access_level}`,
+				{ headers: { Authorization: `Bearer ${token}` } },
 			);
 			const result = await response.json();
 
@@ -1038,7 +1041,7 @@ const DatabaseManagement = () => {
 			const method = userModalMode === "add" ? "POST" : "PUT";
 			const response = await fetch("/api/users", {
 				method,
-				headers: { "Content-Type": "application/json" },
+				headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
 				body: JSON.stringify({
 					userData: userFormData,
 					userAccessLevel: user.access_level,
@@ -1074,7 +1077,7 @@ const DatabaseManagement = () => {
 		try {
 			const response = await fetch("/api/users", {
 				method: "DELETE",
-				headers: { "Content-Type": "application/json" },
+				headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
 				body: JSON.stringify({
 					userId,
 					userAccessLevel: user.access_level,
@@ -1109,7 +1112,7 @@ const DatabaseManagement = () => {
 		try {
 			const response = await fetch("/api/users", {
 				method: "PUT",
-				headers: { "Content-Type": "application/json" },
+				headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
 				body: JSON.stringify({
 					userData: { ...userData, is_active: !willDeactivate },
 					userAccessLevel: user.access_level,
