@@ -11,6 +11,7 @@ import {
 } from "../../lib/DataRoster";
 import { supabase } from "../../lib/supabase";
 import { db } from "../../lib/dbWrite";
+import { dbr } from "../../lib/dbRead";
 import { dutyPdfBucket } from "../../lib/dutyPdfStorage";
 import { minutesToDisplay } from "../../lib/pdxHelpers";
 import toast from "react-hot-toast";
@@ -507,7 +508,7 @@ function DutyChangeContent() {
 		if (!allCurrentDates.length) return null;
 
 		// Fetch all pending/approved requests involving either party this month
-		const { data, error } = await supabase
+		const { data, error } = await dbr
 			.from("duty_change_requests")
 			.select("id, person_a_id, person_b_id, selected_dates, all_duties, status")
 			.eq("month", month)

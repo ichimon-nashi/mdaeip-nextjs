@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useAuth } from '../../contexts/AuthContext';
 import { supabase } from '../../lib/supabase';
 import { db } from '../../lib/dbWrite';
+import { dbr } from '../../lib/dbRead';
 import { dutyPdfBucket } from '../../lib/dutyPdfStorage';
 import { hasAppAccess } from '../../lib/permissionHelpers';
 import toast from 'react-hot-toast';
@@ -61,7 +62,7 @@ export default function DutyChangeReviewPage() {
 	const fetchRequests = useCallback(async () => {
 		setDataLoading(true);
 		try {
-			const { data, error } = await supabase
+			const { data, error } = await dbr
 				.from('duty_change_requests')
 				.select('*')
 				.order('submitted_at', { ascending: true }); // oldest first → carousel reads left to right

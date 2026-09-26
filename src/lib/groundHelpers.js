@@ -3,6 +3,7 @@
 
 import { supabase } from "./supabase";
 import { db } from "./dbWrite";
+import { dbr } from "./dbRead";
 
 // ── Ground staff cache (mirrors DataRoster cache pattern) ────────────────────
 const groundScheduleCache = new Map();
@@ -558,7 +559,7 @@ export const groundDayOffHelpers = {
 			);
 			if (!baseEmployeeIds.length) return { data: [], error: null };
 
-			const { data, error } = await supabase
+			const { data, error } = await dbr
 				.from("ground_dayoff_requests")
 				.select("*")
 				.eq("month_label", monthLabel)
@@ -580,7 +581,7 @@ export const groundDayOffHelpers = {
 	// Get day-off requests for a single employee for a month
 	async getRequestsForEmployee(employeeId, monthLabel) {
 		try {
-			const { data, error } = await supabase
+			const { data, error } = await dbr
 				.from("ground_dayoff_requests")
 				.select("*")
 				.eq("employee_id", employeeId)
@@ -683,7 +684,7 @@ export const groundDayOffHelpers = {
 			);
 			if (!baseEmployeeIds.length) return { count: 0, error: null };
 
-			const { count, error } = await supabase
+			const { count, error } = await dbr
 				.from("ground_dayoff_requests")
 				.select("*", { count: "exact", head: true })
 				.eq("status", "pending")
@@ -960,7 +961,7 @@ export const groundLeaveRequestHelpers = {
 			const baseEmployees = getGroundEmployeesByBase(base);
 			const totalStaff = baseEmployees.length;
 
-			const { data: existingAccepted, error } = await supabase
+			const { data: existingAccepted, error } = await dbr
 				.from("ground_leave_requests")
 				.select("employee_id, leave_type")
 				.eq("base", base)
@@ -1050,7 +1051,7 @@ export const groundLeaveRequestHelpers = {
 	// the supervisor's pre-auto-assign overview.
 	async getRequestsForMonth(base, monthLabel) {
 		try {
-			const { data, error } = await supabase
+			const { data, error } = await dbr
 				.from("ground_leave_requests")
 				.select("*")
 				.eq("base", base)
@@ -1066,7 +1067,7 @@ export const groundLeaveRequestHelpers = {
 
 	async getRequestsForEmployee(employeeId, monthLabel) {
 		try {
-			const { data, error } = await supabase
+			const { data, error } = await dbr
 				.from("ground_leave_requests")
 				.select("*")
 				.eq("employee_id", employeeId)

@@ -30,6 +30,7 @@ import {
 	getAllSchedulesForMonth,
 } from "../../lib/DataRoster";
 import { supabase, flightDutyHelpers } from "../../lib/supabase";
+import { dbr } from "../../lib/dbRead";
 import { minutesToDisplay } from "../../lib/pdxHelpers";
 import { exportDispatchPdf } from "../../lib/pdxPdfExport";
 import { isGroundStaff, isSpecialAdmin } from "../../lib/permissionHelpers";
@@ -697,7 +698,7 @@ export default function DashboardPage() {
 			// Covers the case where DataRoster cache still holds pre-swap data.
 			// approvedSwapMap: { "YYYY-MM-DD": swappedDutyString }
 			try {
-				const { data: swapRecords } = await supabase
+				const { data: swapRecords } = await dbr
 					.from("duty_change_requests")
 					.select(
 						"person_a_id, person_b_id, selected_dates, all_duties, person_a_duties",

@@ -17,6 +17,7 @@ import {
 	getAvailableMonths,
 } from "../../lib/DataRoster";
 import { supabase, flightDutyHelpers } from "../../lib/supabase";
+import { dbr } from "../../lib/dbRead";
 import { minutesToDisplay } from "../../lib/pdxHelpers";
 
 // ─── PDX date-matching helpers (mirrors dashboard logic) ────────────────────
@@ -212,7 +213,7 @@ export default function SchedulePage() {
 
 		const fetchSwapRequests = async () => {
 			try {
-				const { data, error } = await supabase
+				const { data, error } = await dbr
 					.from("duty_change_requests")
 					.select(
 						"person_a_id, person_b_id, selected_dates, all_duties, person_a_duties, status",

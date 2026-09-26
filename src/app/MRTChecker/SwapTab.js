@@ -7,6 +7,7 @@ import styles from "../../styles/SwapTab.module.css";
 import { employeeList, getEmployeeSchedule } from "../../lib/DataRoster";
 import { getFlightDutiesForMRTByMonth } from "../../lib/pdxHelpers";
 import { db } from "../../lib/dbWrite";
+import { dbr } from "../../lib/dbRead";
 import { dutyPdfBucket } from "../../lib/dutyPdfStorage";
 import {
 	runFatigueCheck,
@@ -424,7 +425,7 @@ export default function SwapTab() {
 		try {
 			const { supabase } = await import("../../lib/supabase");
 			const monthStr = `${year}年${String(month + 1).padStart(2, "0")}月`;
-			const { data } = await supabase
+			const { data } = await dbr
 				.from("duty_change_requests")
 				.select("id, person_a_id, person_a_name, person_b_id, person_b_name, selected_dates, all_duties, submitted_at")
 				.eq("status", "pending")
@@ -587,7 +588,7 @@ export default function SwapTab() {
 			]);
 
 			// 3. Delete PDF from storage
-			const { data: reqRow } = await supabase
+			const { data: reqRow } = await dbr
 				.from("duty_change_requests").select("pdf_storage_path").eq("id", importedReqId).maybeSingle();
 			if (reqRow?.pdf_storage_path) {
 				await dutyPdfBucket.remove([reqRow.pdf_storage_path]);
@@ -626,7 +627,7 @@ export default function SwapTab() {
 			if (denyErr) throw denyErr;
 
 			// 2. Delete PDF
-			const { data: reqRow } = await supabase
+			const { data: reqRow } = await dbr
 				.from("duty_change_requests").select("pdf_storage_path").eq("id", importedReqId).maybeSingle();
 			if (reqRow?.pdf_storage_path) {
 				await dutyPdfBucket.remove([reqRow.pdf_storage_path]);
