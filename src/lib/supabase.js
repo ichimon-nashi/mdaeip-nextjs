@@ -2,6 +2,13 @@ import { createClient } from "@supabase/supabase-js";
 import { db } from "./dbWrite";
 import { dbr } from "./dbRead";
 
+// flight_duty_records is closed to the public key: read it with the server
+// client on the server and through /api/db/read in the browser.
+const flightReader = async () =>
+	typeof window === "undefined"
+		? (await import("./supabaseAdmin")).supabaseAdmin
+		: dbr;
+
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
 
@@ -451,7 +458,7 @@ export const flightDutyHelpers = {
 	// Get available months for flight duty from flight_duty_records
 	getAvailableMonths: async () => {
 		try {
-			const { data, error } = await supabase
+			const { data, error } = await (await flightReader())
 				.from("flight_duty_records")
 				.select("month_id")
 				.order("month_id", { ascending: true });
@@ -482,7 +489,7 @@ export const flightDutyHelpers = {
 			console.log(`Fetching flight duties for month: ${month}`);
 
 			// Get all flight duties for that month
-			const { data, error } = await supabase
+			const { data, error } = await (await flightReader())
 				.from("flight_duty_records")
 				.select("*")
 				.eq("month_id", month);
@@ -516,7 +523,7 @@ export const flightDutyHelpers = {
 			);
 
 			// Get flight duty for specific employee
-			const { data, error } = await supabase
+			const { data, error } = await (await flightReader())
 				.from("flight_duty_records")
 				.select("*")
 				.eq("month_id", month)
@@ -656,7 +663,7 @@ export const flightDutyHelpers = {
 			}
 
 			// Get all months
-			const { data: allMonths, error: fetchError } = await supabase
+			const { data: allMonths, error: fetchError } = await (await flightReader())
 				.from("flight_duty_records")
 				.select("month_id")
 				.order("month_id", { ascending: true });
@@ -746,7 +753,7 @@ export const flightDutyHelpers = {
 
 			// Query for matching flight duty record
 			// First try special date, then fallback to regular schedule
-			let { data, error } = await supabase
+			let { data, error } = await (await flightReader())
 				.from("flight_duty_records")
 				.select("*")
 				.eq("month_id", month)
@@ -758,7 +765,7 @@ export const flightDutyHelpers = {
 
 			// If no special date found, try regular schedule
 			if (!data || data.length === 0) {
-				const result = await supabase
+				const result = await (await flightReader())
 					.from("flight_duty_records")
 					.select("*")
 					.eq("month_id", month)

@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from "react";
 import { Upload, Database, X, AlertTriangle } from "lucide-react";
 import toast from "react-hot-toast";
 import { supabase } from "../../lib/supabase";
+import { dbr } from "../../lib/dbRead";
 import {
 	pdxMonthHelpers,
 	pdxDutyHelpers,
@@ -427,7 +428,7 @@ export default function DispatchImport({
 
 	async function loadDbMonths() {
 		setLoadingDbMonths(true);
-		const { data, error } = await supabase
+		const { data, error } = await dbr
 			.from("flight_duty_records")
 			.select("month_id")
 			.order("month_id", { ascending: false });
@@ -592,7 +593,7 @@ export default function DispatchImport({
 		toast("從資料庫載入中...", { icon: "⏳" });
 
 		try {
-			const { data: records, error } = await supabase
+			const { data: records, error } = await dbr
 				.from("flight_duty_records")
 				.select("*")
 				.eq("month_id", selectedDbMonth)

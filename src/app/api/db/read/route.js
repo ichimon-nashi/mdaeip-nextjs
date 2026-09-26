@@ -19,6 +19,8 @@ const READ_PERMISSIONS = {
 	// FleetTab, schedule page, duty-change review, DutyChangeImport)
 	mdaeip_schedules: ["*"],
 	schedule_day_overrides: ["*"],
+	// Per-employee flight duties (flightDutyHelpers in lib/supabase.js, DispatchImport)
+	flight_duty_records: ["*"],
 	// Ground schedules (groundHelpers.js, ground-schedule page)
 	ground_schedules: GROUND,
 };
