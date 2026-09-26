@@ -92,6 +92,8 @@ export const scheduleHelpers = {
 		resolvedConflicts = null
 	) => {
 	try {
+			// Server-only client: this table is read-only to the public key
+			const { supabaseAdmin: supabase } = await import("./supabaseAdmin");
 		if (userAccessLevel !== 99) {
 			return { error: "Admin access required" };
 		}
@@ -233,6 +235,8 @@ export const scheduleHelpers = {
 		userAccessLevel
 	) => {
 		try {
+			// Server-only client: this table is read-only to the public key
+			const { supabaseAdmin: supabase } = await import("./supabaseAdmin");
 			if (userAccessLevel !== 99) {
 				return { error: "Admin access required" };
 			}
@@ -289,6 +293,8 @@ export const scheduleHelpers = {
 	// Delete schedule data for a specific month
 	deleteMonthSchedule: async (month, userAccessLevel) => {
 		try {
+			// Server-only client: this table is read-only to the public key
+			const { supabaseAdmin: supabase } = await import("./supabaseAdmin");
 			if (userAccessLevel !== 99) {
 				return { error: "Admin access required" };
 			}
@@ -344,6 +350,8 @@ export const scheduleHelpers = {
 	// Clean up old schedule data (keep only current month ± 1)
 	cleanupOldSchedules: async (currentMonth, userAccessLevel) => {
 		try {
+			// Server-only client: this table is read-only to the public key
+			const { supabaseAdmin: supabase } = await import("./supabaseAdmin");
 			if (userAccessLevel !== 99) {
 				return { error: "Admin access required" };
 			}
@@ -530,6 +538,8 @@ export const flightDutyHelpers = {
 	// Upload/update flight duty data - for array format with duties
 	upsertMonthFlightDuty: async (month, flightDutyData, userAccessLevel) => {
 	try {
+			// Server-only client: this table is read-only to the public key
+			const { supabaseAdmin: supabase } = await import("./supabaseAdmin");
 		if (userAccessLevel !== 99) {
 			return { error: "Admin access required" };
 		}
@@ -607,6 +617,8 @@ export const flightDutyHelpers = {
 	// Delete flight duty data for a specific month
 	deleteMonthFlightDuty: async (month, userAccessLevel) => {
 		try {
+			// Server-only client: this table is read-only to the public key
+			const { supabaseAdmin: supabase } = await import("./supabaseAdmin");
 			if (userAccessLevel !== 99) {
 				return { error: "Admin access required" };
 			}
@@ -635,6 +647,8 @@ export const flightDutyHelpers = {
 	// Clean up old flight duty data (keep only current month ± 1)
 	cleanupOldFlightDuties: async (currentMonth, userAccessLevel) => {
 		try {
+			// Server-only client: this table is read-only to the public key
+			const { supabaseAdmin: supabase } = await import("./supabaseAdmin");
 			if (userAccessLevel !== 99) {
 				return { error: "Admin access required" };
 			}

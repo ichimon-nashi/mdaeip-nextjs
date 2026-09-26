@@ -33,6 +33,7 @@ import {
 import { useAuth } from "../../contexts/AuthContext";
 import { useRouter } from "next/navigation";
 import { hasAppAccess } from "../../lib/permissionHelpers";
+import { db } from "../../lib/dbWrite";
 import toast from "react-hot-toast";
 
 const MRTChecker = () => {
@@ -1363,7 +1364,7 @@ const MRTChecker = () => {
 			const originalDuties = preUpsertRow?.duties || [];
 
 			// Upsert the schedule row
-			const { error: upsertErr } = await supabase
+			const { error: upsertErr } = await db
 				.from("mdaeip_schedules")
 				.upsert(
 					{
@@ -1433,7 +1434,7 @@ const MRTChecker = () => {
 						const dutyBase =
 							normalizeDutyCode(duty.code) ||
 							duty.code.split("\\")[0];
-						await supabase.from("schedule_day_overrides").upsert(
+						await db.from("schedule_day_overrides").upsert(
 							{
 								employee_id: targetUserId,
 								month_id: monthRow.id,
@@ -1482,7 +1483,7 @@ const MRTChecker = () => {
 							const et = (dropped?.endTime && dropped.endTime !== "00:00")
 								? dropped.endTime
 								: (preset?.endTime || null);
-							return supabase.from("schedule_day_overrides").upsert(
+							return db.from("schedule_day_overrides").upsert(
 								{
 									employee_id:      targetUserId,
 									month_id:         monthRow.id,
@@ -1530,7 +1531,7 @@ const MRTChecker = () => {
 					return;
 				}
 
-				const { error } = await supabase
+				const { error } = await db
 					.from("schedule_day_overrides")
 					.upsert(
 						{
@@ -1569,7 +1570,7 @@ const MRTChecker = () => {
 						...(schedRow.duties || Array(totalDays).fill("")),
 					];
 					duties[day - 1] = form.code;
-					await supabase
+					await db
 						.from("mdaeip_schedules")
 						.upsert(
 							{
@@ -1698,7 +1699,7 @@ const MRTChecker = () => {
 						: dutyBase;
 
 				// Upsert override row with extra_sectors + additional_tasks
-				const { error } = await supabase
+				const { error } = await db
 					.from("schedule_day_overrides")
 					.upsert(
 						{
@@ -1739,7 +1740,7 @@ const MRTChecker = () => {
 						...(schedRow.duties || Array(totalDays).fill("")),
 					];
 					duties[day - 1] = newCode;
-					await supabase
+					await db
 						.from("mdaeip_schedules")
 						.upsert(
 							{

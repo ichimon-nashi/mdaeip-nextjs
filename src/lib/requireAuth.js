@@ -16,7 +16,7 @@ export async function requireAuth(request, { admin = false } = {}) {
 
 	const { data: user, error } = await supabaseAdmin
 		.from("mdaeip_users")
-		.select("id, access_level, is_active")
+		.select("id, access_level, is_active, app_permissions")
 		.eq("id", userId)
 		.maybeSingle();
 
