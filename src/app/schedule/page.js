@@ -191,64 +191,15 @@ export default function SchedulePage() {
 
 	// ── NEW: purge old duty_change_requests (prior months) ───────────────────
 	const purgeOldDutyChangeRequests = async () => {
+		// Runs on the server (duty_change_requests is read-only to the public key)
 		try {
-			const { year: curYear, month: curMonth } = getCurrentYearMonth();
-
-			// Fetch all distinct months in the table
-			const { data: allRecords, error } = await supabase
-				.from("duty_change_requests")
-				.select("id, month, pdf_storage_path");
-
-			if (error || !allRecords?.length) return;
-
-			// Find records from months strictly before the current real month
-			const staleRecords = allRecords.filter((record) => {
-				const parsed = parseMonthString(record.month);
-				if (!parsed) return false;
-				// Before current year, or same year but before current month
-				return (
-					parsed.year < curYear ||
-					(parsed.year === curYear && parsed.month < curMonth)
-				);
+			const token = localStorage.getItem("mdaeip_token");
+			const res = await fetch("/api/duty-change/purge", {
+				method: "POST",
+				headers: token ? { Authorization: `Bearer ${token}` } : {},
 			});
-
-			if (!staleRecords.length) return;
-
-			console.log(
-				`Purging ${staleRecords.length} stale duty change request(s)...`,
-			);
-
-			// Delete PDFs from Storage first
-			const pathsToDelete = staleRecords
-				.map((r) => r.pdf_storage_path)
-				.filter(Boolean);
-
-			if (pathsToDelete.length) {
-				const { error: storageErr } = await supabase.storage
-					.from("duty-change-pdfs")
-					.remove(pathsToDelete);
-				if (storageErr) {
-					console.error(
-						"Error deleting stale PDFs from storage:",
-						storageErr,
-					);
-				}
-			}
-
-			// Delete DB records
-			const staleIds = staleRecords.map((r) => r.id);
-			const { error: deleteErr } = await supabase
-				.from("duty_change_requests")
-				.delete()
-				.in("id", staleIds);
-
-			if (deleteErr) {
-				console.error(
-					"Error purging stale duty change requests:",
-					deleteErr,
-				);
-			} else {
-				console.log("Stale duty change requests purged successfully.");
+			if (!res.ok) {
+				console.error("Error purging stale duty change requests:", res.status);
 			}
 		} catch (err) {
 			console.error("Unexpected error during duty change purge:", err);

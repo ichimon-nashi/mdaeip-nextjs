@@ -10,6 +10,7 @@ import {
 	getEmployeeSchedule,
 } from "../../lib/DataRoster";
 import { supabase } from "../../lib/supabase";
+import { db } from "../../lib/dbWrite";
 import { minutesToDisplay } from "../../lib/pdxHelpers";
 import toast from "react-hot-toast";
 
@@ -565,7 +566,7 @@ function DutyChangeContent() {
 		ftDeltaA,
 		ftDeltaB,
 	}) => {
-		const { error } = await supabase
+		const { error } = await db
 			.from("duty_change_requests")
 			.insert({
 				month:                    formData.selectedMonth,
