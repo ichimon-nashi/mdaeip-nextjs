@@ -6,14 +6,15 @@
 import { NextResponse } from "next/server";
 import { requireAuth } from "../../../../lib/requireAuth";
 import { supabaseAdmin } from "../../../../lib/supabaseAdmin";
-import { hasAppAccess } from "../../../../lib/permissionHelpers";
+import { hasAppAccess, isSpecialAdmin } from "../../../../lib/permissionHelpers";
 
 // Pages that edit schedules: MRTChecker (+ its tabs) and duty-change review
 const SCHEDULE_EDITORS = ["mrt_checker", "dispatch", "duty_change_review"];
 const DISPATCH = ["dispatch"];
 const ETR = ["etr_generator"];
 
-// table → operation → app permissions allowed ("*" = any logged-in user).
+// table → operation → app permissions allowed ("*" = any logged-in user,
+// "admin" = access level 99 or a special admin).
 // Anything not listed here is refused.
 const PERMISSIONS = {
 	mdaeip_schedules: { upsert: SCHEDULE_EDITORS, update: SCHEDULE_EDITORS },
@@ -30,6 +31,8 @@ const PERMISSIONS = {
 	// ETR generator (bulletinHelpers / remarksHelpers in lib/supabase.js)
 	mdaeip_bulletin: { insert: ETR, update: ETR, delete: ETR },
 	mdaeip_additional_remark: { insert: ETR, update: ETR, delete: ETR },
+	// FAQ editor — admins only (see "admin" below)
+	mdaeip_faq_entries: { insert: ["admin"], update: ["admin"], delete: ["admin"] },
 };
 
 const FILTERS = ["eq", "neq", "in", "is", "lt", "lte", "gt", "gte", "match"];
@@ -48,7 +51,12 @@ export async function POST(request) {
 
 		const allowed = PERMISSIONS[table]?.[op];
 		if (!allowed) return bad(403, `Write not allowed: ${op} on ${table}`);
-		if (!allowed.includes("*") && !allowed.some((app) => hasAppAccess(auth.user, app))) {
+		const isAdmin = auth.user.access_level === 99 || isSpecialAdmin(auth.user);
+		if (
+			!allowed.includes("*") &&
+			!(allowed.includes("admin") && isAdmin) &&
+			!allowed.some((app) => app !== "admin" && hasAppAccess(auth.user, app))
+		) {
 			return bad(403, "No permission for this write");
 		}
 		if ((op === "update" || op === "delete") && filters.length === 0) {
