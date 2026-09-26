@@ -31,6 +31,7 @@ import {
 	formatDateHeader,
 } from "../../lib/groundHelpers";
 import { supabase } from "../../lib/supabase";
+import { db } from "../../lib/dbWrite";
 
 // ── Constants ────────────────────────────────────────────────────────────────
 const MAX_DUTY_CHANGES = 5;
@@ -329,7 +330,7 @@ const DutyChangeRecords = ({ user, currentMonth }) => {
 	}, [loadRecords]);
 
 	const handleApprove = async (rec) => {
-		const { error } = await supabase
+		const { error } = await db
 			.from("ground_duty_change_requests")
 			.update({
 				status: "approved",
@@ -397,7 +398,7 @@ const DutyChangeRecords = ({ user, currentMonth }) => {
 	};
 
 	const handleDeny = async (id) => {
-		const { error } = await supabase
+		const { error } = await db
 			.from("ground_duty_change_requests")
 			.update({
 				status: "denied",
@@ -417,7 +418,7 @@ const DutyChangeRecords = ({ user, currentMonth }) => {
 
 	const handleDelete = async (id) => {
 		if (!window.confirm("確定刪除此筆換班記錄？")) return;
-		const { error } = await supabase
+		const { error } = await db
 			.from("ground_duty_change_requests")
 			.delete()
 			.eq("id", id);
@@ -433,7 +434,7 @@ const DutyChangeRecords = ({ user, currentMonth }) => {
 	const handleDeleteSelected = async () => {
 		if (!selectedIds.length) return;
 		if (!window.confirm(`確定刪除 ${selectedIds.length} 筆記錄？`)) return;
-		const { error } = await supabase
+		const { error } = await db
 			.from("ground_duty_change_requests")
 			.delete()
 			.in("id", selectedIds);
@@ -1222,7 +1223,7 @@ export default function GroundSchedulePage() {
 					: null,
 				reviewed_at: isAutoApprove ? new Date().toISOString() : null,
 			}));
-			const { error: insertErr } = await supabase
+			const { error: insertErr } = await db
 				.from("ground_duty_change_requests")
 				.insert(inserts);
 			if (insertErr) throw new Error(insertErr.message);

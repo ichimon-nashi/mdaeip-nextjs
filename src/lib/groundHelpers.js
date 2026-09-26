@@ -2,6 +2,7 @@
 // Ground staff employee list and schedule helpers for MDAEIP
 
 import { supabase } from "./supabase";
+import { db } from "./dbWrite";
 
 // ── Ground staff cache (mirrors DataRoster cache pattern) ────────────────────
 const groundScheduleCache = new Map();
@@ -409,7 +410,7 @@ export const groundScheduleHelpers = {
 	// Upsert a single employee's schedule for a month
 	async upsertEmployeeSchedule(employeeId, monthLabel, base, schedule) {
 		try {
-			const { data, error } = await supabase
+			const { data, error } = await db
 				.from("ground_schedules")
 				.upsert(
 					{
@@ -435,7 +436,7 @@ export const groundScheduleHelpers = {
 	async upsertBaseSchedule(monthLabel, base, schedules) {
 		try {
 			// Ensure month record exists for this base
-			await supabase
+			await db
 				.from("ground_schedule_months")
 				.upsert(
 					{
@@ -454,7 +455,7 @@ export const groundScheduleHelpers = {
 				schedule: s.schedule,
 			}));
 
-			const { data, error } = await supabase
+			const { data, error } = await db
 				.from("ground_schedules")
 				.upsert(records, { onConflict: "employee_id,month_label" })
 				.select();
@@ -475,7 +476,7 @@ export const groundScheduleHelpers = {
 			if (!yearMatch || !monthMatch)
 				return { error: "Invalid month format" };
 
-			const { error } = await supabase
+			const { error } = await db
 				.from("ground_schedule_months")
 				.upsert(
 					{
@@ -525,7 +526,7 @@ export const groundScheduleHelpers = {
 			const monthMatch = monthLabel.match(/(\d{2})月/);
 			if (!yearMatch || !monthMatch) return { error: "Invalid month format" };
 
-			const { error } = await supabase
+			const { error } = await db
 				.from("ground_schedule_months")
 				.upsert(
 					{
@@ -605,7 +606,7 @@ export const groundDayOffHelpers = {
 	// Prevents duplicate requests for the same date
 	async submitRequest(employeeId, monthLabel, requestedDate) {
 		try {
-			const { data, error } = await supabase
+			const { data, error } = await db
 				.from("ground_dayoff_requests")
 				.upsert(
 					{
@@ -628,7 +629,7 @@ export const groundDayOffHelpers = {
 	// Cancel a pending day-off request (employee taps pending cell again)
 	async cancelRequest(employeeId, requestedDate) {
 		try {
-			const { error } = await supabase
+			const { error } = await db
 				.from("ground_dayoff_requests")
 				.delete()
 				.eq("employee_id", employeeId)
@@ -645,7 +646,7 @@ export const groundDayOffHelpers = {
 	// Supervisor approve a request
 	async approveRequest(requestId) {
 		try {
-			const { data, error } = await supabase
+			const { data, error } = await db
 				.from("ground_dayoff_requests")
 				.update({ status: "approved" })
 				.eq("id", requestId)
@@ -661,7 +662,7 @@ export const groundDayOffHelpers = {
 	// Supervisor deny a request
 	async denyRequest(requestId) {
 		try {
-			const { data, error } = await supabase
+			const { data, error } = await db
 				.from("ground_dayoff_requests")
 				.update({ status: "denied" })
 				.eq("id", requestId)
@@ -1011,7 +1012,7 @@ export const groundLeaveRequestHelpers = {
 				return { data: null, error: null, rejected: true, reason: availability.reason };
 			}
 
-			const { data, error } = await supabase
+			const { data, error } = await db
 				.from("ground_leave_requests")
 				.insert({
 					employee_id: employeeId,
@@ -1032,7 +1033,7 @@ export const groundLeaveRequestHelpers = {
 
 	async cancelRequest(requestId) {
 		try {
-			const { data, error } = await supabase
+			const { data, error } = await db
 				.from("ground_leave_requests")
 				.update({ status: "cancelled" })
 				.eq("id", requestId)

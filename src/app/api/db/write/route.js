@@ -12,6 +12,7 @@ import { hasAppAccess, isSpecialAdmin } from "../../../../lib/permissionHelpers"
 const SCHEDULE_EDITORS = ["mrt_checker", "dispatch", "duty_change_review"];
 const DISPATCH = ["dispatch"];
 const ETR = ["etr_generator"];
+const GROUND = ["ground_roster", "ground_schedule"];
 
 // table → operation → app permissions allowed ("*" = any logged-in user,
 // "admin" = access level 99 or a special admin).
@@ -31,6 +32,13 @@ const PERMISSIONS = {
 	// ETR generator (bulletinHelpers / remarksHelpers in lib/supabase.js)
 	mdaeip_bulletin: { insert: ETR, update: ETR, delete: ETR },
 	mdaeip_additional_remark: { insert: ETR, update: ETR, delete: ETR },
+	// Ground staff (groundHelpers.js + ground-schedule page). Supervisor vs
+	// staff is decided by rank in the UI, so both ground apps may write.
+	ground_schedules: { upsert: GROUND },
+	ground_schedule_months: { upsert: GROUND },
+	ground_dayoff_requests: { upsert: GROUND, update: GROUND, delete: GROUND },
+	ground_leave_requests: { insert: GROUND, update: GROUND },
+	ground_duty_change_requests: { insert: GROUND, update: GROUND, delete: GROUND },
 	// FAQ editor — admins only (see "admin" below)
 	mdaeip_faq_entries: { insert: ["admin"], update: ["admin"], delete: ["admin"] },
 };
