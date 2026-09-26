@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import toast from "react-hot-toast";
 import { supabase } from "../../lib/supabase";
+import { db } from "../../lib/dbWrite";
 import { pdxMonthHelpers, monthLabel, daysInMonth } from "../../lib/pdxHelpers";
 import DispatchImport from "./DispatchImport";
 import styles from "../../styles/DispatchDashboard.module.css";
@@ -129,7 +130,7 @@ export default function DispatchDashboard({ onSelectMonth }) {
 		e.stopPropagation();
 		const newRevision = (m.revision || 0) + 1;
 		setUpdatingId(m.id);
-		const { error } = await supabase
+		const { error } = await db
 			.from("pdx_months")
 			.update({ revision: newRevision })
 			.eq("id", m.id);
@@ -150,7 +151,7 @@ export default function DispatchDashboard({ onSelectMonth }) {
 		e.stopPropagation();
 		const newRevision = Math.max(0, (m.revision || 0) - 1);
 		setUpdatingId(m.id);
-		const { error } = await supabase
+		const { error } = await db
 			.from("pdx_months")
 			.update({ revision: newRevision })
 			.eq("id", m.id);
