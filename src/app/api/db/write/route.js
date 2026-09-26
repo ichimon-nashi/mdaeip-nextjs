@@ -10,16 +10,20 @@ import { hasAppAccess } from "../../../../lib/permissionHelpers";
 
 // Pages that edit schedules: MRTChecker (+ its tabs) and duty-change review
 const SCHEDULE_EDITORS = ["mrt_checker", "dispatch", "duty_change_review"];
+const DISPATCH = ["dispatch"];
 
 // table → operation → app permissions allowed ("*" = any logged-in user).
 // Anything not listed here is refused.
 const PERMISSIONS = {
 	mdaeip_schedules: { upsert: SCHEDULE_EDITORS, update: SCHEDULE_EDITORS },
 	schedule_day_overrides: { upsert: SCHEDULE_EDITORS },
-	// Approve/deny/clear-PDF (review page, SwapTab) and swap records (SwapTab)
 	// Crew submit (duty-change page, any logged-in user); approve/deny and
 	// swap records by editors. Stale-request purge has its own route.
 	duty_change_requests: { insert: ["*"], update: SCHEDULE_EDITORS },
+	// Dispatch (PDX) — pdxHelpers, DispatchDashboard, DispatchMonthView
+	pdx_months: { insert: DISPATCH, update: DISPATCH, delete: DISPATCH },
+	pdx_duties: { insert: DISPATCH, update: DISPATCH, delete: DISPATCH },
+	pdx_sectors: { insert: DISPATCH, delete: DISPATCH },
 };
 
 const FILTERS = ["eq", "neq", "in", "is", "lt", "lte", "gt", "gte", "match"];

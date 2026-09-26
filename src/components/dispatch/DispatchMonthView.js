@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import toast from "react-hot-toast";
 import { supabase } from "../../lib/supabase";
+import { db } from "../../lib/dbWrite";
 
 // Module-level store: persists accordion collapsed state across component remounts
 // keyed by month.id so each month remembers its own state
@@ -406,7 +407,7 @@ export default function DispatchMonthView({
 			const newRevision = isFirstEverPublish
 				? 0
 				: (fresh?.revision || 0) + 1;
-			const { error } = await supabase
+			const { error } = await db
 				.from("pdx_months")
 				.update({
 					status: "published",

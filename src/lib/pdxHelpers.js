@@ -1,4 +1,5 @@
 import { supabase } from "./supabase";
+import { db } from "./dbWrite";
 
 // ─── MONTHS ──────────────────────────────────────────────────────────────────
 
@@ -35,7 +36,7 @@ export const pdxMonthHelpers = {
 
 	async create(year, month, createdBy = null) {
 		try {
-			const { data, error } = await supabase
+			const { data, error } = await db
 				.from("pdx_months")
 				.insert([
 					{
@@ -58,7 +59,7 @@ export const pdxMonthHelpers = {
 
 	async updateYearMonth(id, year, month) {
 		try {
-			const { data, error } = await supabase
+			const { data, error } = await db
 				.from("pdx_months")
 				.update({ year, month })
 				.eq("id", id)
@@ -77,7 +78,7 @@ export const pdxMonthHelpers = {
 			const updates = { status };
 			if (status === "published")
 				updates.published_at = new Date().toISOString();
-			const { data, error } = await supabase
+			const { data, error } = await db
 				.from("pdx_months")
 				.update(updates)
 				.eq("id", id)
@@ -94,7 +95,7 @@ export const pdxMonthHelpers = {
 	async delete(id) {
 		try {
 			// CASCADE will delete duties + sectors automatically
-			const { error } = await supabase
+			const { error } = await db
 				.from("pdx_months")
 				.delete()
 				.eq("id", id);
@@ -172,7 +173,7 @@ export const pdxMonthHelpers = {
 						: duty.specific_dates,
 				};
 
-				const { data: newDuty, error: newDutyError } = await supabase
+				const { data: newDuty, error: newDutyError } = await db
 					.from("pdx_duties")
 					.insert([remappedDuty])
 					.select()
@@ -195,7 +196,7 @@ export const pdxMonthHelpers = {
 							duty_id: newDuty.id,
 						}),
 					);
-					const { error: sectorsError } = await supabase
+					const { error: sectorsError } = await db
 						.from("pdx_sectors")
 						.insert(newSectors);
 					if (sectorsError) throw sectorsError;
@@ -246,7 +247,7 @@ export const pdxDutyHelpers = {
 
 	async create(dutyData) {
 		try {
-			const { data, error } = await supabase
+			const { data, error } = await db
 				.from("pdx_duties")
 				.insert([dutyData])
 				.select()
@@ -261,7 +262,7 @@ export const pdxDutyHelpers = {
 
 	async update(id, updates) {
 		try {
-			const { data, error } = await supabase
+			const { data, error } = await db
 				.from("pdx_duties")
 				.update(updates)
 				.eq("id", id)
@@ -278,7 +279,7 @@ export const pdxDutyHelpers = {
 	async delete(id) {
 		try {
 			// CASCADE will delete sectors automatically
-			const { error } = await supabase
+			const { error } = await db
 				.from("pdx_duties")
 				.delete()
 				.eq("id", id);
@@ -313,7 +314,7 @@ export const pdxSectorHelpers = {
 	async replaceAll(dutyId, sectors) {
 		try {
 			// Delete existing
-			const { error: deleteError } = await supabase
+			const { error: deleteError } = await db
 				.from("pdx_sectors")
 				.delete()
 				.eq("duty_id", dutyId);
@@ -334,7 +335,7 @@ export const pdxSectorHelpers = {
 				aircraft_type: s.aircraft_type || null,
 			}));
 
-			const { data, error } = await supabase
+			const { data, error } = await db
 				.from("pdx_sectors")
 				.insert(toInsert)
 				.select();
