@@ -1,4 +1,5 @@
-import { supabase } from "../../../lib/supabase";
+import { supabaseAdmin as supabase } from "../../../lib/supabaseAdmin";
+import { requireAuth } from "../../../lib/requireAuth";
 import bcrypt from "bcryptjs";
 import crypto from "crypto";
 import { NextResponse } from "next/server";
@@ -18,12 +19,8 @@ export async function GET(request) {
 		const { searchParams } = new URL(request.url);
 		const userAccessLevel = searchParams.get("userAccessLevel");
 
-		if (!userAccessLevel || parseInt(userAccessLevel) !== 99) {
-			return NextResponse.json(
-				{ success: false, error: "Access denied. Admin privileges required." },
-				{ status: 403 }
-			);
-		}
+		const auth = await requireAuth(request, { admin: true });
+		if (auth.error) return auth.error;
 
 		const { data, error } = await supabase
 			.from("mdaeip_users")
@@ -53,12 +50,8 @@ export async function POST(request) {
 	try {
 		const { userData, userAccessLevel } = await request.json();
 
-		if (!userAccessLevel || parseInt(userAccessLevel) !== 99) {
-			return NextResponse.json(
-				{ success: false, error: "Access denied. Admin privileges required." },
-				{ status: 403 }
-			);
-		}
+		const auth = await requireAuth(request, { admin: true });
+		if (auth.error) return auth.error;
 
 		const { id, name, rank, base, access_level, password, app_permissions, gender, avatar_gif } = userData;
 
@@ -125,12 +118,8 @@ export async function PUT(request) {
 	try {
 		const { userData, userAccessLevel } = await request.json();
 
-		if (!userAccessLevel || parseInt(userAccessLevel) !== 99) {
-			return NextResponse.json(
-				{ success: false, error: "Access denied. Admin privileges required." },
-				{ status: 403 }
-			);
-		}
+		const auth = await requireAuth(request, { admin: true });
+		if (auth.error) return auth.error;
 
 		const { id, name, rank, base, access_level, password, app_permissions, gender, avatar_gif, is_active } = userData;
 
@@ -199,12 +188,8 @@ export async function DELETE(request) {
 	try {
 		const { userId, userAccessLevel } = await request.json();
 
-		if (!userAccessLevel || parseInt(userAccessLevel) !== 99) {
-			return NextResponse.json(
-				{ success: false, error: "Access denied. Admin privileges required." },
-				{ status: 403 }
-			);
-		}
+		const auth = await requireAuth(request, { admin: true });
+		if (auth.error) return auth.error;
 
 		if (!userId) {
 			return NextResponse.json(

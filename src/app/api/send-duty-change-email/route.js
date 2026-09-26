@@ -2,9 +2,14 @@
 // Enhanced: User email copy + Resend fallback
 
 import { NextResponse } from 'next/server';
+import { requireAuth } from '../../../lib/requireAuth';
 
 export async function POST(request) {
   try {
+    // Only logged-in users may send (verified login token)
+    const auth = await requireAuth(request);
+    if (auth.error) return auth.error;
+
     console.log('=== Email API Called ===');
     console.log('Brevo API Key exists:', !!process.env.BREVO_API_KEY);
     console.log('Resend API Key exists:', !!process.env.RESEND_API_KEY);

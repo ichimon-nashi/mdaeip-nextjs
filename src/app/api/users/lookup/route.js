@@ -1,6 +1,7 @@
 import { employeeList } from "../../../../lib/DataRoster";
 import { groundEmployeeList } from "../../../../lib/groundHelpers";
 import { NextResponse } from "next/server";
+import { requireAuth } from "../../../../lib/requireAuth";
 
 export async function GET(request) {
 	try {
@@ -9,15 +10,8 @@ export async function GET(request) {
 		const userAccessLevel = searchParams.get("userAccessLevel");
 
 		// Check if user has admin access
-		if (!userAccessLevel || parseInt(userAccessLevel) !== 99) {
-			return NextResponse.json(
-				{
-					success: false,
-					error: "Access denied. Admin privileges required.",
-				},
-				{ status: 403 }
-			);
-		}
+		const auth = await requireAuth(request, { admin: true });
+		if (auth.error) return auth.error;
 
 		if (!employeeId) {
 			return NextResponse.json(

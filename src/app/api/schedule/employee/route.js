@@ -1,19 +1,16 @@
 // TARGET PATH: app/api/schedule/employee/route.js
 import { scheduleHelpers } from "../../../../lib/supabase";
 import { NextResponse } from "next/server";
+import { requireAuth } from "../../../../lib/requireAuth";
 
 export async function POST(request) {
 	try {
 		const { month, employeeId, duties, userId, userAccessLevel } =
 			await request.json();
 
-		// Check admin privileges
-		if (userAccessLevel !== 99) {
-			return NextResponse.json(
-				{ error: "Admin access required" },
-				{ status: 403 }
-			);
-		}
+		// Check admin privileges (verified login token + access level from DB)
+		const auth = await requireAuth(request, { admin: true });
+		if (auth.error) return auth.error;
 
 		const result = await scheduleHelpers.upsertEmployeeSchedule(
 			month,

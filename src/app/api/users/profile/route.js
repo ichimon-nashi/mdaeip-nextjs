@@ -1,4 +1,5 @@
-import { supabase } from "../../../../lib/supabase";
+import { supabaseAdmin as supabase } from "../../../../lib/supabaseAdmin";
+import { requireAuth } from "../../../../lib/requireAuth";
 import { NextResponse } from "next/server";
 
 // GET - Fetch a single user's full profile by ID (used by AuthContext on init)
@@ -11,6 +12,16 @@ export async function GET(request) {
 			return NextResponse.json(
 				{ success: false, error: "User ID is required" },
 				{ status: 400 }
+			);
+		}
+
+		// Only your own profile (admins may read any)
+		const auth = await requireAuth(request);
+		if (auth.error) return auth.error;
+		if (auth.user.id !== id && auth.user.access_level !== 99) {
+			return NextResponse.json(
+				{ success: false, error: "Access denied" },
+				{ status: 403 }
 			);
 		}
 
