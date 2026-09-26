@@ -1,5 +1,6 @@
 import { createClient } from "@supabase/supabase-js";
 import { db } from "./dbWrite";
+import { dbr } from "./dbRead";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
@@ -54,7 +55,7 @@ export const scheduleHelpers = {
 			}
 
 			// Then get all schedules for that month
-			const { data, error } = await supabase
+			const { data, error } = await dbr
 				.from("mdaeip_schedules")
 				.select("employee_id, duties")
 				.eq("month_id", monthData.id);

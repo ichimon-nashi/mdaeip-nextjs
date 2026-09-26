@@ -478,7 +478,7 @@ export default function DashboardPage() {
 						.eq("month", label)
 						.single();
 					if (!mRow2) continue;
-					const { data: ovs2 } = await supabase
+					const { data: ovs2 } = await dbr
 						.from("schedule_day_overrides")
 						.select(
 							"day, duty_code, start_time, end_time, extra_sectors, additional_tasks, is_special",
@@ -747,7 +747,7 @@ export default function DashboardPage() {
 							.eq("month", label)
 							.single();
 						if (!mRow) continue;
-						const { data: ovs } = await supabase
+						const { data: ovs } = await dbr
 							.from("schedule_day_overrides")
 							.select(
 								"day, duty_code, start_time, end_time, extra_sectors, additional_tasks, is_special",

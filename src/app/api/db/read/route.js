@@ -15,6 +15,12 @@ const READ_PERMISSIONS = {
 	duty_change_requests: ["*"],
 	ground_dayoff_requests: GROUND,
 	ground_leave_requests: GROUND,
+	// Crew schedules (DataRoster via lib/supabase.js, dashboard, MRTChecker,
+	// FleetTab, schedule page, duty-change review, DutyChangeImport)
+	mdaeip_schedules: ["*"],
+	schedule_day_overrides: ["*"],
+	// Ground schedules (groundHelpers.js, ground-schedule page)
+	ground_schedules: GROUND,
 };
 
 const CHAIN = ["eq", "neq", "in", "is", "lt", "lte", "gt", "gte", "match", "not", "or", "order", "limit", "range"];

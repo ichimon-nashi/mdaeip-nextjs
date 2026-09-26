@@ -34,6 +34,7 @@ import { useAuth } from "../../contexts/AuthContext";
 import { useRouter } from "next/navigation";
 import { hasAppAccess } from "../../lib/permissionHelpers";
 import { db } from "../../lib/dbWrite";
+import { dbr } from "../../lib/dbRead";
 import toast from "react-hot-toast";
 
 const MRTChecker = () => {
@@ -784,7 +785,7 @@ const MRTChecker = () => {
 						.eq("month", monthStr)
 						.single();
 					if (monthRow) {
-						const { data: overrides } = await supabase
+						const { data: overrides } = await dbr
 							.from("schedule_day_overrides")
 							.select(
 								"day, duty_code, start_time, end_time, is_special, note, extra_sectors, additional_tasks",
@@ -1355,7 +1356,7 @@ const MRTChecker = () => {
 			}
 
 			// Fetch original duties BEFORE overwriting — used later for override detection
-			const { data: preUpsertRow } = await supabase
+			const { data: preUpsertRow } = await dbr
 				.from("mdaeip_schedules")
 				.select("duties")
 				.eq("month_id", monthRow.id)
@@ -1559,7 +1560,7 @@ const MRTChecker = () => {
 					currentMonth + 1,
 					0,
 				).getDate();
-				const { data: schedRow } = await supabase
+				const { data: schedRow } = await dbr
 					.from("mdaeip_schedules")
 					.select("duties")
 					.eq("employee_id", targetUserId)
@@ -1729,7 +1730,7 @@ const MRTChecker = () => {
 					currentMonth + 1,
 					0,
 				).getDate();
-				const { data: schedRow } = await supabase
+				const { data: schedRow } = await dbr
 					.from("mdaeip_schedules")
 					.select("duties")
 					.eq("employee_id", targetUserId)

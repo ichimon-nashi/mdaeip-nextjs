@@ -8,6 +8,7 @@ import { employeeList, getEmployeeSchedule, clearScheduleCache } from "../../lib
 import { normalizeDutyCode } from "../../lib/fatigueHelpers";
 import { useAuth } from "../../contexts/AuthContext";
 import { db } from "../../lib/dbWrite";
+import { dbr } from "../../lib/dbRead";
 
 // S = inspection/audit, T = HSR travel. Handles concatenated ("X4S","H2T") and
 // slash ("X4/S","H2/T") suffix forms, and the "T/H2" prefix form (HSR before duty).
@@ -299,7 +300,7 @@ export default function DutyChangeImport() {
 			const failures = [];
 			for (const [employeeId, empRows] of Object.entries(byEmployee)) {
 				try {
-					const { data: schedRow, error: readErr } = await supabase
+					const { data: schedRow, error: readErr } = await dbr
 						.from("mdaeip_schedules")
 						.select("duties")
 						.eq("employee_id", employeeId)

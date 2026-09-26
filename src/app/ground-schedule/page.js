@@ -32,6 +32,7 @@ import {
 } from "../../lib/groundHelpers";
 import { supabase } from "../../lib/supabase";
 import { db } from "../../lib/dbWrite";
+import { dbr } from "../../lib/dbRead";
 
 // ── Constants ────────────────────────────────────────────────────────────────
 const MAX_DUTY_CHANGES = 5;
@@ -343,7 +344,7 @@ const DutyChangeRecords = ({ user, currentMonth }) => {
 			return;
 		}
 		const buildUpdated = async (empId, dateStr, newCode, monthLabel) => {
-			const { data } = await supabase
+			const { data } = await dbr
 				.from("ground_schedules")
 				.select("schedule")
 				.eq("employee_id", empId)

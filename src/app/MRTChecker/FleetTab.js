@@ -18,6 +18,7 @@ import {
 } from "../../lib/fatigueHelpers";
 import styles from "../../styles/FleetTab.module.css";
 import { supabase } from "../../lib/supabase";
+import { dbr } from "../../lib/dbRead";
 
 // BASE_COLORS — matches MRT Checker color scheme
 const BASE_COLORS = {
@@ -97,7 +98,7 @@ export default function FleetTab({ onViewCrew, onBack }) {
 				const { data: monthRow } = await supabase
 					.from("mdaeip_schedule_months").select("id").eq("month", pivotStr).single();
 				if (monthRow) {
-					const { data: overrides } = await supabase
+					const { data: overrides } = await dbr
 						.from("schedule_day_overrides")
 						.select("employee_id, day, start_time, end_time, extra_sectors")
 						.eq("month_id", monthRow.id);

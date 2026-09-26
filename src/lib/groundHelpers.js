@@ -349,7 +349,7 @@ export const groundScheduleHelpers = {
 		}
 
 		try {
-			let query = supabase
+			let query = dbr
 				.from("ground_schedules")
 				.select("employee_id, month_label, base, schedule")
 				.eq("month_label", monthLabel);

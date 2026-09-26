@@ -588,7 +588,7 @@ export default function SchedulePage() {
 					.maybeSingle();
 
 				if (schedMonthRow) {
-					const { data: ovs } = await supabase
+					const { data: ovs } = await dbr
 						.from("schedule_day_overrides")
 						.select("employee_id, day, start_time, end_time, extra_sectors, additional_tasks")
 						.eq("month_id", schedMonthRow.id);

@@ -121,7 +121,7 @@ export default function DutyChangeReviewPage() {
 		const monthId = monthRow.id;
 
 		// 2. Fetch both employees' schedule rows
-		const { data: schedules, error: schedErr } = await supabase
+		const { data: schedules, error: schedErr } = await dbr
 			.from('mdaeip_schedules')
 			.select('id, employee_id, duties')
 			.eq('month_id', monthId)
