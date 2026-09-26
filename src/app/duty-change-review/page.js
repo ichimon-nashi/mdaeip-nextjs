@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '../../contexts/AuthContext';
 import { supabase } from '../../lib/supabase';
+import { db } from '../../lib/dbWrite';
 import { hasAppAccess } from '../../lib/permissionHelpers';
 import toast from 'react-hot-toast';
 import styles from '../../styles/DutyChangeReview.module.css';
@@ -170,11 +171,11 @@ export default function DutyChangeReviewPage() {
 
 		// 6. Write both rows back
 		const [updateA, updateB] = await Promise.all([
-			supabase
+			db
 				.from('mdaeip_schedules')
 				.update({ duties: dutiesA, updated_at: new Date().toISOString() })
 				.eq('id', rowA.id),
-			supabase
+			db
 				.from('mdaeip_schedules')
 				.update({ duties: dutiesB, updated_at: new Date().toISOString() })
 				.eq('id', rowB.id),
@@ -189,7 +190,7 @@ export default function DutyChangeReviewPage() {
 		setActionLoading(req.id);
 		try {
 			// 1. Update duty_change_requests status first
-			const { error } = await supabase
+			const { error } = await db
 				.from('duty_change_requests')
 				.update({
 					status:      'approved',
@@ -208,7 +209,7 @@ export default function DutyChangeReviewPage() {
 
 			// 4. Clean up PDF
 			await deletePdfFromStorage(req.pdf_storage_path);
-			await supabase
+			await db
 				.from('duty_change_requests')
 				.update({ pdf_storage_path: null })
 				.eq('id', req.id);
@@ -227,7 +228,7 @@ export default function DutyChangeReviewPage() {
 	const handleDeny = async (req) => {
 		setActionLoading(req.id);
 		try {
-			const { error } = await supabase
+			const { error } = await db
 				.from('duty_change_requests')
 				.update({
 					status:      'denied',
@@ -239,7 +240,7 @@ export default function DutyChangeReviewPage() {
 			if (error) throw error;
 
 			await deletePdfFromStorage(req.pdf_storage_path);
-			await supabase
+			await db
 				.from('duty_change_requests')
 				.update({ pdf_storage_path: null })
 				.eq('id', req.id);
@@ -267,7 +268,7 @@ export default function DutyChangeReviewPage() {
 		setActionLoading('deny-all');
 		try {
 			const ids = pendingInMonth.map(r => r.id);
-			const { error } = await supabase
+			const { error } = await db
 				.from('duty_change_requests')
 				.update({
 					status:      'denied',
@@ -283,7 +284,7 @@ export default function DutyChangeReviewPage() {
 				pendingInMonth.map(async (r) => {
 					if (!r.pdf_storage_path) return;
 					await deletePdfFromStorage(r.pdf_storage_path);
-					await supabase
+					await db
 						.from('duty_change_requests')
 						.update({ pdf_storage_path: null })
 						.eq('id', r.id);

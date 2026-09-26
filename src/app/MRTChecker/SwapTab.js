@@ -6,6 +6,7 @@ import { Search, RefreshCw, ArrowLeftRight, AlertTriangle, CheckCircle } from "l
 import styles from "../../styles/SwapTab.module.css";
 import { employeeList, getEmployeeSchedule } from "../../lib/DataRoster";
 import { getFlightDutiesForMRTByMonth } from "../../lib/pdxHelpers";
+import { db } from "../../lib/dbWrite";
 import {
 	runFatigueCheck,
 	buildDroppedItemsFromSchedule,
@@ -553,7 +554,7 @@ export default function SwapTab() {
 			const totalDays = new Date(year, month + 1, 0).getDate();
 
 			// 1. Mark request as approved
-			const { error: approveErr } = await supabase
+			const { error: approveErr } = await db
 				.from("duty_change_requests")
 				.update({ status: "approved", reviewed_at: new Date().toISOString() })
 				.eq("id", importedReqId);
@@ -574,11 +575,11 @@ export default function SwapTab() {
 			};
 
 			await Promise.all([
-				supabase.from("mdaeip_schedules").upsert(
+				db.from("mdaeip_schedules").upsert(
 					{ employee_id: crewA.id, month_id: monthRow.id, duties: buildDuties(simA) },
 					{ onConflict: "month_id,employee_id" }
 				),
-				supabase.from("mdaeip_schedules").upsert(
+				db.from("mdaeip_schedules").upsert(
 					{ employee_id: crewB.id, month_id: monthRow.id, duties: buildDuties(simB) },
 					{ onConflict: "month_id,employee_id" }
 				),
@@ -589,7 +590,7 @@ export default function SwapTab() {
 				.from("duty_change_requests").select("pdf_storage_path").eq("id", importedReqId).maybeSingle();
 			if (reqRow?.pdf_storage_path) {
 				await supabase.storage.from("duty-change-pdfs").remove([reqRow.pdf_storage_path]);
-				await supabase.from("duty_change_requests").update({ pdf_storage_path: null }).eq("id", importedReqId);
+				await db.from("duty_change_requests").update({ pdf_storage_path: null }).eq("id", importedReqId);
 			}
 
 			// 4. Clear cache and apply sim as new base
@@ -617,7 +618,7 @@ export default function SwapTab() {
 			const { supabase } = await import("../../lib/supabase");
 
 			// 1. Mark as denied
-			const { error: denyErr } = await supabase
+			const { error: denyErr } = await db
 				.from("duty_change_requests")
 				.update({ status: "denied", reviewed_at: new Date().toISOString() })
 				.eq("id", importedReqId);
@@ -628,7 +629,7 @@ export default function SwapTab() {
 				.from("duty_change_requests").select("pdf_storage_path").eq("id", importedReqId).maybeSingle();
 			if (reqRow?.pdf_storage_path) {
 				await supabase.storage.from("duty-change-pdfs").remove([reqRow.pdf_storage_path]);
-				await supabase.from("duty_change_requests").update({ pdf_storage_path: null }).eq("id", importedReqId);
+				await db.from("duty_change_requests").update({ pdf_storage_path: null }).eq("id", importedReqId);
 			}
 
 			// 3. Reset UI (keep schedules visible, just clear swap state)
@@ -667,11 +668,11 @@ export default function SwapTab() {
 
 			// Save both sides
 			await Promise.all([
-				supabase.from("mdaeip_schedules").upsert(
+				db.from("mdaeip_schedules").upsert(
 					{ employee_id: crewA.id, month_id: monthRow.id, duties: buildDuties(simA) },
 					{ onConflict: "month_id,employee_id" }
 				),
-				supabase.from("mdaeip_schedules").upsert(
+				db.from("mdaeip_schedules").upsert(
 					{ employee_id: crewB.id, month_id: monthRow.id, duties: buildDuties(simB) },
 					{ onConflict: "month_id,employee_id" }
 				),
@@ -686,7 +687,7 @@ export default function SwapTab() {
 					return `${y}-${String(mIdx + 1).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
 				};
 				const changedKeys = Array.from(new Set([...selA, ...selB]));
-				await supabase.from("duty_change_requests").insert({
+				await db.from("duty_change_requests").insert({
 					person_a_id: crewA.id,
 					person_a_name: crewA.name,
 					person_b_id: crewB.id,

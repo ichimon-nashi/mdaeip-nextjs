@@ -7,6 +7,7 @@ import styles from "../../styles/DutyChangeImport.module.css";
 import { employeeList, getEmployeeSchedule, clearScheduleCache } from "../../lib/DataRoster";
 import { normalizeDutyCode } from "../../lib/fatigueHelpers";
 import { useAuth } from "../../contexts/AuthContext";
+import { db } from "../../lib/dbWrite";
 
 // S = inspection/audit, T = HSR travel. Handles concatenated ("X4S","H2T") and
 // slash ("X4/S","H2/T") suffix forms, and the "T/H2" prefix form (HSR before duty).
@@ -309,7 +310,7 @@ export default function DutyChangeImport() {
 
 					empRows.forEach((r) => { duties[r.day - 1] = r.newEnc.stored; });
 
-					const { error: upsertErr } = await supabase.from("mdaeip_schedules").upsert(
+					const { error: upsertErr } = await db.from("mdaeip_schedules").upsert(
 						{ employee_id: employeeId, month_id: monthRow.id, duties },
 						{ onConflict: "month_id,employee_id" },
 					);
@@ -323,7 +324,7 @@ export default function DutyChangeImport() {
 					// value for a text column — unlike null, which the NOT NULL
 					// constraint on this table rejects outright.
 					const overrideResults = await Promise.all(empRows.map((r) =>
-						supabase.from("schedule_day_overrides").upsert(
+						db.from("schedule_day_overrides").upsert(
 							{
 								employee_id: employeeId,
 								month_id: monthRow.id,

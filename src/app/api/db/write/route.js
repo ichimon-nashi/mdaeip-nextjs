@@ -16,6 +16,8 @@ const SCHEDULE_EDITORS = ["mrt_checker", "dispatch", "duty_change_review"];
 const PERMISSIONS = {
 	mdaeip_schedules: { upsert: SCHEDULE_EDITORS, update: SCHEDULE_EDITORS },
 	schedule_day_overrides: { upsert: SCHEDULE_EDITORS },
+	// Approve/deny/clear-PDF (review page, SwapTab) and swap records (SwapTab)
+	duty_change_requests: { insert: SCHEDULE_EDITORS, update: SCHEDULE_EDITORS },
 };
 
 const FILTERS = ["eq", "neq", "in", "is", "lt", "lte", "gt", "gte", "match"];
