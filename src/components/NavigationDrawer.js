@@ -113,7 +113,7 @@ const NavigationDrawer = ({ isOpen, onClose, userDetails }) => {
 				{
 					id: "evalform-generator",
 					title: "考核表產生器",
-					description: "訓練考核表產生器",
+					description: "一般/追蹤考核表產生器",
 					icon: (
 						<PngIcon
 							src="/assets/evaluation.png"
@@ -441,7 +441,7 @@ const NavigationDrawer = ({ isOpen, onClose, userDetails }) => {
 
 				{/* Footer */}
 				<div className={styles.drawerFooter}>
-					<div className={styles.appVersion}>豪神APP v5.5.12</div>
+					<div className={styles.appVersion}>豪神APP v5.5.13</div>
 				</div>
 			</div>
 		</>

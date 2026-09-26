@@ -3,12 +3,23 @@
 // 考核表產生器 (evalform_generator)
 // TARGET PATH: src/app/eval-form-generator/page.js
 //
-// Gated by hasAppAccess(user, "evalform_generator"). Score is per-section
-// (10 sections, max 10 each = 100), not per sub-item — sub-item lists
-// under sections 1-8 are reference only. Sections 9/10 are a ≥2-item
-// quiz picker instead (the form's own "抽問二項" instruction) — the
-// selection feeds the remarks draft but no longer marks anything on the
-// output PDF (removed per Eric: no checkmarks in front of 9.x/10.x).
+// Two tabs in ONE page/route, not two separate routes: 一般考核 (the
+// original PDF scoring tool) and 追蹤考核 (fills a dispatch-issued Word
+// tracking-evaluation report). Both are gated by the same
+// hasAppAccess(user, "evalform_generator") check, since there's only one
+// route now — there's no way to gate them separately without splitting
+// back into two routes, which Eric explicitly said not to do.
+//
+// Score is per-section (10 sections, max 10 each = 100), not per sub-item
+// — sub-item lists under sections 1-8 are reference only. Sections 9/10
+// are a ≥2-item quiz picker instead (the form's own "抽問二項" instruction)
+// — the selection feeds the remarks draft but no longer marks anything on
+// the output PDF (removed per Eric: no checkmarks in front of 9.x/10.x).
+//
+// 追蹤考核 note: no template asset of our own for this tab — every
+// uploaded file is a different specific instance dispatch already filled
+// in, and this only fills the one blank 考評意見 field via raw XML
+// targeting of a verified table/row position (see followupAuditDoc.js).
 
 import { useState, useMemo, useEffect, useRef } from "react";
 import { useAuth } from "../../contexts/AuthContext";
@@ -23,6 +34,7 @@ import { employeeList } from "../../lib/DataRoster";
 import SignaturePadModal from "./SignaturePadModal";
 import { getSectionBank, buildRemarksDraft, getSummaryLine } from "../../lib/evalFormComments";
 import { generateEvalFormPdf, HEADER_FONTS } from "../../lib/generateEvalFormPdf";
+import { fillFollowupAuditDoc, extractPreviewInfo } from "../../lib/followupAuditDoc";
 import { QUIZ_ITEM_LABELS } from "../../lib/evalFormCoords";
 import styles from "../../styles/EvalFormGenerator.module.css";
 
@@ -118,6 +130,17 @@ export default function EvalFormGeneratorPage() {
 	const [headerFontIndex, setHeaderFontIndex] = useState(""); // "" = random (default); numeric string index = explicit pick
 	const [showSignatureModal, setShowSignatureModal] = useState(false);
 
+	// ── Tab switcher: 一般考核 (this component's original content) vs
+	// 追蹤考核 (fills a dispatch-issued Word report) — one page, one route.
+	const [activeTab, setActiveTab] = useState("general"); // "general" | "followup"
+
+	// 追蹤考核 — its own isolated state, unrelated to the PDF tool above.
+	const [followupFile, setFollowupFile] = useState(null);
+	const [followupComment, setFollowupComment] = useState("");
+	const [isFollowupExporting, setIsFollowupExporting] = useState(false);
+	const [followupError, setFollowupError] = useState("");
+	const [followupPreview, setFollowupPreview] = useState(null);
+
 	useEffect(() => {
 		if (!loading && (!user || !hasAppAccess(user, "evalform_generator"))) {
 			router.replace("/dashboard");
@@ -193,6 +216,73 @@ export default function EvalFormGeneratorPage() {
 		setName("");
 		setEmployeeLocked(false);
 		setEmployeeSearch("");
+	};
+
+	const processFollowupFile = async (file) => {
+		if (!file) return;
+		setFollowupError("");
+		if (!file.name.toLowerCase().endsWith(".docx")) {
+			setFollowupError("此檔案不是 .docx 格式 — 請先另存新檔為 .docx 後再上傳。");
+			return;
+		}
+		setFollowupFile(file);
+		try {
+			const arrayBuffer = await file.arrayBuffer();
+			setFollowupPreview(extractPreviewInfo(arrayBuffer));
+		} catch (err) {
+			console.error("追蹤考核 preview failed:", err);
+			setFollowupPreview(null);
+			setFollowupError("檔案格式無法讀取 — 可能不是真正的 .docx 檔案，請確認已用 Word 另存新檔。");
+		}
+	};
+
+	const handleFollowupFileSelect = (e) => {
+		processFollowupFile(e.target.files?.[0]);
+		e.target.value = "";
+	};
+
+	const handleFollowupDrop = (e) => {
+		e.preventDefault();
+		processFollowupFile(e.dataTransfer.files?.[0]);
+	};
+
+	const handleClearFollowupFile = () => {
+		setFollowupFile(null);
+		setFollowupPreview(null);
+		setFollowupError("");
+	};
+
+	const handleExportFollowup = async () => {
+		if (!followupFile) {
+			toast.error("請先上傳檔案");
+			return;
+		}
+		if (!followupComment.trim()) {
+			toast.error("請輸入考評意見");
+			return;
+		}
+		setIsFollowupExporting(true);
+		setFollowupError("");
+		try {
+			const arrayBuffer = await followupFile.arrayBuffer();
+			const { blob, filename } = await fillFollowupAuditDoc(arrayBuffer, followupComment);
+			const url = URL.createObjectURL(blob);
+			const a = document.createElement("a");
+			a.href = url;
+			a.download = filename;
+			a.click();
+			URL.revokeObjectURL(url);
+		} catch (err) {
+			console.error("追蹤考核 export failed:", err);
+			// PizZip throws on anything that isn't a real zip/docx — the
+			// most likely real-world cause is a legacy binary .doc that
+			// got renamed to .docx rather than actually converted.
+			setFollowupError(
+				"匯出失敗 — 這通常表示檔案雖然副檔名是 .docx，但實際上還是舊版 .doc 格式。請用 Word 開啟並確實「另存新檔」為 .docx 後再上傳一次。",
+			);
+		} finally {
+			setIsFollowupExporting(false);
+		}
 	};
 
 	const handleExport = async () => {
@@ -292,18 +382,38 @@ export default function EvalFormGeneratorPage() {
 					</div>
 				</header>
 
-				<div className={`${styles.totalBar} ${passes ? styles.totalPass : styles.totalFail}`}>
-					總分 {total} / 100 — 標準 {threshold} 分 — {passes ? "及格" : "尚未達標"}
+				<div className={styles.sealRow} style={{ justifyContent: "center", marginBottom: 20 }}>
+					<button
+						type="button"
+						className={`${styles.seal} ${activeTab === "general" ? styles.sealOn : ""}`}
+						onClick={() => setActiveTab("general")}
+					>
+						一般考核
+					</button>
+					<button
+						type="button"
+						className={`${styles.seal} ${activeTab === "followup" ? styles.sealOn : ""}`}
+						onClick={() => setActiveTab("followup")}
+					>
+						追蹤考核
+					</button>
 				</div>
 
-				{/* 表單類型 + 訓練類別 */}
-				<section className={styles.altar}>
-					<div className={styles.altarHead}>
-						<span className={styles.altarTitle}>表單與訓練類別</span>
-						<span className={styles.altarEn}>Form &amp; Training</span>
-					</div>
-					<div className={styles.sealGroup}>
-						<span className={styles.fieldLabel}>表單類型</span>
+				{activeTab === "general" && (
+					<>
+						<div className={`${styles.totalBar} ${passes ? styles.totalPass : styles.totalFail}`}>
+							總分 {total} / 100 — 標準 {threshold} 分 — {passes ? "及格" : "尚未達標"}
+						</div>
+
+						{/* 表單類型 + 訓練類別 */}
+						<section className={styles.altar}>
+							<div className={styles.altarHead}>
+								<span className={styles.altarTitle}>表單與訓練類別</span>
+								<span className={styles.altarEn}>Form &amp; Training</span>
+							</div>
+							<div className={styles.sealGroup}>
+								<span className={styles.fieldLabel}>表單類型</span>
+
 						<div className={styles.sealRow}>
 							{FORM_TYPES.map((f) => (
 								<button
@@ -613,10 +723,102 @@ export default function EvalFormGeneratorPage() {
 						placeholder="總分變動時將自動更新"
 					/>
 				</section>
+				</>
+			)}
+
+			{activeTab === "followup" && (
+				<>
+					{/* Step 1 */}
+					<section className={styles.altar}>
+						<div className={styles.altarHead}>
+							<span className={styles.altarTitle}>步驟一：確認檔案格式</span>
+							<span className={styles.altarEn}>Convert to .docx</span>
+						</div>
+						<p className={styles.hint} style={{ fontSize: 14, lineHeight: 1.8 }}>
+							如果您收到的檔案是 <b>.doc</b> 格式，請先用 Word 開啟，選擇「檔案」→「另存新檔」，
+							將檔案類型改為 <b>Word 文件 (.docx)</b> 後儲存。若檔案本來就是 .docx，可直接跳到步驟二上傳。
+						</p>
+					</section>
+
+					{/* Step 2: upload */}
+					<section className={styles.altar}>
+						<div className={styles.altarHead}>
+							<span className={styles.altarTitle}>步驟二：上傳檔案</span>
+							<span className={styles.altarEn}>Upload</span>
+						</div>
+						{followupFile ? (
+							<>
+								<div className={styles.fileChip}>
+									<span>{followupFile.name}</span>
+									<button type="button" className={styles.fileChipClear} onClick={handleClearFollowupFile} title="清除，重新選擇">
+										<X size={14} />
+									</button>
+								</div>
+								{followupPreview && (
+									<div className={styles.previewCard}>
+										<div className={styles.previewHeaderLine}>
+											{followupPreview.crewName}（{followupPreview.employeeId}）· {followupPreview.flight} · {followupPreview.date}
+										</div>
+										<div className={styles.previewSubLine}>座艙長：{followupPreview.supervisor}</div>
+
+										<div className={styles.previewBadgeRow}>
+											{followupPreview.categories.map((c) => (
+												<span key={c.label} className={`${styles.previewBadge} ${c.checked ? styles.previewBadgeOn : ""}`}>
+													{c.label}
+												</span>
+											))}
+										</div>
+
+										{followupPreview.observations.length > 0 && (
+											<>
+												<div className={styles.previewSectionLabel}>考核事項</div>
+												<ul className={styles.previewList}>
+													{followupPreview.observations.map((o, i) => <li key={i}>{o}</li>)}
+												</ul>
+											</>
+										)}
+									</div>
+								)}
+							</>
+						) : (
+							<label
+								className={styles.dropZone}
+								onDragOver={(e) => e.preventDefault()}
+								onDrop={handleFollowupDrop}
+							>
+								<span>點選或把檔案拉到此處（.docx）</span>
+								<span className={styles.hint} style={{ marginTop: 4 }}>僅接受 .docx 檔案</span>
+								<input type="file" accept=".docx" onChange={handleFollowupFileSelect} style={{ display: "none" }} />
+							</label>
+						)}
+						{followupError && <div className={styles.errorNote}>{followupError}</div>}
+					</section>
+
+					{/* Step 3: comment */}
+					<section className={styles.altar}>
+						<div className={styles.altarHead}>
+							<span className={styles.altarTitle}>步驟三：輸入考評意見</span>
+							<span className={styles.altarEn}>Comment</span>
+						</div>
+						<div className={styles.fieldLabel}>考評意見</div>
+						<textarea
+							className={styles.remarksTextarea}
+							value={followupComment}
+							onChange={(e) => setFollowupComment(e.target.value)}
+							placeholder="輸入考評意見，將以完整段落印於「考評意見」欄位後方"
+						/>
+						<div className={styles.hint} style={{ marginTop: 8 }}>
+							內容將以完整段落印在考評意見欄位後方並加底線，字體大小會視內容長度自動微調以盡量維持在一頁內。
+						</div>
+					</section>
+				</>
+			)}
 			</div>
 
 			<div className={styles.exportDock}>
 				<div className={styles.exportDockInner}>
+				{activeTab === "general" ? (
+					<>
 					<button type="button" className={styles.sigTrigger} onClick={() => setShowSignatureModal(true)}>
 						{signatureDataUrl ? (
 							<>
@@ -625,7 +827,7 @@ export default function EvalFormGeneratorPage() {
 								<span className={styles.sigTriggerLabel}>重新簽名</span>
 							</>
 						) : (
-							<span className={styles.sigTriggerLabel}>點擊簽名</span>
+							<span className={styles.sigTriggerLabel}>點選簽名</span>
 						)}
 					</button>
 
@@ -656,10 +858,23 @@ export default function EvalFormGeneratorPage() {
 						</span>
 						<span className={styles.exportEn}>{exportDone ? "Sealed" : "Seal"}</span>
 					</button>
+					</>
+				) : (
+					<button
+						className={styles.exportButton}
+						onClick={handleExportFollowup}
+						disabled={isFollowupExporting}
+					>
+						<span className={styles.exportLabel}>
+							{isFollowupExporting ? "封印中..." : "封印追蹤考核表"}
+						</span>
+						<span className={styles.exportEn}>Seal</span>
+					</button>
+				)}
 				</div>
 			</div>
 
-			{showSignatureModal && (
+			{showSignatureModal && activeTab === "general" && (
 				<SignaturePadModal
 					onConfirm={(dataUrl) => {
 						setSignatureDataUrl(dataUrl);

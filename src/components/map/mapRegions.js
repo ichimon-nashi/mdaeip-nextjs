@@ -59,7 +59,7 @@ const POINTS = {
 	evalFormGenerator: {
 		id: "eval-form-generator",
 		label: "考核表產生器",
-		description: "訓練考核表產生器",
+		description: "一般/追蹤考核表產生器",
 		icon: "/assets/evaluation.png",
 		color: "#8c6d1f",
 		path: "/eval-form-generator",

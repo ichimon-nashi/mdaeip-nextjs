@@ -399,6 +399,131 @@
 	margin-top: 6px;
 }
 
+/* ── 追蹤考核 file upload (new for the tab) ── */
+.dropZone {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+	gap: 6px;
+	padding: 28px 20px;
+	border-radius: 4px;
+	border: 1px dashed rgba(201, 167, 92, 0.4);
+	background: rgba(9, 14, 32, 0.4);
+	cursor: pointer;
+	text-align: center;
+	color: var(--cream);
+	font-size: 14px;
+}
+
+.dropZone:hover {
+	border-color: var(--gold);
+	background: rgba(201, 167, 92, 0.08);
+}
+
+.fileChip {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 10px;
+	padding: 12px 16px;
+	border-radius: 4px;
+	border: 1px solid rgba(201, 167, 92, 0.32);
+	background: rgba(9, 14, 32, 0.55);
+	color: var(--cream);
+	font-size: 14px;
+}
+
+.fileChipClear {
+	flex-shrink: 0;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 26px;
+	height: 26px;
+	border-radius: 4px;
+	border: none;
+	background: rgba(201, 167, 92, 0.16);
+	color: var(--gold-hi);
+	cursor: pointer;
+}
+
+.fileChipClear:hover {
+	background: rgba(201, 167, 92, 0.3);
+}
+
+.previewCard {
+	margin-top: 12px;
+	padding: 14px 16px;
+	border-radius: 4px;
+	border: 1px solid rgba(201, 167, 92, 0.24);
+	background: rgba(9, 14, 32, 0.35);
+}
+
+.previewHeaderLine {
+	font-size: 15px;
+	font-weight: 700;
+	color: var(--cream);
+}
+
+.previewSubLine {
+	margin-top: 2px;
+	font-size: 13px;
+	color: var(--mute);
+}
+
+.previewBadgeRow {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 6px;
+	margin-top: 10px;
+}
+
+.previewBadge {
+	padding: 3px 10px;
+	border-radius: 999px;
+	font-size: 12px;
+	color: var(--mute);
+	border: 1px solid rgba(201, 167, 92, 0.2);
+}
+
+.previewBadgeOn {
+	color: #1a1408;
+	background: linear-gradient(180deg, var(--gold-hi), var(--gold));
+	border-color: var(--gold);
+	font-weight: 700;
+}
+
+.previewSectionLabel {
+	margin-top: 12px;
+	font-size: 12px;
+	font-weight: 700;
+	letter-spacing: 0.1em;
+	color: var(--gold-hi);
+}
+
+.previewList {
+	margin: 6px 0 0;
+	padding-left: 18px;
+}
+
+.previewList li {
+	font-size: 13px;
+	line-height: 1.7;
+	color: var(--body);
+}
+
+.errorNote {
+	margin-top: 10px;
+	padding: 10px 14px;
+	border-radius: 4px;
+	background: rgba(74, 38, 32, 0.55);
+	border: 1px solid rgba(226, 131, 107, 0.4);
+	color: var(--fail-hi);
+	font-size: 13px;
+	line-height: 1.6;
+}
+
 /* ── Live total — reuses altar styling, colored by pass/fail ── */
 .totalBar {
 	position: sticky;
