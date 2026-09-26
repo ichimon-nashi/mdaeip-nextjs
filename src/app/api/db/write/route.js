@@ -11,6 +11,7 @@ import { hasAppAccess } from "../../../../lib/permissionHelpers";
 // Pages that edit schedules: MRTChecker (+ its tabs) and duty-change review
 const SCHEDULE_EDITORS = ["mrt_checker", "dispatch", "duty_change_review"];
 const DISPATCH = ["dispatch"];
+const ETR = ["etr_generator"];
 
 // table → operation → app permissions allowed ("*" = any logged-in user).
 // Anything not listed here is refused.
@@ -24,6 +25,11 @@ const PERMISSIONS = {
 	pdx_months: { insert: DISPATCH, update: DISPATCH, delete: DISPATCH },
 	pdx_duties: { insert: DISPATCH, update: DISPATCH, delete: DISPATCH },
 	pdx_sectors: { insert: DISPATCH, delete: DISPATCH },
+	// Ground roster "暫停排班" toggle
+	ground_employee_absences: { insert: ["ground_roster"], delete: ["ground_roster"] },
+	// ETR generator (bulletinHelpers / remarksHelpers in lib/supabase.js)
+	mdaeip_bulletin: { insert: ETR, update: ETR, delete: ETR },
+	mdaeip_additional_remark: { insert: ETR, update: ETR, delete: ETR },
 };
 
 const FILTERS = ["eq", "neq", "in", "is", "lt", "lte", "gt", "gte", "match"];

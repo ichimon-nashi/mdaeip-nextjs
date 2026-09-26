@@ -1,4 +1,5 @@
 import { createClient } from "@supabase/supabase-js";
+import { db } from "./dbWrite";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
@@ -974,7 +975,7 @@ export const bulletinHelpers = {
 	// Add new bulletin
 	async addBulletin(bulletinData) {
 		try {
-			const { data, error } = await supabase
+			const { data, error } = await db
 				.from("mdaeip_bulletin")
 				.insert([
 					{
@@ -1026,7 +1027,7 @@ export const bulletinHelpers = {
 	// Update existing bulletin
 	async updateBulletin(bulletinId, bulletinData) {
 		try {
-			const { data, error } = await supabase
+			const { data, error } = await db
 				.from("mdaeip_bulletin")
 				.update(bulletinData)
 				.eq("id", bulletinId)
@@ -1041,7 +1042,7 @@ export const bulletinHelpers = {
 	// Delete bulletin
 	async deleteBulletin(bulletinId) {
 		try {
-			const { data, error } = await supabase
+			const { data, error } = await db
 				.from("mdaeip_bulletin")
 				.delete()
 				.eq("id", bulletinId);
@@ -1088,7 +1089,7 @@ export const remarksHelpers = {
 	// Add new additional remark
 	async addRemark(remarkData) {
 		try {
-			const { data, error } = await supabase
+			const { data, error } = await db
 				.from("mdaeip_additional_remark")
 				.insert([
 					{
@@ -1136,7 +1137,7 @@ export const remarksHelpers = {
 	// Update existing remark
 	async updateRemark(remarkId, remarkData) {
 		try {
-			const { data, error } = await supabase
+			const { data, error } = await db
 				.from("mdaeip_additional_remark")
 				.update(remarkData)
 				.eq("id", remarkId)
@@ -1151,7 +1152,7 @@ export const remarksHelpers = {
 	// Delete remark
 	async deleteRemark(remarkId) {
 		try {
-			const { data, error } = await supabase
+			const { data, error } = await db
 				.from("mdaeip_additional_remark")
 				.delete()
 				.eq("id", remarkId);

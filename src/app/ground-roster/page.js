@@ -34,6 +34,7 @@ import {
   GROUND_YEARLY_QUOTA,
 } from '../../lib/groundHelpers';
 import { supabase } from '../../lib/supabase';
+import { db } from '../../lib/dbWrite';
 
 // ── Helpers (page-local, same pattern as ground-schedule/page.js) ──────────
 // Per-code colors (2026-06-21) — each rest/leave code gets its own
@@ -477,13 +478,13 @@ export default function GroundRosterPage() {
 
     if (existing) {
       // Already absent — remove to re-enable
-      const { error } = await supabase
+      const { error } = await db
         .from('ground_employee_absences').delete().eq('id', existing.id);
       if (error) { toast.error('操作失敗：' + error.message); return; }
       toast.success(`${emp.name} 已恢復排班（${currentMonth}）`);
     } else {
       // Currently active — disable for this month
-      const { error } = await supabase
+      const { error } = await db
         .from('ground_employee_absences').insert({
           employee_id: emp.id, absent_from, absent_until,
           reason: '外派/受訓', base: emp.base, created_by: user?.id,
