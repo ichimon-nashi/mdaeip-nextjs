@@ -362,16 +362,24 @@ export const pdxSectorHelpers = {
 // from two tabs at nearly the same instant, the slower write could clobber
 // the faster one's month-key. Acceptable for a soft "reviewed" flag, but
 // not a pattern to copy for anything that needs real consistency.
+// Calls go through /api/users/pdx-done (mdaeip_users is closed to the public
+// key). The server scopes everything to the logged-in user from the token;
+// the userId parameters are kept only so existing callers don't change.
+const pdxAuthHeaders = () => {
+	const token =
+		typeof window !== "undefined" ? localStorage.getItem("mdaeip_token") : null;
+	return token ? { Authorization: `Bearer ${token}` } : {};
+};
+
 export const pdxDoneHelpers = {
 	async get(userId) {
 		try {
-			const { data, error } = await supabase
-				.from("mdaeip_users")
-				.select("pdx_done_state")
-				.eq("id", userId)
-				.single();
-			if (error) throw error;
-			return { data: data?.pdx_done_state || {}, error: null };
+			const res = await fetch("/api/users/pdx-done", {
+				headers: pdxAuthHeaders(),
+			});
+			const result = await res.json();
+			if (!res.ok) throw new Error(result.error || `HTTP ${res.status}`);
+			return { data: result.data || {}, error: null };
 		} catch (error) {
 			console.error("pdxDoneHelpers.get:", error);
 			return { data: {}, error: error.message };
@@ -380,21 +388,13 @@ export const pdxDoneHelpers = {
 
 	async setForMonth(userId, monthId, dutyIds) {
 		try {
-			const { data: existing, error: readError } = await supabase
-				.from("mdaeip_users")
-				.select("pdx_done_state")
-				.eq("id", userId)
-				.single();
-			if (readError) throw readError;
-			const next = {
-				...(existing?.pdx_done_state || {}),
-				[monthId]: dutyIds,
-			};
-			const { error } = await supabase
-				.from("mdaeip_users")
-				.update({ pdx_done_state: next })
-				.eq("id", userId);
-			if (error) throw error;
+			const res = await fetch("/api/users/pdx-done", {
+				method: "POST",
+				headers: { "Content-Type": "application/json", ...pdxAuthHeaders() },
+				body: JSON.stringify({ monthId, dutyIds }),
+			});
+			const result = await res.json();
+			if (!res.ok) throw new Error(result.error || `HTTP ${res.status}`);
 			return { error: null };
 		} catch (error) {
 			console.error("pdxDoneHelpers.setForMonth:", error);

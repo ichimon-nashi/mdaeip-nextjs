@@ -779,8 +779,10 @@ export const authHelpers = {
 		try {
 			console.log("Attempting login for employee:", employeeID);
 
-			// Query your custom users table directly
-			const { data, error } = await supabase
+			// Query your custom users table directly (server-only secret-key client;
+			// mdaeip_users is closed to the public key)
+			const { supabaseAdmin } = await import("./supabaseAdmin");
+			const { data, error } = await supabaseAdmin
 				.from("mdaeip_users")
 				.select("*")
 				.eq("id", employeeID)
