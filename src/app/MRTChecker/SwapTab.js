@@ -7,6 +7,7 @@ import styles from "../../styles/SwapTab.module.css";
 import { employeeList, getEmployeeSchedule } from "../../lib/DataRoster";
 import { getFlightDutiesForMRTByMonth } from "../../lib/pdxHelpers";
 import { db } from "../../lib/dbWrite";
+import { dutyPdfBucket } from "../../lib/dutyPdfStorage";
 import {
 	runFatigueCheck,
 	buildDroppedItemsFromSchedule,
@@ -589,7 +590,7 @@ export default function SwapTab() {
 			const { data: reqRow } = await supabase
 				.from("duty_change_requests").select("pdf_storage_path").eq("id", importedReqId).maybeSingle();
 			if (reqRow?.pdf_storage_path) {
-				await supabase.storage.from("duty-change-pdfs").remove([reqRow.pdf_storage_path]);
+				await dutyPdfBucket.remove([reqRow.pdf_storage_path]);
 				await db.from("duty_change_requests").update({ pdf_storage_path: null }).eq("id", importedReqId);
 			}
 
@@ -628,7 +629,7 @@ export default function SwapTab() {
 			const { data: reqRow } = await supabase
 				.from("duty_change_requests").select("pdf_storage_path").eq("id", importedReqId).maybeSingle();
 			if (reqRow?.pdf_storage_path) {
-				await supabase.storage.from("duty-change-pdfs").remove([reqRow.pdf_storage_path]);
+				await dutyPdfBucket.remove([reqRow.pdf_storage_path]);
 				await db.from("duty_change_requests").update({ pdf_storage_path: null }).eq("id", importedReqId);
 			}
 

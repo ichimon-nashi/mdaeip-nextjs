@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useAuth } from '../../contexts/AuthContext';
 import { supabase } from '../../lib/supabase';
 import { db } from '../../lib/dbWrite';
+import { dutyPdfBucket } from '../../lib/dutyPdfStorage';
 import { hasAppAccess } from '../../lib/permissionHelpers';
 import toast from 'react-hot-toast';
 import styles from '../../styles/DutyChangeReview.module.css';
@@ -97,8 +98,7 @@ export default function DutyChangeReviewPage() {
 	// ── Delete PDF from Storage ───────────────────────────────────────────────
 	const deletePdfFromStorage = async (pdfStoragePath) => {
 		if (!pdfStoragePath) return;
-		const { error } = await supabase.storage
-			.from('duty-change-pdfs')
+		const { error } = await dutyPdfBucket
 			.remove([pdfStoragePath]);
 		if (error) console.error('Error deleting PDF from storage:', error);
 	};
@@ -308,8 +308,7 @@ export default function DutyChangeReviewPage() {
 			return;
 		}
 		try {
-			const { data, error } = await supabase.storage
-				.from('duty-change-pdfs')
+			const { data, error } = await dutyPdfBucket
 				.createSignedUrl(req.pdf_storage_path, 60);
 
 			if (error || !data?.signedUrl) throw error || new Error('No URL');

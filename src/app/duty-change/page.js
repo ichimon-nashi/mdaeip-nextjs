@@ -11,6 +11,7 @@ import {
 } from "../../lib/DataRoster";
 import { supabase } from "../../lib/supabase";
 import { db } from "../../lib/dbWrite";
+import { dutyPdfBucket } from "../../lib/dutyPdfStorage";
 import { minutesToDisplay } from "../../lib/pdxHelpers";
 import toast from "react-hot-toast";
 
@@ -540,8 +541,7 @@ function DutyChangeContent() {
 		const safeMonth = monthMatch ? `${monthMatch[1]}-${monthMatch[2]}` : "unknown";
 		const filePath = `${personAId}/${safeMonth}_${timestamp}.pdf`;
 
-		const { error } = await supabase.storage
-			.from("duty-change-pdfs")
+		const { error } = await dutyPdfBucket
 			.upload(filePath, pdfBlob, {
 				contentType: "application/pdf",
 				upsert: false,
